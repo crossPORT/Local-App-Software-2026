@@ -1,0 +1,2 @@
+# SLS fabric USB device (1772:0006) — allows libusb access without root
+SUBSYSTEM=="usb", ATTR{idVendor}=="1772", ATTR{idProduct}=="0006", MODE="0666"

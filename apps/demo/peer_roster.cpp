@@ -1,0 +1,148 @@
+#include "peer_roster.h"
+
+#include <chrono>
+
+namespace {
+
+std::string make_peer_id(int port_index, const std::string& name) {
+    return std::to_string(port_index) + ":" + name;
+}
+
+}  // namespace
+
+std::vector<PeerEntry> peer_entries_from_config(const std::vector<PeerConfig>& peers) {
+    std::vector<PeerEntry> entries;
+    for (const PeerConfig& peer : peers) {
+        if (peer.display_name.empty()) {
+            continue;
+        }
+        entries.push_back(PeerEntry{
+            make_peer_id(peer.port_index, peer.display_name),
+            peer.display_name,
+            peer.team,
+            peer.role,
+            peer.receive_status,
+            peer.port_index,
+            false,
+            {},
+        });
+    }
+    return entries;
+}
+
+void PeerRoster::seed_from_config(const std::vector<PeerConfig>& peers) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    peers_ = peer_entries_from_config(peers);
+}
+
+void PeerRoster::touch_peer(const std::string& display_name,
+                            const std::string& team,
+                            ReceiveStatus status,
+                            int port_index) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    for (PeerEntry& peer : peers_) {
+        if (peer.display_name == display_name
+            || (port_index >= 0 && peer.port_index == port_index)) {
+            peer.last_seen = now;
+            peer.online = true;
+            if (!team.empty()) {
+                peer.team = team;
+            }
+            peer.receive_status = status;
+            return;
+        }
+    }
+
+    peers_.push_back(PeerEntry{
+        make_peer_id(port_index >= 0 ? port_index : 0, display_name),
+        display_name,
+        team,
+        "",
+        status,
+        port_index >= 0 ? port_index : 0,
+        true,
+        now,
+    });
+}
+
+void PeerRoster::touch_peer_presence(const std::string& display_name,
+                                     const std::string& team) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    for (PeerEntry& peer : peers_) {
+        if (peer.display_name == display_name) {
+            peer.last_seen = now;
+            peer.online = true;
+            if (!team.empty()) {
+                peer.team = team;
+            }
+            return;
+        }
+    }
+}
+
+void PeerRoster::mark_stale_peers_offline(std::chrono::seconds max_age) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    for (PeerEntry& peer : peers_) {
+        if (!peer.online || peer.last_seen == std::chrono::steady_clock::time_point{}) {
+            peer.online = false;
+            continue;
+        }
+        if (now - peer.last_seen > max_age) {
+            peer.online = false;
+        }
+    }
+}
+
+void PeerRoster::set_all_peers_offline() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (PeerEntry& peer : peers_) {
+        peer.online = false;
+    }
+}
+
+void PeerRoster::set_all_peers_online() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    for (PeerEntry& peer : peers_) {
+        peer.online = true;
+        peer.last_seen = now;
+    }
+}
+
+void PeerRoster::set_peer_online(int port_index, bool online) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (PeerEntry& peer : peers_) {
+        if (peer.port_index == port_index) {
+            peer.online = online;
+            return;
+        }
+    }
+}
+
+std::vector<PeerEntry> PeerRoster::peers() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return peers_;
+}
+
+std::optional<PeerEntry> PeerRoster::find_by_name(const std::string& display_name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const PeerEntry& peer : peers_) {
+        if (peer.display_name == display_name) {
+            return peer;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<PeerEntry> PeerRoster::find_by_port(int port_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const PeerEntry& peer : peers_) {
+        if (peer.port_index == port_index) {
+            return peer;
+        }
+    }
+    return std::nullopt;
+}

@@ -1,0 +1,9 @@
+/build/
+/build-asan/
+/Westcoast-0.01_release.zip
+/::buf
+*.o
+*.a
+*.so
+*.user
+.DS_Store
