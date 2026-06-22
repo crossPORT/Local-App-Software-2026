@@ -78,8 +78,14 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --target rocketbox -j 4
 
-      - name: Install staging tree
+      - name: Install and bundle dylibs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
+
+      - name: Verify macOS bundle
+        run: |
+          chmod +x scripts/verify-macos-bundle.sh
+          scripts/verify-macos-bundle.sh "${{ runner.temp }}/install/RocketBox.app"
+          ls -la "${{ runner.temp }}/install/RocketBox.app/Contents/Frameworks" || true
 
       - name: Create DMG
         run: |

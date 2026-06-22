@@ -32,6 +32,7 @@ open build/apps/wx/RocketBox.app
 
 ```bash
 cmake --install build --prefix build/install
+./scripts/verify-macos-bundle.sh build/install/RocketBox.app
 ./scripts/build-dmg.sh build/install build 0.1.0
 ```
 

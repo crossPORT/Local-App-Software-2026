@@ -25,6 +25,8 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_NAME "RocketBox App"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "@executable_path/../Frameworks"
     )
 endif()
 
@@ -42,6 +44,7 @@ target_compile_features(rocketbox PRIVATE cxx_std_17)
 
 if(APPLE)
     install(TARGETS rocketbox BUNDLE DESTINATION .)
+    install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/macos_fixup_bundle.cmake")
 else()
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
 

@@ -15,6 +15,10 @@ if [[ ! -x "$BIN" ]]; then
   exit 1
 fi
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+chmod +x "$ROOT/scripts/verify-macos-bundle.sh"
+"$ROOT/scripts/verify-macos-bundle.sh" "$APP"
+
 mkdir -p "$OUT_DIR"
 OUT_DMG="$OUT_DIR/RocketBox-${TAG}-macos.dmg"
 rm -f "$OUT_DMG"
