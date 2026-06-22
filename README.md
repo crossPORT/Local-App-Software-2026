@@ -16,7 +16,7 @@ sudo apt install cmake g++ pkg-config libusb-1.0-0-dev libwxgtk3.2-dev
 cmake -S . -B build
 cmake --build build -j
 ./scripts/setup-usb-access.sh   # once, then replug cable
-./build/apps/wx/RocketBox --config booth-port0.conf
+./build/apps/wx/RocketBox
 ```
 
 ## Quick start (web dev)
@@ -54,6 +54,7 @@ apps/wx/        RocketBox desktop app (wxWidgets UI)
 apps/web/       RocketBox PWA (WebUSB — TypeScript, parallel to lib/session)
 sim/            In-process fabric simulator for integration tests
 tools/          usb-probe, loopback-test, booth-cli, …
+demo-config/    Optional sample identity configs (not loaded by default)
 protocols/      Agent guides for session + file transfer
 docs/           Architecture, protocol, build, deployment
 ```

@@ -19,9 +19,6 @@ public:
 
         wxString config_path;
         parser.Found("config", &config_path);
-        if (config_path.empty()) {
-            config_path = "booth-port0.conf";
-        }
 
         auto* frame = new MainFrame(config_path.ToStdString());
         frame->Show(true);

@@ -53,7 +53,7 @@ Binary locations:
 
 ## Runtime: RocketBox wx
 
-Implements the vendor contract in [GUI_HANDOFF.md](../GUI_HANDOFF.md) via shared session logic.
+Implements the core API via shared session logic in `lib/session/`.
 
 ```
 apps/wx/main.cpp

@@ -2,12 +2,13 @@
 /build-asan/
 /build/install/
 /RocketBox-pwa.zip
+/*.conf
 /apps/web/node_modules/
 /apps/web/dist/
-/Westcoast-0.01_release.zip
 /::buf
 *.o
 *.a
 *.so
 *.user
 .DS_Store
+/Westcoast-0.01_release.zip

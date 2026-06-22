@@ -12,14 +12,14 @@ fi
 pkill -f 'RocketBox --port' 2>/dev/null || true
 sleep 0.3
 
-CONFIG="${ROCKETBOX_CONFIG:-$ROOT/booth-shared.conf}"
+CONFIG="${ROCKETBOX_CONFIG:-$ROOT/demo-config/shared.conf}"
 CONFIG_ARGS=()
-if [[ -f "$CONFIG" ]]; then
+if [[ -n "$CONFIG" && -f "$CONFIG" ]]; then
   CONFIG_ARGS=(--config "$CONFIG")
   echo "Using config: $CONFIG"
 fi
 
-echo "Launching booth pair — two windows (Receiver port 0, Sender port 1)"
+echo "Launching two RocketBox windows (ports 0 and 1)"
 cd "$ROOT"
 "$APP" "${CONFIG_ARGS[@]}" --port 0 &
 sleep 0.4

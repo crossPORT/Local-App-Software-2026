@@ -228,9 +228,6 @@ MainFrame::MainFrame(const std::string& config_path)
     , config_path_(config_path) {
     SetBackgroundColour(kBg);
 
-    if (config_path_.empty()) {
-        config_path_ = "booth-port0.conf";
-    }
     load_identity_profile(0, config_path_, identity_);
     if (!identity_.config_path.empty()) {
         config_path_ = identity_.config_path;

@@ -110,9 +110,6 @@ std::string resolve_session_config_path(const std::string& cli_path) {
             return env_path;
         }
     }
-    if (std::filesystem::is_regular_file("booth-shared.conf")) {
-        return "booth-shared.conf";
-    }
     if (const char* home = std::getenv("HOME")) {
         const std::filesystem::path user_path =
             std::filesystem::path(home) / ".config" / "sls-fabric" / "session.conf";

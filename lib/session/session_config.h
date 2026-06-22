@@ -13,7 +13,7 @@ struct SessionConfig {
 // Parse key=value config. Optional [portN] sections override globals.
 bool load_session_config_file(const std::string& path, int port_index, SessionConfig& out);
 
-// Resolve config path: CLI > ROCKETBOX_CONFIG > ./booth-shared.conf > ~/.config/sls-fabric/session.conf
+// Resolve config path: CLI > ROCKETBOX_CONFIG > ~/.config/sls-fabric/session.conf
 std::string resolve_session_config_path(const std::string& cli_path);
 
 // Load first config file found on the search path.

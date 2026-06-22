@@ -10,7 +10,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'booth-port0.conf', 'booth-port1.conf'],
+      includeAssets: ['favicon.svg'],
       manifest: {
         name: 'RocketBox',
         short_name: 'RocketBox',

@@ -127,7 +127,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent,
 
     auto* tune_hint = MakeLabel(
         panel,
-        "Advanced tuning lives in the config file (see booth-portN.conf comments or "
+        "Advanced tuning keys can be set in a config file passed via --config, or in "
         "Developer → USB diagnostics).",
         kMuted);
     tune_hint->Wrap(kWrapWidth);

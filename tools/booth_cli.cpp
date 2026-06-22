@@ -1,7 +1,7 @@
 // Command-line booth peer — mirrors wx GUI session flow with file logging.
 //
-//   booth-cli listen --port 1 --config booth-port1.conf
-//   booth-cli send   --port 0 --config booth-port0.conf --to Creative-Desk --file /path
+//   booth-cli listen --port 1
+//   booth-cli send --port 0 --to Peer-Name --file /path
 //   booth-cli probe  --port 0
 
 #include "booth_log.h"

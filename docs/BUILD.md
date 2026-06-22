@@ -6,7 +6,7 @@
 sudo apt install cmake g++ pkg-config libusb-1.0-0-dev libwxgtk3.2-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target rocketbox -j
-./build/apps/wx/RocketBox --config booth-port0.conf
+./build/apps/wx/RocketBox
 ```
 
 ### Package locally (deb)

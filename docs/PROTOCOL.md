@@ -2,9 +2,9 @@
 
 Device: **SLS fabric FPGA** — USB vendor `0x1772`, product `0x0006`.
 
-Constants live in `core/include/usb_protocol.h`. Implementation in `core/src/usb_transfer_core.cpp` (ported from Westcoast 0.01).
+Constants live in `core/include/usb_protocol.h`. Implementation in `core/src/usb_transfer_core.cpp`.
 
-For **how a GUI calls the core** (threading, progress, errors, port index), see [GUI_HANDOFF.md](../GUI_HANDOFF.md). This document covers **on-the-wire** format.
+For **how the wx app calls the core** (threading, progress, port index), see `core/include/usb_transfer.h` and [AGENTS.md](../AGENTS.md). This document covers **on-the-wire** format.
 
 ## Endpoints
 
@@ -41,7 +41,7 @@ Interface: `0`. Claim interface and detach kernel driver if active (handled in c
 
 ## Loopback (`loopback_transfer_core`)
 
-Westcoast **mode 8** file cross-connect (same PC, two cables):
+Two-port file cross-connect (same PC, two cables):
 
 1. Requires ≥ 2 fabric devices (port indices 0 and 1 typical)
 2. Open send port and recv port

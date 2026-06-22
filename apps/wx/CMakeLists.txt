@@ -47,11 +47,14 @@ else()
 endif()
 
 install(FILES
-    ${CMAKE_SOURCE_DIR}/booth-port0.conf
-    ${CMAKE_SOURCE_DIR}/booth-port1.conf
     ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
     ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
     DESTINATION share/rocketbox
+)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/demo-config/
+    DESTINATION share/rocketbox/demo-config
+    FILES_MATCHING PATTERN "*.conf" PATTERN "README.txt"
 )
 
 if(UNIX AND NOT APPLE)

@@ -284,26 +284,6 @@ export function loadIdentityProfile(portIndex: number): IdentityProfile {
   }
 }
 
-function mergeBoothIdentity(
-  booth: IdentityProfile,
-  local: IdentityProfile,
-  portIndex: number,
-): IdentityProfile {
-  return normalizeIdentity(
-    {
-      ...booth,
-      display_name: local.display_name.trim() ? local.display_name : booth.display_name,
-      team: local.team.trim() ? local.team : booth.team,
-      role: local.role.trim() ? local.role : booth.role,
-      receive_status: local.receive_status ?? booth.receive_status,
-      receive_folder: local.receive_folder.trim() ? local.receive_folder : booth.receive_folder,
-      peers: booth.peers.length > 0 ? booth.peers : local.peers,
-      booth_display_enabled: local.booth_display_enabled,
-    },
-    portIndex,
-  );
-}
-
 export function isBoothDisplayEnabled(profile: IdentityProfile): boolean {
   return profile.booth_display_enabled;
 }
@@ -335,35 +315,13 @@ export function applyBoothDisplaySettings(
   );
 }
 
-async function fetchBoothConfig(portIndex: number): Promise<IdentityProfile | null> {
-  try {
-    const base = import.meta.env.BASE_URL;
-    const response = await fetch(`${base}booth-port${portIndex}.conf`, { cache: 'no-store' });
-    if (!response.ok) {
-      return null;
-    }
-    const text = await response.text();
-    if (!text.includes('booth_display_mib_s')) {
-      return null;
-    }
-    return parseIdentityConfig(text, portIndex, `booth-port${portIndex}.conf`);
-  } catch {
-    return null;
-  }
-}
-
-/** Load local identity, then overlay booth defaults from /booth-portN.conf when served. */
+/** Load identity from localStorage and apply booth display preset when enabled. */
 export async function loadIdentityProfileAsync(portIndex: number): Promise<IdentityProfile> {
   const stored = loadIdentityProfile(portIndex);
-  const local = normalizeIdentity(
+  let merged = normalizeIdentity(
     { ...stored, booth_display_mib_s: 0, booth_display_jitter_pct: 0 },
     portIndex,
   );
-  const booth = await fetchBoothConfig(portIndex);
-  let merged = booth ? mergeBoothIdentity(booth, local, portIndex) : local;
-  if (booth && stored.config_path.startsWith('local:') && !stored.display_name.trim()) {
-    merged = { ...merged, booth_display_enabled: booth.booth_display_mib_s > 0 };
-  }
   if (isBoothDisplayDisabledInUrl()) {
     merged = { ...merged, booth_display_enabled: false };
   }

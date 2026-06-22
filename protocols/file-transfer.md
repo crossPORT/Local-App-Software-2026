@@ -2,7 +2,7 @@
 
 Best practices for **ROCKETBX** payload moves over the SLS fabric USB link. Read this before changing `usb_transfer_core.cpp`, `TransferController`, payload staging, or progress/UI wiring.
 
-**Related docs:** byte-level spec in [docs/PROTOCOL.md](../docs/PROTOCOL.md). Handshake coordination in [session.md](./session.md). Vendor GUI contract in [GUI_HANDOFF.md](../GUI_HANDOFF.md).
+**Related docs:** byte-level spec in [docs/PROTOCOL.md](../docs/PROTOCOL.md). Handshake coordination in [session.md](./session.md).
 
 ---
 
@@ -25,7 +25,7 @@ They differ in **size**, **timeout**, and **when** they run relative to the sess
 | 8 | 8 | File size, uint64 LE |
 | 16 | 16 | Reserved (zero) |
 
-Constants: `core/include/usb_protocol.h`. Do not change magic/endpoints without FPGA team + Westcoast reference check.
+Constants: `core/include/usb_protocol.h`. Do not change magic/endpoints without FPGA team review.
 
 ---
 
