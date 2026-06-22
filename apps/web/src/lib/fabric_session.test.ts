@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFixture } from './test_helpers';
+import { readFixture } from '../../test/fixtures';
 import {
   buildAnnounceMessage,
   buildSessionReply,
