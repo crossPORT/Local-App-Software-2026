@@ -95,8 +95,27 @@ jobs:
           path: ${{ runner.temp }}/out/
           if-no-files-found: error
 
+  package-pwa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Build and zip PWA
+        run: |
+          chmod +x scripts/package-pwa.sh
+          ./scripts/package-pwa.sh RocketBox-pwa-${{ github.ref_name }}.zip
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocketbox-pwa
+          path: RocketBox-pwa-*.zip
+
   release:
-    needs: package-wx
+    needs: [package-wx, package-pwa]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

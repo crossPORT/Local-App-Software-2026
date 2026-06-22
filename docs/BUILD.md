@@ -65,7 +65,7 @@ cd apps/web
 npm ci
 npm test
 npm run dev                    # local dev at /
-VITE_BASE_PATH=/Local-App-Software-2026/ npm run build   # GitHub Pages
+./scripts/package-pwa.sh       # RocketBox-pwa.zip at repo root
 ```
 
 ## Tests (no wx required)

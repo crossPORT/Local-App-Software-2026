@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  VITE_BASE_PATH: /Local-App-Software-2026/
-
 jobs:
   native-tests:
     runs-on: ubuntu-latest
@@ -85,5 +82,3 @@ jobs:
       - name: Build
         working-directory: apps/web
         run: npm run build
-        env:
-          VITE_BASE_PATH: /Local-App-Software-2026/

@@ -11,8 +11,8 @@ Desktop (wx)
     Unplug and replug the cable.
 
 Web (PWA)
-  https://crossport.github.io/Local-App-Software-2026/
-  Requires Chrome or Edge, HTTPS, and a connected fabric device.
+  Unzip RocketBox-pwa.zip and serve over HTTPS (Chrome/Edge + WebUSB).
+  Build zip: ./scripts/package-pwa.sh
 
 Downloads
   https://github.com/crossPORT/Local-App-Software-2026/releases/latest

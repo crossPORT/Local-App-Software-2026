@@ -3,15 +3,16 @@
 Download the latest installers from
 [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest).
 
-## Web app (no install)
+## Web app (zip)
 
-Open [RocketBox PWA](https://crossport.github.io/Local-App-Software-2026/) in **Chrome** or **Edge**.
+1. Download `RocketBox-pwa*.zip` from
+   [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest)
+   or run `./scripts/package-pwa.sh` from a source checkout.
+2. Unzip and serve the contents over **HTTPS** (WebUSB requirement), e.g. with your
+   internal static host or `npx serve` behind TLS.
+3. Open in **Chrome** or **Edge**, connect the fabric USB cable, and grant USB access.
 
-1. Connect the SLS fabric USB cable.
-2. Click **Connect** and grant USB access when prompted.
-3. Use the same send/receive workflow as the desktop app.
-
-Requires HTTPS (provided by GitHub Pages) and a physical fabric device.
+`file://` URLs will not work for WebUSB.
 
 ## Windows
 

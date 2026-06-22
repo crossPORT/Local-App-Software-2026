@@ -1,6 +1,7 @@
 /build/
 /build-asan/
 /build/install/
+/RocketBox-pwa.zip
 /apps/web/node_modules/
 /apps/web/dist/
 /Westcoast-0.01_release.zip

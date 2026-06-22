@@ -6,7 +6,7 @@ USB file transfer for the SLS fabric FPGA device (`1772:0006`). Co-located teams
 
 | App | Use |
 |-----|-----|
-| **Web (PWA)** | [crossport.github.io/Local-App-Software-2026](https://crossport.github.io/Local-App-Software-2026/) — Chrome/Edge + WebUSB |
+| **Web (PWA)** | `RocketBox-pwa.zip` from [Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest) or `./scripts/package-pwa.sh` |
 | **Desktop (wx)** | [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest) — Windows, macOS, Linux installers |
 
 ## Quick start (Linux desktop)
@@ -25,10 +25,11 @@ cmake --build build -j
 cd apps/web && npm ci && npm run dev
 ```
 
-Production build (GitHub Pages base path):
+Production zip (serve over HTTPS for WebUSB):
 
 ```bash
-cd apps/web && VITE_BASE_PATH=/Local-App-Software-2026/ npm run build
+./scripts/package-pwa.sh    # creates RocketBox-pwa.zip at repo root
+cd apps/web/dist && python3 -m http.server 8080   # dev serve; use HTTPS in production
 ```
 
 ## Tests
@@ -61,7 +62,7 @@ docs/           Architecture, protocol, build, deployment
 |----------|----------|
 | [docs/BUILD.md](docs/BUILD.md) | Build wx on Linux, macOS, Windows |
 | [docs/INSTALL.md](docs/INSTALL.md) | End-user install from release installers |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | CI, GitHub Pages, releases |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | CI, release installers, PWA zip |
 | [protocols/session.md](protocols/session.md) | Session handshake best practices |
 | [protocols/file-transfer.md](protocols/file-transfer.md) | Payload transfer best practices |
 | [AGENTS.md](AGENTS.md) | Contributor / agent onboarding |

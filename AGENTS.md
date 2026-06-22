@@ -8,7 +8,7 @@ Read this first when working in this repository. Goal: USB file transfer to/from
 2. **This file** — repo layout, build, open work
 3. **[protocols/session.md](protocols/session.md)** — session handshake best practices (no-buffer fabric, timing, listener rules)
 4. **[protocols/file-transfer.md](protocols/file-transfer.md)** — ROCKETBX payload best practices (send/receive, mutex, staging)
-5. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, GitHub Pages, release installers
+5. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, release installers, PWA zip on tags
 6. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
 7. **[docs/WESTCOAST.md](docs/WESTCOAST.md)** — engine port from the zip
 

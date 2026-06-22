@@ -5,18 +5,21 @@
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | [ci.yml](../.github/workflows/ci.yml) | PR + push to `main` | Unit/integration tests, wx compile matrix, PWA build |
-| [pages.yml](../.github/workflows/pages.yml) | push to `main` | Deploy PWA to GitHub Pages |
-| [release.yml](../.github/workflows/release.yml) | tag `v*` | Build wx installers for Linux, macOS, Windows |
+| [release.yml](../.github/workflows/release.yml) | tag `v*` | wx installers + `RocketBox-pwa-<tag>.zip` |
 
-## GitHub Pages (PWA only)
+## PWA zip (tag releases only)
 
-- **URL:** https://crossport.github.io/Local-App-Software-2026/
-- **Source:** `apps/web/dist` from `pages.yml`
-- **Base path:** `VITE_BASE_PATH=/Local-App-Software-2026/` at build time
+On `v*` tags, `release.yml` runs `scripts/package-pwa.sh` and attaches
+`RocketBox-pwa-<tag>.zip` to the GitHub Release (with wx installers).
 
-One-time repo setup: **Settings → Pages → Build and deployment → GitHub Actions**.
+Local build:
 
-Desktop installers are **not** deployed to Pages. They are attached to GitHub Releases only.
+```bash
+./scripts/package-pwa.sh
+# → RocketBox-pwa.zip at repo root
+```
+
+Serve unzipped contents over HTTPS for WebUSB (Chrome/Edge).
 
 ## Releases
 
@@ -46,12 +49,10 @@ cmake -S . -B build -DBUILD_WX_GUI=OFF && cmake --build build -j
 ctest --test-dir build -L unit -L integration --output-on-failure
 
 # PWA with Pages base path
-cd apps/web && npm test && VITE_BASE_PATH=/Local-App-Software-2026/ npm run build
-grep -o '/Local-App-Software-2026/[^"]*' dist/index.html | head
+cd apps/web && npm test && npm run build
 ```
 
 ## Repository
 
 - **Remote:** https://github.com/crossPORT/Local-App-Software-2026
 - **License:** proprietary ([LICENSE](../LICENSE))
-- **Public repo** recommended for free GitHub Pages with proprietary license
