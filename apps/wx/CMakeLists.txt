@@ -28,6 +28,9 @@ if(APPLE)
         BUILD_WITH_INSTALL_RPATH TRUE
         INSTALL_RPATH "@executable_path/../Frameworks"
     )
+elseif(WIN32)
+    # GUI subsystem: wxIMPLEMENT_APP supplies WinMain, not main().
+    set_target_properties(rocketbox PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
 target_include_directories(rocketbox PRIVATE
