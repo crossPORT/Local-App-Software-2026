@@ -1,5 +1,7 @@
 name: Release
 
+# Desktop installers (Linux/macOS/Windows) and PWA zip — tag pushes only.
+# Artifacts are attached to the GitHub Release for the tag (permanent until deleted).
 on:
   push:
     tags:
@@ -95,6 +97,7 @@ jobs:
           name: rocketbox-${{ matrix.artifact }}
           path: ${{ runner.temp }}/out/
           if-no-files-found: error
+          retention-days: 400
 
   package-pwa:
     runs-on: ubuntu-latest
@@ -114,6 +117,7 @@ jobs:
         with:
           name: rocketbox-pwa
           path: RocketBox-pwa-*.zip
+          retention-days: 400
 
   release:
     needs: [package-wx, package-pwa]
@@ -130,10 +134,27 @@ jobs:
       - name: List release files
         run: find dist -type f | sort
 
+      - name: Verify release artifacts
+        run: |
+          set -euo pipefail
+          find dist -type f | sort
+          test "$(find dist -name '*.deb' | wc -l)" -ge 1
+          test "$(find dist -name '*.AppImage' | wc -l)" -ge 1
+          test "$(find dist -name '*.dmg' | wc -l)" -ge 1
+          test "$(find dist -name '*.exe' | wc -l)" -ge 1
+          test "$(find dist -name 'RocketBox-pwa-*.zip' | wc -l)" -ge 1
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: RocketBox ${{ github.ref_name }}
           generate_release_notes: true
-          files: dist/**/*
+          files: |
+            dist/**/*.deb
+            dist/**/*.AppImage
+            dist/**/*.dmg
+            dist/**/*.exe
+            dist/**/RocketBox-pwa-*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

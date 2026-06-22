@@ -4,8 +4,31 @@
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| [ci.yml](../.github/workflows/ci.yml) | PR + push to `main` | Unit/integration tests, wx compile matrix, PWA build |
-| [release.yml](../.github/workflows/release.yml) | tag `v*` | wx installers + `RocketBox-pwa-<tag>.zip` |
+| [ci.yml](../.github/workflows/ci.yml) | PR + push to `main` | Unit/integration tests + PWA build/test (no installers) |
+| [release.yml](../.github/workflows/release.yml) | **tag `v*` only** | Linux/macOS/Windows installers + PWA zip → GitHub Release |
+
+## Where builds are kept
+
+**Canonical storage:** [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases) for each tag.
+
+When you push a tag (e.g. `v0.1.0`), `release.yml`:
+
+1. Builds wx RocketBox on **ubuntu**, **macos**, and **windows** runners (CPack + AppImage on Linux).
+2. Builds the PWA zip on ubuntu.
+3. Uploads job artifacts (400-day retention backup).
+4. Creates/updates the **GitHub Release** for that tag and attaches all installer files.
+
+| File (typical) | Platform | Kept on |
+|----------------|----------|---------|
+| `rocketbox_*_amd64.deb` | Linux (Debian/Ubuntu) | GitHub Release (permanent) |
+| `RocketBox-v*-linux-x64.AppImage` | Linux (portable) | GitHub Release |
+| `RocketBox-*.dmg` | macOS (arm64 CI runner) | GitHub Release |
+| `RocketBox-*-setup.exe` | Windows (NSIS) | GitHub Release |
+| `RocketBox-pwa-v*.zip` | Web PWA | GitHub Release |
+
+Download from: **Releases →** pick tag → **Assets**.
+
+CI on `main` does **not** produce or store desktop installers — only tests and a PWA compile check.
 
 ## PWA zip (tag releases only)
 

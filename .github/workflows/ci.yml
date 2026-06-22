@@ -22,50 +22,6 @@ jobs:
       - name: Integration tests
         run: ctest --test-dir build -L integration --output-on-failure
 
-  build-wx:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install vcpkg (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
-          ./vcpkg/bootstrap-vcpkg.bat
-          ./vcpkg/vcpkg install
-
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libwxgtk3.2-dev
-
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install wxwidgets libusb pkg-config
-
-      - name: Configure (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-
-      - name: Configure (Linux)
-        if: runner.os == 'Linux'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Configure (macOS)
-        if: runner.os == 'macOS'
-        env:
-          PKG_CONFIG_PATH: /opt/homebrew/opt/libusb/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/usr/local/opt/libusb/lib/pkgconfig
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
-
-      - name: Build RocketBox
-        run: cmake --build build --config Release --target rocketbox -j 4
-
   web:
     runs-on: ubuntu-latest
     steps:

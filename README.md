@@ -66,7 +66,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency graph.
 |----------|----------|
 | [docs/BUILD.md](docs/BUILD.md) | Build wx on Linux, macOS, Windows |
 | [docs/INSTALL.md](docs/INSTALL.md) | End-user install from release installers |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | CI, release installers, PWA zip |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | CI vs release; installers live on GitHub Releases (tag `v*` only) |
 | [protocols/session.md](protocols/session.md) | Session handshake best practices |
 | [protocols/file-transfer.md](protocols/file-transfer.md) | Payload transfer best practices |
 | [AGENTS.md](AGENTS.md) | Contributor / agent onboarding |
