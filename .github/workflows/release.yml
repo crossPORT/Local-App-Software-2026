@@ -1,14 +1,24 @@
 name: Release
 
-# Desktop installers (Linux/macOS/Windows) and PWA zip — tag pushes only.
-# Artifacts are attached to the GitHub Release for the tag (permanent until deleted).
+# Desktop installers (Linux/macOS/Windows) and PWA zip — triggered by version tag push.
+# Tags must match v* (e.g. v0.0.1) or semver *.*.* (e.g. 0.0.1).
+# Artifacts are attached to the GitHub Release for the tag.
 on:
   push:
     tags:
       - "v*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v0.0.1 or 0.0.1)"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
 jobs:
   package-wx:
@@ -28,6 +38,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
 
       - name: Install vcpkg (Windows)
         if: runner.os == 'Windows'
@@ -89,7 +101,7 @@ jobs:
         if: matrix.artifact == 'linux'
         run: |
           chmod +x scripts/build-appimage.sh
-          scripts/build-appimage.sh "${{ runner.temp }}/install" "${{ runner.temp }}/out" "${{ github.ref_name }}"
+          scripts/build-appimage.sh "${{ runner.temp }}/install" "${{ runner.temp }}/out" "${{ env.RELEASE_TAG }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -103,6 +115,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -111,7 +125,7 @@ jobs:
       - name: Build and zip PWA
         run: |
           chmod +x scripts/package-pwa.sh
-          ./scripts/package-pwa.sh RocketBox-pwa-${{ github.ref_name }}.zip
+          ./scripts/package-pwa.sh RocketBox-pwa-${{ env.RELEASE_TAG }}.zip
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -147,8 +161,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: RocketBox ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: RocketBox App ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: |
             dist/**/*.deb

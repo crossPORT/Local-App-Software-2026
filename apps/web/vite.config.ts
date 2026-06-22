@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'RocketBox',
-        short_name: 'RocketBox',
+        name: 'RocketBox App',
+        short_name: 'RocketBox App',
         description: 'SLS USB device file transfer (WebUSB PWA)',
         theme_color: '#1a2332',
         background_color: '#1a2332',

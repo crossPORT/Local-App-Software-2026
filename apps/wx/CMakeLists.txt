@@ -22,7 +22,7 @@ if(APPLE)
     set_target_properties(rocketbox PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.crossport.rocketbox"
-        MACOSX_BUNDLE_BUNDLE_NAME "RocketBox"
+        MACOSX_BUNDLE_BUNDLE_NAME "RocketBox App"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     )

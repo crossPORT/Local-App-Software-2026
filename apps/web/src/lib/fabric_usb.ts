@@ -148,7 +148,7 @@ async function openFabricDevice(device: USBDevice): Promise<void> {
     } catch {
       if (message.includes('claim') || message.includes('busy') || message.includes('Access')) {
         throw new FabricUsbError(
-          'USB interface is busy — close other RocketBox tabs or native apps using this cable, then try Forget USB device.',
+          'USB interface is busy — close other RocketBox App tabs or native apps using this cable, then try Forget USB device.',
         );
       }
       throw new FabricUsbError(`Could not claim USB interface — ${message}`);

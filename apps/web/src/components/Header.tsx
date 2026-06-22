@@ -27,7 +27,7 @@ export function Header({ state, ledPulse, onOpenSettings }: HeaderProps) {
         <div className="icon-box" aria-hidden>🚀</div>
         <div className="brand-block">
           <div className="brand-row">
-            <span className="brand">RocketBox</span>
+            <span className="brand">RocketBox App</span>
             <span className="node-name">{state.identity.display_name}</span>
             <ConnectionLed state={led} pulseOn={ledPulse} />
           </div>

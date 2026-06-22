@@ -22,7 +22,7 @@ export function formatUsbConnectError(err: unknown): string | null {
     return 'WebUSB is not available — use Chrome or Edge on localhost.';
   }
   if (message.includes('Access denied') || message.includes('SecurityError')) {
-    return 'USB access denied — close other RocketBox tabs, click Forget USB device, then connect again.';
+    return 'USB access denied — close other RocketBox App tabs, click Forget USB device, then connect again.';
   }
   if (message.includes('interface is busy') || message.includes('Could not claim')) {
     return message;

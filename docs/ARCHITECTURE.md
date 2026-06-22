@@ -6,8 +6,8 @@
 |------|------|------|
 | `core/` | Library | USB engine (`fabric_usb_core`) — libusb, ROCKETBX wire protocol |
 | `lib/session/` | Library | Shared native session logic (`rocketbox_session`) — handshake, roster, orchestration |
-| `apps/wx/` | App | RocketBox desktop UI (wxWidgets) — links `rocketbox_session` |
-| `apps/web/` | App | RocketBox PWA (TypeScript/WebUSB) — **parallel implementation**, does not link C++ |
+| `apps/wx/` | App | RocketBox App (desktop / wxWidgets) — links `rocketbox_session` |
+| `apps/web/` | App | RocketBox App (PWA / WebUSB) — **parallel implementation**, does not link C++ |
 | `sim/` | Library | In-process fabric simulator for tests |
 | `tools/` | Binaries | CLIs — raw USB tools link `core`; session tools link `rocketbox_session` |
 | `tests/` | Binaries | C++ unit + integration suites (CTest) |
@@ -18,7 +18,7 @@
 
 One **USB transfer engine** (`fabric_usb_core`) and one **session layer** (`rocketbox_session`) shared by:
 
-- RocketBox desktop (`apps/wx/` + `lib/session/`)
+- RocketBox App desktop (`apps/wx/` + `lib/session/`)
 - Headless session tools (`booth-cli`, `fabric-session-test`, …)
 
 The web PWA (`apps/web/`) mirrors session behavior in TypeScript and stays aligned via golden fixtures and parity tests — it does not link the C++ libraries.
@@ -51,7 +51,7 @@ Binary locations:
 - `build/apps/wx/RocketBox`
 - `build/tools/usb-probe`, `usb-loopback-test`, `booth-cli`, …
 
-## Runtime: RocketBox wx
+## Runtime: RocketBox App (wx)
 
 Implements the core API via shared session logic in `lib/session/`.
 
@@ -99,7 +99,7 @@ Prefer `usb-loopback-test` and integration tests to validate core/session change
 - **`port_index`** selects the Nth matching device (0-based) in libusb device list order
 - **`count_fabric_devices(ctx)`** returns how many are connected
 
-Loopback on one PC requires **two** devices (two cables). Run two RocketBox instances. Use `--port 0` and `--port 1`, or pick the cable in the **Connect USB** dialog when multiple devices are present.
+Loopback on one PC requires **two** RocketBox hardware connections (two cables). Run two RocketBox App instances. Use `--port 0` and `--port 1`, or pick the cable in the **Connect USB** dialog when multiple devices are present.
 
 ## Dependencies
 

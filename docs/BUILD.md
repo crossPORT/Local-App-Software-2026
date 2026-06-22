@@ -1,4 +1,4 @@
-# Building RocketBox
+# Building RocketBox App
 
 ## Linux (Ubuntu/Debian)
 

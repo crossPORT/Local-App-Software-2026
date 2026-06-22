@@ -1,6 +1,6 @@
 # Agent onboarding
 
-Read this first when working in this repository. Goal: USB file transfer to/from an FPGA fabric device (`1772:0006`) with RocketBox (wx + PWA) and CLI test tools.
+Read this first when working in this repository. Goal: USB file transfer to/from **RocketBox** hardware (`1772:0006`) using **RocketBox App** (wx + PWA) and CLI test tools.
 
 ## Read order
 
@@ -36,8 +36,8 @@ All targets must compile:
 | `core/include/usb_transfer.h` | Public core API: `TransferResult`, `*_core()` functions |
 | `core/src/usb_transfer_core.cpp` | USB transfer engine |
 | `lib/session/` | Shared session layer (`transfer_orchestrator`, `session_listener`, `TransferController`, …) |
-| `apps/wx/` | RocketBox desktop UI — roster, send-to-peer, accept/reject |
-| `apps/web/` | RocketBox PWA (WebUSB) — TypeScript mirror of session behavior |
+| `apps/wx/` | RocketBox App (desktop UI) — roster, send-to-peer, accept/reject |
+| `apps/web/` | RocketBox App (PWA / WebUSB) — TypeScript mirror of session behavior |
 | `tools/usb_probe.cpp` | Enumerate devices/endpoints (no full transfer) |
 | `tools/usb_loopback_test.cpp` | Two-port file loopback |
 | `tools/booth_cli.cpp` | Headless session CLI (links `rocketbox_session`) |
@@ -106,7 +106,7 @@ Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
 
 ## Priority open work
 
-1. **Hardware validation** — run `usb-probe`, `usb-loopback-test`, and RocketBox wx against real FPGA
+1. **Hardware validation** — run `usb-probe`, `usb-loopback-test`, and RocketBox App (wx) against real RocketBox hardware
 
 ## Conventions
 

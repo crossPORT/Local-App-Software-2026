@@ -73,7 +73,7 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave }: Setting
       >
         <h2 id="settings-title">Settings</h2>
         <p className="settings-hint" style={{ color: theme.muted }}>
-          Your name is announced to other RocketBox stations. Peer bookmarks are optional.
+          Your name is announced to other peers on the RocketBox fabric. Peer bookmarks are optional.
         </p>
 
         <form onSubmit={onSubmit}>

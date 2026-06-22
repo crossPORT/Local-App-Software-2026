@@ -5,13 +5,13 @@
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | [ci.yml](../.github/workflows/ci.yml) | PR + push to `main` | Unit/integration tests + PWA build/test (no installers) |
-| [release.yml](../.github/workflows/release.yml) | **tag `v*` only** | Linux/macOS/Windows installers + PWA zip → GitHub Release |
+| [release.yml](../.github/workflows/release.yml) | **tag push** `v*` or `*.*.*`, or **manual** workflow dispatch | Linux/macOS/Windows installers + PWA zip → GitHub Release |
 
 ## Where builds are kept
 
 **Canonical storage:** [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases) for each tag.
 
-When you push a tag (e.g. `v0.1.0`), `release.yml`:
+When you push a version tag (e.g. `v0.0.1` or `0.0.1`), `release.yml`:
 
 1. Builds wx RocketBox on **ubuntu**, **macos**, and **windows** runners (CPack + AppImage on Linux).
 2. Builds the PWA zip on ubuntu.
@@ -46,12 +46,23 @@ Serve unzipped contents over HTTPS for WebUSB (Chrome/Edge).
 
 ## Releases
 
-Tag a version:
+Tag a version and push (use a **`v` prefix** or plain semver — both work):
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.0.1
+git push origin v0.0.1
 ```
+
+Or without the `v` prefix:
+
+```bash
+git tag 0.0.1
+git push origin 0.0.1
+```
+
+**Creating a release only in the GitHub UI does not build installers.** The workflow runs when the **tag is pushed** to the remote (or when you use **Actions → Release → Run workflow** and enter the tag name).
+
+If you already published an empty release, open **Actions → Release → Run workflow**, enter the tag (e.g. `0.0.1`), and run — it will attach built assets to that release.
 
 The release workflow produces:
 

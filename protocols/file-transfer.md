@@ -56,10 +56,10 @@ Session receives use `session_header_timeout_ms` (idle poll) or `handshake_poll_
 
 | Fact | Implication |
 |------|-------------|
-| VID `0x1772`, PID `0x0006` | SLS fabric FPGA |
+| VID `0x1772`, PID `0x0006` | RocketBox hardware |
 | Endpoints: OUT `0x02`, IN `0x81` | Single interface `0` |
 | `port_index` = libusb enumeration order | **Not** the physical silkscreen label |
-| Two cables on one PC | Two RocketBox instances; `--port 0` / `--port 1`, or pick cable in **Connect USB** dialog |
+| Two cables on one PC | Two RocketBox App instances; `--port 0` / `--port 1`, or pick cable in **Connect USB** dialog |
 | One cable | One app; `port_index` is usually `0` |
 
 Permission errors → `scripts/setup-usb-access.sh`, replug cable.

@@ -28,7 +28,7 @@ chmod +x "$APPDIR/AppRun"
 cat > "$APPDIR/rocketbox.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=RocketBox
+Name=RocketBox App
 Exec=RocketBox
 Icon=rocketbox
 Categories=Utility;

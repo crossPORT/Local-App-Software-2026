@@ -222,7 +222,7 @@ wxEND_EVENT_TABLE()
 MainFrame::MainFrame(const std::string& config_path, int cli_port_index)
     : wxFrame(nullptr,
               wxID_ANY,
-              "RocketBox Transfer",
+              "RocketBox App",
               wxDefaultPosition,
               wxDefaultSize)
     , cli_port_index_(cli_port_index)
@@ -390,7 +390,7 @@ void MainFrame::BuildUi() {
     auto* brand_block = new wxBoxSizer(wxVERTICAL);
     auto* brand_row = new wxBoxSizer(wxHORIZONTAL);
 
-    auto* brand_label = MakeLabel(header, "RocketBox", kText, 14);
+    auto* brand_label = MakeLabel(header, "RocketBox App", kText, 14);
     {
         wxFont font = brand_label->GetFont();
         font.SetWeight(wxFONTWEIGHT_BOLD);
@@ -455,7 +455,7 @@ void MainFrame::BuildUi() {
 }
 
 void MainFrame::UpdateWindowTitle() {
-    SetTitle(wxString::FromUTF8(("RocketBox — " + identity_.display_name).c_str()));
+    SetTitle(wxString::FromUTF8(("RocketBox App — " + identity_.display_name).c_str()));
     if (node_name_label_) {
         node_name_label_->SetLabel(wxString::FromUTF8(identity_.display_name.c_str()));
     }

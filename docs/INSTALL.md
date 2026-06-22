@@ -1,5 +1,6 @@
-# Installing RocketBox
+# Installing RocketBox App
 
+Software for **RocketBox** hardware (USB fabric, `1772:0006`). Installers are packaged as `RocketBox-*`; the running product is **RocketBox App**.
 Download the latest installers from
 [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest).
 
@@ -10,7 +11,7 @@ Download the latest installers from
    or run `./scripts/package-pwa.sh` from a source checkout.
 2. Unzip and serve the contents over **HTTPS** (WebUSB requirement), e.g. with your
    internal static host or `npx serve` behind TLS.
-3. Open in **Chrome** or **Edge**, connect the fabric USB cable, and grant USB access.
+3. Open in **Chrome** or **Edge**, connect the RocketBox USB cable, and grant USB access.
 
 `file://` URLs will not work for WebUSB.
 
@@ -20,8 +21,8 @@ On **Linux**, install the udev rule (see [Linux](#linux)) before the browser can
 
 1. Download `RocketBox-*-setup.exe` (NSIS installer from CPack).
 2. Run the installer (SmartScreen may warn — unsigned v1 build).
-3. Launch **RocketBox** from the Start Menu.
-4. Connect the fabric USB cable before transferring.
+3. Launch **RocketBox App** from the Start Menu (listed as RocketBox).
+4. Connect the RocketBox USB cable before transferring.
 
 If the device is not detected, ensure no other app holds the USB interface and retry.
 
@@ -30,9 +31,9 @@ No udev rule is required on Windows.
 ## macOS
 
 1. Download `RocketBox-*.dmg`.
-2. Open the DMG and drag **RocketBox** to Applications.
+2. Open the DMG and drag **RocketBox App** to Applications (bundle name RocketBox).
 3. First launch: right-click → **Open** if Gatekeeper blocks unsigned builds.
-4. Connect the fabric USB cable.
+4. Connect the RocketBox USB cable.
 
 Release CI builds on `macos-latest` (Apple Silicon). No udev rule is required on macOS.
 
@@ -40,7 +41,7 @@ Release CI builds on `macos-latest` (Apple Silicon). No udev rule is required on
 
 ### USB access rule (required, one-time)
 
-The fabric device (`1772:0006`) needs a udev rule on Linux for RocketBox and for Chrome/Edge WebUSB.
+The **RocketBox** hardware (`1772:0006`) needs a udev rule on Linux for RocketBox App and for Chrome/Edge WebUSB.
 
 **`.deb` install:** `cmake/debian/postinst` copies
 `/usr/share/rocketbox/99-sls-fabric-usb.rules` → `/etc/udev/rules.d/` when that destination file does not exist yet. Unplug and replug the cable once.
@@ -64,7 +65,7 @@ sudo apt install ./rocketbox_*_amd64.deb
 RocketBox
 ```
 
-Binary name is **`RocketBox`** in `/usr/bin/`. The `.deb` package does not install a `.desktop` menu entry.
+Binary name is **`RocketBox`** in `/usr/bin/` (RocketBox App). The `.deb` package does not install a `.desktop` menu entry.
 
 ### AppImage (portable)
 
@@ -75,11 +76,11 @@ chmod +x RocketBox-*-linux-x64.AppImage
 
 Install the udev rule manually (see above). The AppImage build includes `rocketbox.desktop` for its own launcher only.
 
-## USB device and multiple cables
+## RocketBox hardware and multiple cables
 
-- Vendor/product: `1772:0006`
-- One RocketBox window per USB cable
-- Two cables on one PC: launch RocketBox twice. With two devices connected, each launch prompts to pick a cable unless you pass `--port 0` / `--port 1` on the command line.
+- **RocketBox** USB device: vendor/product `1772:0006`
+- One RocketBox App window per cable
+- Two RocketBox units on one PC: launch RocketBox App twice. With two devices connected, each launch prompts to pick a cable unless you pass `--port 0` / `--port 1` on the command line.
 
 Desktop CLI options today: `--config FILE`, `--port N` (see `apps/wx/main.cpp`).
 

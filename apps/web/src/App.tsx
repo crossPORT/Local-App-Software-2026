@@ -27,7 +27,7 @@ export function App() {
   } = useRocketBox();
 
   if (!state) {
-    return <div className="app loading">Loading RocketBox…</div>;
+    return <div className="app loading">Loading RocketBox App…</div>;
   }
 
   const onConnect = () => {

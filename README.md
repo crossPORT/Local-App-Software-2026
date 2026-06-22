@@ -1,14 +1,23 @@
-# RocketBox
+# RocketBox App
 
-**USB file transfer for co-located teams** — connect laptops over the SLS fabric FPGA USB device. No IP addresses, no accounts, no IT firewall changes. Plug in the cable, open RocketBox, and send files.
+**USB file transfer for co-located teams** — plug laptops into **RocketBox** hardware (the USB switched fabric). No IP addresses, no accounts, no IT firewall changes. Connect the cable, open **RocketBox App**, and send files.
 
 [![CI](https://github.com/crossPORT/Local-App-Software-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/crossPORT/Local-App-Software-2026/actions/workflows/ci.yml)
 
+## Names
+
+| Name | What it is |
+|------|------------|
+| **RocketBox** | The hardware — USB fabric device (vendor/product **1772:0006**) and cables |
+| **RocketBox App** | The software — desktop and web apps that talk to RocketBox hardware |
+
+Release installers and the Linux binary are named `RocketBox` / `RocketBox-*` for packaging; this document uses **RocketBox App** for the software.
+
 ## What it is
 
-RocketBox is the end-user software for the SLS switched USB fabric. Each participant runs RocketBox on their laptop with a fabric USB cable attached. The app discovers peers on the fabric, negotiates a session, and transfers files directly over USB — not over the corporate network.
+**RocketBox App** is the end-user software for RocketBox hardware. Each participant runs the app on their laptop with a RocketBox USB cable attached. The app discovers peers on the fabric, negotiates a session, and transfers files directly over USB — not over the corporate network.
 
-**Hardware:** SLS fabric USB device (vendor/product **1772:0006**). One RocketBox window per cable. With two cables on one PC, launch RocketBox twice — each window binds to one cable (see [Using RocketBox](#using-rocketbox)).
+**RocketBox hardware:** one USB connection per laptop in normal use. With two RocketBox cables on one PC, launch RocketBox App twice — each window binds to one cable (see [Using RocketBox App](#using-rocketbox-app)).
 
 ## What you get
 
@@ -17,7 +26,7 @@ RocketBox is the end-user software for the SLS switched USB fabric. Each partici
 | **Desktop app** | Windows, macOS, Linux — full native UI | [GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest) — `.exe`, `.dmg`, `.deb`, or `.AppImage` |
 | **Web app (PWA)** | Chrome/Edge on any OS; host on your HTTPS site | Same Releases page — `RocketBox-pwa-*.zip` |
 
-Both apps do the same job: connect to the fabric, show who is online, and send/receive files. Pick desktop for a installed app; pick the PWA when you already have an HTTPS internal host and want zero install for users.
+Both apps do the same job: connect to RocketBox hardware, show who is online, and send/receive files. Pick desktop for an installed app; pick the PWA when you already have an HTTPS internal host and want zero install for users.
 
 ## Supported platforms
 
@@ -27,15 +36,15 @@ Both apps do the same job: connect to the fabric, show who is online, and send/r
 | **macOS (Apple Silicon)** | Disk image (`.dmg`) | Chrome or Edge over HTTPS |
 | **Linux (Ubuntu/Debian 64-bit)** | `.deb` (recommended) or `.AppImage` | Chrome or Edge over HTTPS |
 
-Release builds are published when the team tags a version (e.g. `v0.1.0`). Always download from **[GitHub Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest)** — pick the latest tag, then download the asset for your platform.
+Release builds are published when the team pushes a version tag (e.g. `v0.0.1`). Pushing the tag starts GitHub Actions — creating a release in the UI alone does not build installers. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
 ## Linux: USB access rule (required, one-time)
 
-On **Linux only**, the operating system blocks normal apps (and browsers) from talking to the fabric USB device until a **udev rule** is installed. This is a one-time setup per machine — not needed on Windows or macOS.
+On **Linux only**, the operating system blocks apps and browsers from opening RocketBox hardware until a **udev rule** is installed. This is a one-time setup per machine — not needed on Windows or macOS.
 
-**Why:** The fabric device (`1772:0006`) is a custom USB peripheral. Without the rule, RocketBox or Chrome will fail to open the device (permission denied).
+**Why:** RocketBox presents as USB device `1772:0006`. Without the rule, RocketBox App or Chrome will fail to open the device (permission denied).
 
 **What to do:**
 
@@ -55,9 +64,9 @@ On **Linux only**, the operating system blocks normal apps (and browsers) from t
 
    The rule file is also at the repo root as `99-sls-fabric-usb.rules`.
 
-3. **Unplug and replug the fabric USB cable** after installing the rule.
+3. **Unplug and replug the RocketBox USB cable** after installing the rule.
 
-The rule file (`99-sls-fabric-usb.rules`) grants read/write access to device `1772:0006` without running RocketBox as root. The same rule is required for the **web PWA on Linux** — Chrome/Edge use the same USB permissions.
+The rule file (`99-sls-fabric-usb.rules`) grants access to RocketBox hardware (`1772:0006`) without running the app as root. The same rule is required for the **web PWA on Linux** — Chrome/Edge use the same USB permissions.
 
 ---
 
@@ -67,17 +76,17 @@ The rule file (`99-sls-fabric-usb.rules`) grants read/write access to device `17
 
 1. Download `RocketBox-*-setup.exe` from [Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest).
 2. Run the installer. Windows SmartScreen may warn on unsigned builds — choose to run anyway if your IT policy allows.
-3. Launch **RocketBox** from the Start Menu.
-4. Connect the fabric USB cable, then start a transfer.
+3. Launch **RocketBox App** from the Start Menu (installer lists it as RocketBox).
+4. Connect the RocketBox USB cable, then start a transfer.
 
 No USB rules file is required on Windows.
 
 ### macOS
 
 1. Download `RocketBox-*-macos-*.dmg` from [Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest).
-2. Open the DMG and drag **RocketBox** to Applications.
+2. Open the DMG and drag **RocketBox App** to Applications (shown as RocketBox in the bundle).
 3. First launch: if macOS Gatekeeper blocks the app, right-click the app → **Open**.
-4. Connect the fabric USB cable.
+4. Connect the RocketBox USB cable.
 
 No udev-style rules are required on macOS.
 
@@ -90,7 +99,7 @@ sudo apt install ./rocketbox_*_amd64.deb
 RocketBox
 ```
 
-The installed binary is `RocketBox` (in `/usr/bin/`). The `.deb` does not add a desktop menu entry today.
+The installed binary is `RocketBox` in `/usr/bin/` (RocketBox App). The `.deb` does not add a desktop menu entry today.
 
 After install, complete the [USB access rule](#linux-usb-access-rule-required-one-time) step if the device is not detected (unplug/replug the cable).
 
@@ -109,20 +118,20 @@ You must install the [USB access rule](#linux-usb-access-rule-required-one-time)
 2. Unzip on a web server that serves the files over **HTTPS** (WebUSB does not work on `http://` or `file://`).
 3. Open the site in **Chrome** or **Edge**.
 4. On **Linux**, install the [USB access rule](#linux-usb-access-rule-required-one-time) first.
-5. Connect the fabric USB cable. When prompted, allow the browser to access the USB device.
+5. Connect the RocketBox USB cable. When prompted, allow the browser to access the device.
 
 Configure booth identity (display name, port) in the in-app **Settings** — settings are stored in the browser.
 
 ---
 
-## Using RocketBox
+## Using RocketBox App
 
-1. **Connect** the fabric USB cable to the laptop before or after launching the app.
+1. **Connect** the RocketBox USB cable to the laptop before or after launching the app.
 2. **Wait for discovery** — peers on the same fabric appear in the roster when their session is active.
 3. **Send a file** — choose a recipient and file; progress is shown until complete.
-4. **Two cables on one machine** — launch RocketBox twice. With two devices connected, the second launch shows a **Connect USB** dialog to pick a cable. To skip the dialog, pass `--port 0` and `--port 1`. Optional `--config` loads booth identity from a file (samples in `demo-config/`).
+4. **Two RocketBox cables on one machine** — launch RocketBox App twice. With two devices connected, the second launch shows a **Connect USB** dialog to pick a cable. To skip the dialog, pass `--port 0` and `--port 1`. Optional `--config` loads booth identity from a file (samples in `demo-config/`).
 
-If the device is not listed: confirm the cable is seated, no other program has exclusive USB access, and on Linux that the udev rule is installed and the cable was replugged.
+If RocketBox hardware is not detected: confirm the cable is seated, no other program has exclusive USB access, and on Linux that the udev rule is installed and the cable was replugged.
 
 ---
 

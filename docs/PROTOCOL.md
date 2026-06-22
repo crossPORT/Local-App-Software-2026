@@ -1,6 +1,6 @@
 # USB protocol
 
-Device: **SLS fabric FPGA** — USB vendor `0x1772`, product `0x0006`.
+Device: **RocketBox** hardware — USB vendor `0x1772`, product `0x0006`.
 
 Constants live in `core/include/usb_protocol.h`. Implementation in `core/src/usb_transfer_core.cpp`.
 
