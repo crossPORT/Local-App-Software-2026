@@ -9,7 +9,7 @@ to use. Do not change their signatures or error semantics without coordination.
 | Handoff topic | Where it lives |
 |---------------|----------------|
 | Core API (`TransferResult`, `*_core()`) | `core/include/usb_transfer.h` — **source of truth** if this doc and headers differ |
-| GTK implementation | `apps/gtk/transfer_controller.{h,cpp}` + `main_window.{h,cpp}` |
+| RocketBox wx implementation | `apps/wx/` + `apps/demo/transfer_controller.{h,cpp}` |
 | Engine (being aligned with Westcoast) | `core/src/usb_transfer_core.cpp` |
 | Agent / build context | [AGENTS.md](AGENTS.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
@@ -17,7 +17,7 @@ to use. Do not change their signatures or error semantics without coordination.
 original send/receive contract):
 
 - `loopback_transfer_core()` — two-cable same-PC test (GUI button + `usb-loopback-test`)
-- `count_fabric_devices()` — device-count hint in the GTK status bar
+- `count_fabric_devices()` — device-count hint in the wx status UI
 
 For GUI send / receive, follow this document. Use port index `0` only
 unless running **two GUI instances** on one PC (see below).
@@ -29,17 +29,17 @@ unless running **two GUI instances** on one PC (see below).
 To mimic two distinct machines, launch one app per port:
 
 ```bash
-./build/apps/gtk/data-transfer-demo --port 0   # e.g. Receiver
-./build/apps/gtk/data-transfer-demo --port 1   # e.g. Sender
+./build/apps/wx/RocketBox --port 0 --config booth-port0.conf
+./build/apps/wx/RocketBox --port 1 --config booth-port1.conf
 ```
 
 Short form: `-p 0` / `-p 1`.
 
 **Workflow**
 
-1. On **port 0** window: click **Receive File**, pick output path → waits ("Waiting for sender…")
-2. On **port 1** window: click **Send File**, pick the source file
-3. Watch progress on both windows; compare output file to source
+1. On **port 0** window: wait for peer / accept incoming transfer
+2. On **port 1** window: send to peer from roster
+3. Watch progress on both windows; compare received file to source
 
 Each instance owns one USB device; send/receive use that instance's `--port`.
 Loopback (ports 0→1 in one process) stays on the **port 0** window only.

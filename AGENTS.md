@@ -1,6 +1,6 @@
 # Agent onboarding
 
-Read this first when working in this repository. Goal: USB file transfer to/from an FPGA fabric device (`1772:0006`) on Linux, with a GTK app and CLI test tools.
+Read this first when working in this repository. Goal: USB file transfer to/from an FPGA fabric device (`1772:0006`) with RocketBox (wx + PWA) and CLI test tools.
 
 ## Read order
 
@@ -30,7 +30,7 @@ cmake --build build -j
 All targets must compile:
 
 - `fabric_usb_core` (static lib)
-- `data-transfer-demo`, `usb-probe`, `usb-loopback-test`
+- `data-transfer-demo` (wx RocketBox), `usb-probe`, `usb-loopback-test`
 
 ## File map
 
@@ -42,8 +42,7 @@ All targets must compile:
 | [GUI_HANDOFF.md](GUI_HANDOFF.md) | **Vendor GUI contract** — must-read for any UI work |
 | RocketBox wx app | `apps/wx/main_frame.{h,cpp}` + panels | Roster, send-to-peer, accept/reject (RocketBox MVP) |
 | Shared demo logic | `apps/demo/` (`transfer_orchestrator`, `session_listener`, …) | USB session coordination + `TransferController` |
-| Legacy GTK app | `apps/gtk/` | Engineering demo (retained; not RocketBox MVP target) |
-| `apps/gtk/transfer_controller.{h,cpp}` | Legacy duplicate of `apps/demo/transfer_controller` |
+| Web PWA | `apps/web/` | WebUSB RocketBox |
 | `tools/usb_probe.cpp` | Enumerate devices/endpoints (no full transfer) |
 | `tools/usb_loopback_test.cpp` | Two-port file loopback |
 | `scripts/setup-usb-access.sh` | Installs udev rule (needs sudo) |
@@ -58,18 +57,18 @@ unzip -p Westcoast-0.01_release.zip Westcoast-0.01_release/main.cpp > /tmp/westc
 
 ## Layering rules
 
-1. **USB logic lives in `core/` only** — no GTK, no `stdio` menu loops in core
+1. **USB logic lives in `core/` only** — no wx/GTK in core, no `stdio` menu loops in core
 2. **UI lives in `apps/wx/`** (RocketBox MVP) — wxWidgets; marshal worker/orchestrator updates via `wxTheApp->CallAfter`
-3. **Tools link `fabric_usb_core` only** — no GTK dependency
+3. **Tools link `fabric_usb_core` only** — no GUI dependency
 4. **New platforms** → new `apps/<platform>/` subdirectory linking core (e.g. future `apps/console/`, `apps/win32/`)
 
 ## GUI integration (from GUI_HANDOFF.md)
 
-The GTK app must follow the vendor handoff:
+The wx RocketBox app must follow the vendor handoff:
 
-- **Two GUI operations:** send file, receive file — all via `*_core()` on a **worker thread**
-- **`port_index`:** always `0` for those (single cable to PC)
-- **Progress:** callback fires ~every 4 MB on the worker thread → marshal to GTK main thread before touching widgets (`g_idle_add` in `MainWindow::schedule_ui_update`)
+- **Two GUI operations:** send file, receive file — via `TransferController` → `*_core()` on a **worker thread**
+- **`port_index`:** per app instance (`--port 0` / `--port 1` for two cables)
+- **Progress:** callback on worker thread → `wxTheApp->CallAfter` before touching widgets
 - **Receive UX:** show `"Waiting for sender..."` until the first progress callback (header wait, up to 120s)
 - **Errors:** display `TransferResult.error_message` verbatim; core does not throw
 - **No cancel** — one transfer at a time until complete or fail
@@ -120,7 +119,7 @@ Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
 
 ## Priority open work
 
-1. **Hardware validation** — run `usb-probe`, `usb-loopback-test`, and GTK app against real FPGA
+1. **Hardware validation** — run `usb-probe`, `usb-loopback-test`, and RocketBox wx against real FPGA
 2. Optional: `apps/console/` — thin Linux menu wrapper for Westcoast diagnostic modes 1–4, 7, 9–10
 3. Optional: cancel support for in-flight transfers (not in vendor handoff yet)
 
@@ -136,7 +135,7 @@ Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
 
 See also **[protocols/session.md](protocols/session.md)** and **[protocols/file-transfer.md](protocols/file-transfer.md)** for handshake timing and payload sequencing.
 
-- Putting GTK includes in `core/`
+- Putting GUI toolkit includes in `core/`
 - Changing header magic/endpoints without checking Westcoast reference and FPGA expectations
 - Using sync bulk transfers for large file payload after Westcoast port (regresses throughput and large-file correctness)
 - Assuming port index equals physical port label — always use libusb enumeration order
