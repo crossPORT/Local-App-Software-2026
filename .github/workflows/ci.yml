@@ -59,6 +59,8 @@ jobs:
 
       - name: Configure (macOS)
         if: runner.os == 'macOS'
+        env:
+          PKG_CONFIG_PATH: /opt/homebrew/opt/libusb/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/usr/local/opt/libusb/lib/pkgconfig
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
 
       - name: Build RocketBox

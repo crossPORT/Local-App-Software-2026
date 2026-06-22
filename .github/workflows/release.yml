@@ -62,6 +62,7 @@ jobs:
         if: runner.os == 'macOS'
         env:
           INSTALL_PREFIX: ${{ runner.temp }}/install
+          PKG_CONFIG_PATH: /opt/homebrew/opt/libusb/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/usr/local/opt/libusb/lib/pkgconfig
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
 
       - name: Build
