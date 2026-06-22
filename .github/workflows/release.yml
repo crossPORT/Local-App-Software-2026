@@ -188,21 +188,44 @@ jobs:
 
   release:
     needs: [package-linux, package-macos, package-windows, package-pwa]
+    # Publish a GitHub Release with whatever platforms succeeded — do not wait for all four.
     if: >-
       always() && !cancelled() &&
-      needs.package-pwa.result == 'success' &&
       (needs.package-linux.result == 'success' ||
        needs.package-macos.result == 'success' ||
-       needs.package-windows.result == 'success')
+       needs.package-windows.result == 'success' ||
+       needs.package-pwa.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download Linux artifacts
+        if: needs.package-linux.result == 'success'
         uses: actions/download-artifact@v4
         with:
+          name: rocketbox-linux
           path: dist
-          merge-multiple: true
+
+      - name: Download macOS artifacts
+        if: needs.package-macos.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: rocketbox-macos
+          path: dist
+
+      - name: Download Windows artifacts
+        if: needs.package-windows.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: rocketbox-windows
+          path: dist
+
+      - name: Download PWA artifacts
+        if: needs.package-pwa.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: rocketbox-pwa
+          path: dist
 
       - name: List release files
         run: find dist -type f | sort
@@ -211,17 +234,51 @@ jobs:
         run: |
           set -euo pipefail
           find dist -type f | sort
-          test "$(find dist -name 'RocketBox-pwa-*.zip' | wc -l)" -ge 1
-          desktop_count="$(find dist \( -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.exe' \) | wc -l)"
-          echo "Desktop installer count: $desktop_count"
-          test "$desktop_count" -ge 1
+          file_count="$(find dist -type f | wc -l)"
+          echo "Release file count: $file_count"
+          test "$file_count" -ge 1
+
+      - name: Build release body
+        id: release_body
+        env:
+          LINUX: ${{ needs.package-linux.result }}
+          MACOS: ${{ needs.package-macos.result }}
+          WINDOWS: ${{ needs.package-windows.result }}
+          PWA: ${{ needs.package-pwa.result }}
+        run: |
+          status_line() {
+            case "$2" in
+              success) echo "- $1: included" ;;
+              failure) echo "- $1: **failed** (not attached — download from the workflow run Artifacts tab if another job produced it)" ;;
+              skipped) echo "- $1: skipped" ;;
+              *) echo "- $1: $2" ;;
+            esac
+          }
+          {
+            echo "### Build status"
+            status_line "Linux (.deb + AppImage)" "$LINUX"
+            status_line "macOS (.dmg)" "$MACOS"
+            status_line "Windows (.exe)" "$WINDOWS"
+            status_line "PWA (zip)" "$PWA"
+            echo
+            echo "Successful platform jobs upload artifacts even when other jobs fail. Re-run failed jobs from the Actions tab to add missing installers."
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Build status"
+            status_line "Linux (.deb + AppImage)" "$LINUX"
+            status_line "macOS (.dmg)" "$MACOS"
+            status_line "Windows (.exe)" "$WINDOWS"
+            status_line "PWA (zip)" "$PWA"
+          } > release-body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: RocketBox App ${{ env.RELEASE_TAG }}
+          body_path: release-body.md
           generate_release_notes: true
+          append_body: true
           fail_on_unmatched_files: false
           files: |
             dist/**/*.deb
