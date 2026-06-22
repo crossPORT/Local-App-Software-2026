@@ -1,6 +1,8 @@
 name: Release
 
-# Desktop installers (Linux/macOS/Windows) and PWA zip — triggered by version tag push.
+# Each platform job is independent. A failure on one OS must never block artifacts
+# from the others. Every successful job uploads workflow artifacts AND attaches
+# files to the GitHub Release for the tag immediately.
 on:
   push:
     tags:
@@ -59,6 +61,16 @@ jobs:
           if-no-files-found: error
           retention-days: 400
 
+      - name: Publish Linux to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: RocketBox App ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            ${{ runner.temp }}/out/**
+
   package-macos:
     runs-on: macos-latest
     steps:
@@ -101,9 +113,25 @@ jobs:
           if-no-files-found: error
           retention-days: 400
 
+      - name: Publish macOS to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: RocketBox App ${{ env.RELEASE_TAG }}
+          append_body: true
+          body: |
+            ### Build status
+            - Linux (.deb + AppImage): see parallel CI job
+            - macOS (.dmg): **included**
+          fail_on_unmatched_files: false
+          files: |
+            ${{ runner.temp }}/out/**
+
   package-windows:
     runs-on: windows-2022
     timeout-minutes: 120
+    # Windows is best-effort. It must never fail the workflow or block other platforms.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -165,6 +193,19 @@ jobs:
           if-no-files-found: error
           retention-days: 400
 
+      - name: Publish Windows to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: RocketBox App ${{ env.RELEASE_TAG }}
+          append_body: true
+          body: |
+            ### Build status
+            - Windows (.exe): **included**
+          fail_on_unmatched_files: false
+          files: |
+            ${{ runner.temp }}/out/**
+
   package-pwa:
     runs-on: ubuntu-latest
     steps:
@@ -186,60 +227,25 @@ jobs:
           path: RocketBox-pwa-*.zip
           retention-days: 400
 
-  release:
+      - name: Publish PWA to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: RocketBox App ${{ env.RELEASE_TAG }}
+          append_body: true
+          body: |
+            ### Build status
+            - PWA (zip): **included**
+          fail_on_unmatched_files: false
+          files: RocketBox-pwa-*.zip
+
+  release-summary:
     needs: [package-linux, package-macos, package-windows, package-pwa]
-    # Publish a GitHub Release with whatever platforms succeeded — do not wait for all four.
-    if: >-
-      always() && !cancelled() &&
-      (needs.package-linux.result == 'success' ||
-       needs.package-macos.result == 'success' ||
-       needs.package-windows.result == 'success' ||
-       needs.package-pwa.result == 'success')
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Linux artifacts
-        if: needs.package-linux.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: rocketbox-linux
-          path: dist
-
-      - name: Download macOS artifacts
-        if: needs.package-macos.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: rocketbox-macos
-          path: dist
-
-      - name: Download Windows artifacts
-        if: needs.package-windows.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: rocketbox-windows
-          path: dist
-
-      - name: Download PWA artifacts
-        if: needs.package-pwa.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: rocketbox-pwa
-          path: dist
-
-      - name: List release files
-        run: find dist -type f | sort
-
-      - name: Verify release artifacts
-        run: |
-          set -euo pipefail
-          find dist -type f | sort
-          file_count="$(find dist -type f | wc -l)"
-          echo "Release file count: $file_count"
-          test "$file_count" -ge 1
-
-      - name: Build release body
-        id: release_body
+      - name: Platform build summary
         env:
           LINUX: ${{ needs.package-linux.result }}
           MACOS: ${{ needs.package-macos.result }}
@@ -248,43 +254,18 @@ jobs:
         run: |
           status_line() {
             case "$2" in
-              success) echo "- $1: included" ;;
-              failure) echo "- $1: **failed** (not attached — download from the workflow run Artifacts tab if another job produced it)" ;;
+              success) echo "- $1: included on GitHub Release + workflow Artifacts" ;;
+              failure) echo "- $1: **failed** (other platforms unaffected)" ;;
               skipped) echo "- $1: skipped" ;;
               *) echo "- $1: $2" ;;
             esac
           }
           {
-            echo "### Build status"
+            echo "## Release platform summary (${{ env.RELEASE_TAG }})"
             status_line "Linux (.deb + AppImage)" "$LINUX"
             status_line "macOS (.dmg)" "$MACOS"
             status_line "Windows (.exe)" "$WINDOWS"
             status_line "PWA (zip)" "$PWA"
             echo
-            echo "Successful platform jobs upload artifacts even when other jobs fail. Re-run failed jobs from the Actions tab to add missing installers."
+            echo "Each platform publishes independently. Re-run only the failed job to add missing installers."
           } >> "$GITHUB_STEP_SUMMARY"
-          {
-            echo "### Build status"
-            status_line "Linux (.deb + AppImage)" "$LINUX"
-            status_line "macOS (.dmg)" "$MACOS"
-            status_line "Windows (.exe)" "$WINDOWS"
-            status_line "PWA (zip)" "$PWA"
-          } > release-body.md
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: RocketBox App ${{ env.RELEASE_TAG }}
-          body_path: release-body.md
-          generate_release_notes: true
-          append_body: true
-          fail_on_unmatched_files: false
-          files: |
-            dist/**/*.deb
-            dist/**/*.AppImage
-            dist/**/*.dmg
-            dist/**/*.exe
-            dist/**/RocketBox-pwa-*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
