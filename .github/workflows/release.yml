@@ -220,11 +220,14 @@ jobs:
       - name: Build and zip PWA
         run: |
           chmod +x scripts/package-pwa.sh
-          ./scripts/package-pwa.sh RocketBox-pwa-${{ env.RELEASE_TAG }}.zip
+          scripts/package-pwa.sh RocketBox-pwa-${{ env.RELEASE_TAG }}.zip
+          ls -la "RocketBox-pwa-${{ env.RELEASE_TAG }}.zip"
+          unzip -l "RocketBox-pwa-${{ env.RELEASE_TAG }}.zip" | head -15
       - uses: actions/upload-artifact@v4
         with:
           name: rocketbox-pwa
-          path: RocketBox-pwa-*.zip
+          path: RocketBox-pwa-${{ env.RELEASE_TAG }}.zip
+          if-no-files-found: error
           retention-days: 400
 
       - name: Publish PWA to GitHub Release
@@ -236,8 +239,8 @@ jobs:
           body: |
             ### Build status
             - PWA (zip): **included**
-          fail_on_unmatched_files: false
-          files: RocketBox-pwa-*.zip
+          fail_on_unmatched_files: true
+          files: RocketBox-pwa-${{ env.RELEASE_TAG }}.zip
 
   release-summary:
     needs: [package-linux, package-macos, package-windows, package-pwa]
