@@ -42,16 +42,18 @@ curl -fsSL -o "$LINUXDEPLOY" \
   https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
 chmod +x "$LINUXDEPLOY"
 
-"$LINUXDEPLOY" --appdir "$APPDIR" --output appimage \
+OUTPUT_NAME="RocketBox-${TAG}-linux-x64.AppImage"
+cd "$WORKDIR"
+LDAI_OUTPUT="$OUTPUT_NAME" "$LINUXDEPLOY" --appdir "$APPDIR" --output appimage \
   --desktop-file="$APPDIR/usr/share/applications/rocketbox.desktop" \
   --icon-file="$APPDIR/usr/share/icons/hicolor/scalable/apps/rocketbox.svg" \
   --executable="$APPDIR/usr/bin/RocketBox"
 
-APPIMAGE="$(find "$WORKDIR" -maxdepth 1 -name '*.AppImage' | head -1)"
-if [[ -z "$APPIMAGE" ]]; then
-  echo "AppImage build failed" >&2
+APPIMAGE="$WORKDIR/$OUTPUT_NAME"
+if [[ ! -f "$APPIMAGE" ]]; then
+  echo "AppImage build failed: expected $APPIMAGE" >&2
   exit 1
 fi
 
-cp "$APPIMAGE" "$OUT_DIR/RocketBox-${TAG}-linux-x64.AppImage"
+cp "$APPIMAGE" "$OUT_DIR/$OUTPUT_NAME"
 echo "Created $OUT_DIR/RocketBox-${TAG}-linux-x64.AppImage"
