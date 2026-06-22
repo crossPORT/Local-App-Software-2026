@@ -1,16 +1,13 @@
 import type { IdentityProfile, PeerConfig, ReceiveStatus } from './types';
 
-/** Internal preset used when demo mode is enabled — not editable in UI. */
-export const DEMO_SPEED_PRESET = {
-  demo_display_mib_s: 7168,
-  demo_display_jitter_pct: 3,
+/** Internal preset used when booth display speed is enabled — not editable in UI. */
+export const BOOTH_DISPLAY_PRESET = {
+  booth_display_mib_s: 7168,
+  booth_display_jitter_pct: 3,
 } as const;
 
-/** @deprecated Use DEMO_SPEED_PRESET */
-export const BOOTH_MARKETING_DEMO = DEMO_SPEED_PRESET;
-
-export function isBoothDemoDisabledInUrl(): boolean {
-  return new URLSearchParams(window.location.search).get('demo') === '0';
+export function isBoothDisplayDisabledInUrl(): boolean {
+  return new URLSearchParams(window.location.search).get('booth_display') === '0';
 }
 
 function trim(value: string): string {
@@ -76,11 +73,11 @@ function applyIdentityKey(cfg: Partial<IdentityProfile>, key: string, value: str
     case 'payload_header_timeout_ms':
       cfg.payload_header_timeout_ms = Math.max(0, Number.parseInt(value, 10) || 0);
       break;
-    case 'demo_display_mib_s':
-      cfg.demo_display_mib_s = Math.max(0, Number.parseFloat(value) || 0);
+    case 'booth_display_mib_s':
+      cfg.booth_display_mib_s = Math.max(0, Number.parseFloat(value) || 0);
       break;
-    case 'demo_display_jitter_pct':
-      cfg.demo_display_jitter_pct = Math.max(0, Number.parseFloat(value) || 0);
+    case 'booth_display_jitter_pct':
+      cfg.booth_display_jitter_pct = Math.max(0, Number.parseFloat(value) || 0);
       break;
     default:
       break;
@@ -121,9 +118,9 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
     ready_timeout_sec: 0,
     session_header_timeout_ms: 0,
     payload_header_timeout_ms: 0,
-    demo_display_mib_s: 0,
-    demo_display_jitter_pct: 0,
-    demo_enabled: true,
+    booth_display_mib_s: 0,
+    booth_display_jitter_pct: 0,
+    booth_display_enabled: true,
     peers: [],
   };
   const portCfg: Partial<IdentityProfile> = { peers: [] };
@@ -198,16 +195,16 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
       portCfg.session_header_timeout_ms || global.session_header_timeout_ms || 0,
     payload_header_timeout_ms:
       portCfg.payload_header_timeout_ms || global.payload_header_timeout_ms || 0,
-    demo_display_mib_s:
-      (portCfg.demo_display_mib_s ?? 0) > 0
-        ? (portCfg.demo_display_mib_s ?? 0)
-        : (global.demo_display_mib_s ?? 0),
-    demo_display_jitter_pct:
-      (portCfg.demo_display_jitter_pct ?? 0) > 0
-        ? (portCfg.demo_display_jitter_pct ?? 0)
-        : (global.demo_display_jitter_pct ?? 0),
-    demo_enabled:
-      (portCfg.demo_display_mib_s ?? 0) > 0 || (global.demo_display_mib_s ?? 0) > 0,
+    booth_display_mib_s:
+      (portCfg.booth_display_mib_s ?? 0) > 0
+        ? (portCfg.booth_display_mib_s ?? 0)
+        : (global.booth_display_mib_s ?? 0),
+    booth_display_jitter_pct:
+      (portCfg.booth_display_jitter_pct ?? 0) > 0
+        ? (portCfg.booth_display_jitter_pct ?? 0)
+        : (global.booth_display_jitter_pct ?? 0),
+    booth_display_enabled:
+      (portCfg.booth_display_mib_s ?? 0) > 0 || (global.booth_display_mib_s ?? 0) > 0,
     peers: global.peers ?? [],
     config_path: configPath,
   };
@@ -234,9 +231,9 @@ export function defaultIdentityProfile(portIndex: number): IdentityProfile {
     ready_timeout_sec: 0,
     session_header_timeout_ms: 0,
     payload_header_timeout_ms: 0,
-    demo_display_mib_s: 0,
-    demo_display_jitter_pct: 0,
-    demo_enabled: true,
+    booth_display_mib_s: 0,
+    booth_display_jitter_pct: 0,
+    booth_display_enabled: true,
     peers: [],
     config_path: `local:port${portIndex}`,
   };
@@ -267,7 +264,7 @@ function normalizeIdentity(raw: Partial<IdentityProfile>, portIndex: number): Id
     role: trim(raw.role ?? defaults.role),
     receive_status: raw.receive_status ?? defaults.receive_status,
     receive_folder: trim(raw.receive_folder ?? defaults.receive_folder),
-    demo_enabled: raw.demo_enabled ?? defaults.demo_enabled,
+    booth_display_enabled: raw.booth_display_enabled ?? defaults.booth_display_enabled,
     peers: (raw.peers ?? [])
       .map((peer) => normalizePeer(peer))
       .filter((peer): peer is PeerConfig => peer != null),
@@ -301,50 +298,41 @@ function mergeBoothIdentity(
       receive_status: local.receive_status ?? booth.receive_status,
       receive_folder: local.receive_folder.trim() ? local.receive_folder : booth.receive_folder,
       peers: booth.peers.length > 0 ? booth.peers : local.peers,
-      demo_enabled: local.demo_enabled,
+      booth_display_enabled: local.booth_display_enabled,
     },
     portIndex,
   );
 }
 
-export function isDemoEnabled(profile: IdentityProfile): boolean {
-  return profile.demo_enabled;
+export function isBoothDisplayEnabled(profile: IdentityProfile): boolean {
+  return profile.booth_display_enabled;
 }
 
-export function demoPresetLabel(): string {
-  const gib = DEMO_SPEED_PRESET.demo_display_mib_s / 1024;
-  const pct = DEMO_SPEED_PRESET.demo_display_jitter_pct;
+export function boothDisplayPresetLabel(): string {
+  const gib = BOOTH_DISPLAY_PRESET.booth_display_mib_s / 1024;
+  const pct = BOOTH_DISPLAY_PRESET.booth_display_jitter_pct;
   return `~${Math.round(gib)} GiB/s (±${pct}%)`;
 }
 
-/** Apply internal preset rates when demo mode is on; otherwise use measured speeds only. */
-export function applyDemoSpeedSettings(
+/** Apply internal preset rates when booth display speed is on; otherwise use measured speeds only. */
+export function applyBoothDisplaySettings(
   profile: IdentityProfile,
   portIndex: number,
 ): IdentityProfile {
-  if (isBoothDemoDisabledInUrl() || !profile.demo_enabled) {
+  if (isBoothDisplayDisabledInUrl() || !profile.booth_display_enabled) {
     return normalizeIdentity(
-      { ...profile, demo_display_mib_s: 0, demo_display_jitter_pct: 0 },
+      { ...profile, booth_display_mib_s: 0, booth_display_jitter_pct: 0 },
       portIndex,
     );
   }
   return normalizeIdentity(
     {
       ...profile,
-      demo_display_mib_s: DEMO_SPEED_PRESET.demo_display_mib_s,
-      demo_display_jitter_pct: DEMO_SPEED_PRESET.demo_display_jitter_pct,
+      booth_display_mib_s: BOOTH_DISPLAY_PRESET.booth_display_mib_s,
+      booth_display_jitter_pct: BOOTH_DISPLAY_PRESET.booth_display_jitter_pct,
     },
     portIndex,
   );
-}
-
-/** @deprecated Use applyDemoSpeedSettings */
-export function applyBoothMarketingDemo(
-  profile: IdentityProfile,
-  portIndex: number,
-  _booth?: Pick<IdentityProfile, 'demo_display_mib_s' | 'demo_display_jitter_pct'>,
-): IdentityProfile {
-  return applyDemoSpeedSettings(profile, portIndex);
 }
 
 async function fetchBoothConfig(portIndex: number): Promise<IdentityProfile | null> {
@@ -355,7 +343,7 @@ async function fetchBoothConfig(portIndex: number): Promise<IdentityProfile | nu
       return null;
     }
     const text = await response.text();
-    if (!text.includes('demo_display_mib_s')) {
+    if (!text.includes('booth_display_mib_s')) {
       return null;
     }
     return parseIdentityConfig(text, portIndex, `booth-port${portIndex}.conf`);
@@ -368,26 +356,26 @@ async function fetchBoothConfig(portIndex: number): Promise<IdentityProfile | nu
 export async function loadIdentityProfileAsync(portIndex: number): Promise<IdentityProfile> {
   const stored = loadIdentityProfile(portIndex);
   const local = normalizeIdentity(
-    { ...stored, demo_display_mib_s: 0, demo_display_jitter_pct: 0 },
+    { ...stored, booth_display_mib_s: 0, booth_display_jitter_pct: 0 },
     portIndex,
   );
   const booth = await fetchBoothConfig(portIndex);
   let merged = booth ? mergeBoothIdentity(booth, local, portIndex) : local;
   if (booth && stored.config_path.startsWith('local:') && !stored.display_name.trim()) {
-    merged = { ...merged, demo_enabled: booth.demo_display_mib_s > 0 };
+    merged = { ...merged, booth_display_enabled: booth.booth_display_mib_s > 0 };
   }
-  if (isBoothDemoDisabledInUrl()) {
-    merged = { ...merged, demo_enabled: false };
+  if (isBoothDisplayDisabledInUrl()) {
+    merged = { ...merged, booth_display_enabled: false };
   }
-  return applyDemoSpeedSettings(merged, portIndex);
+  return applyBoothDisplaySettings(merged, portIndex);
 }
 
 export function saveIdentityProfile(portIndex: number, identity: IdentityProfile): void {
   const normalized = normalizeIdentity(
     {
       ...identity,
-      demo_display_mib_s: 0,
-      demo_display_jitter_pct: 0,
+      booth_display_mib_s: 0,
+      booth_display_jitter_pct: 0,
     },
     portIndex,
   );

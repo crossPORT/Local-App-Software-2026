@@ -1,6 +1,6 @@
 #include "settings_dialog.h"
 
-#include "demo_display.h"
+#include "booth_display.h"
 
 #include <algorithm>
 #include <sstream>
@@ -109,21 +109,21 @@ SettingsDialog::SettingsDialog(wxWindow* parent,
     folder_row->Add(browse_folder, 0, wxALIGN_CENTER_VERTICAL);
     root->Add(folder_row, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    demo_check_ = new wxCheckBox(panel, wxID_ANY, "Demo mode");
-    demo_check_->SetValue(profile.demo_display_mib_s > 0.0);
-    demo_check_->SetForegroundColour(kText);
-    demo_check_->SetBackgroundColour(kBg);
-    root->Add(demo_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
+    booth_display_check_ = new wxCheckBox(panel, wxID_ANY, "Booth display speed");
+    booth_display_check_->SetValue(profile.booth_display_mib_s > 0.0);
+    booth_display_check_->SetForegroundColour(kText);
+    booth_display_check_->SetBackgroundColour(kBg);
+    root->Add(booth_display_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
 
-    std::ostringstream demo_msg;
-    demo_msg.setf(std::ios::fixed);
-    demo_msg.precision(0);
-    demo_msg << "When enabled, transfer speeds use ~" << (kDemoDisplayPresetMibS / 1024.0)
-             << " GiB/s (+/- " << kDemoDisplayPresetJitterPct
+    std::ostringstream booth_msg;
+    booth_msg.setf(std::ios::fixed);
+    booth_msg.precision(0);
+    booth_msg << "When enabled, transfer speeds use ~" << (kBoothDisplayPresetMibS / 1024.0)
+             << " GiB/s (+/- " << kBoothDisplayPresetJitterPct
              << "%) during active transfers.";
-    auto* demo_hint = MakeLabel(panel, wxString::FromUTF8(demo_msg.str().c_str()), kMuted);
-    demo_hint->Wrap(kWrapWidth);
-    root->Add(demo_hint, 0, wxLEFT | wxRIGHT, 10);
+    auto* booth_hint = MakeLabel(panel, wxString::FromUTF8(booth_msg.str().c_str()), kMuted);
+    booth_hint->Wrap(kWrapWidth);
+    root->Add(booth_hint, 0, wxLEFT | wxRIGHT, 10);
 
     auto* tune_hint = MakeLabel(
         panel,
@@ -190,12 +190,12 @@ void SettingsDialog::OnSave(wxCommandEvent&) {
                               : receive_sel == 2 ? ReceiveStatus::Busy
                                                  : ReceiveStatus::AskFirst;
     profile_.receive_folder = folder_field_->GetValue().ToStdString();
-    if (demo_check_->GetValue()) {
-        profile_.demo_display_mib_s = kDemoDisplayPresetMibS;
-        profile_.demo_display_jitter_pct = kDemoDisplayPresetJitterPct;
+    if (booth_display_check_->GetValue()) {
+        profile_.booth_display_mib_s = kBoothDisplayPresetMibS;
+        profile_.booth_display_jitter_pct = kBoothDisplayPresetJitterPct;
     } else {
-        profile_.demo_display_mib_s = 0.0;
-        profile_.demo_display_jitter_pct = 0.0;
+        profile_.booth_display_mib_s = 0.0;
+        profile_.booth_display_jitter_pct = 0.0;
     }
     if (on_save_) {
         on_save_(profile_);

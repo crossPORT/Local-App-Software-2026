@@ -19,8 +19,8 @@ add_executable(unit-tests
     unit/test_meta_file.cpp
     unit/test_identity_profile.cpp
     unit/test_session_handshake.cpp
-    unit/test_demo_display.cpp
-    unit/test_demo_config.cpp
+    unit/test_booth_display.cpp
+    unit/test_session_config.cpp
     unit/test_peer_roster.cpp
     unit/test_session_role.cpp
     unit/test_core_tuning.cpp
@@ -31,7 +31,7 @@ add_executable(unit-tests
 target_include_directories(unit-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(unit-tests PRIVATE
     FABRIC_TEST_FIXTURE_DIR="${FABRIC_TEST_FIXTURE_DIR}")
-target_link_libraries(unit-tests PRIVATE sls_demo_logic)
+target_link_libraries(unit-tests PRIVATE rocketbox_session)
 target_compile_features(unit-tests PRIVATE cxx_std_17)
 
 add_test(NAME unit-tests COMMAND unit-tests)
@@ -46,7 +46,7 @@ add_executable(integration-tests
 target_include_directories(integration-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(integration-tests PRIVATE
     FABRIC_TEST_FIXTURE_DIR="${FABRIC_TEST_FIXTURE_DIR}")
-target_link_libraries(integration-tests PRIVATE sls_demo_logic)
+target_link_libraries(integration-tests PRIVATE rocketbox_session)
 target_compile_features(integration-tests PRIVATE cxx_std_17)
 
 add_test(NAME integration-tests COMMAND integration-tests)

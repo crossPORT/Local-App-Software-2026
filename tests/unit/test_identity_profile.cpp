@@ -48,15 +48,15 @@ FABRIC_TEST(identity_tuning_keys_parsed) {
         "display_name=Node\n"
         "transfer_timeout_ms=5000\n"
         "usb_inflight_mb=64\n"
-        "demo_display_mib_s=7168\n"
-        "demo_display_jitter_pct=3\n");
+        "booth_display_mib_s=7168\n"
+        "booth_display_jitter_pct=3\n");
 
     IdentityProfile p;
     CHECK(load_identity_profile(0, path, p));
     CHECK_EQ(p.transfer_timeout_ms, 5000);
     CHECK_EQ(p.usb_inflight_mb, 64);
-    CHECK(p.demo_display_mib_s > 7167.0 && p.demo_display_mib_s < 7169.0);
-    CHECK(p.demo_display_jitter_pct > 2.9 && p.demo_display_jitter_pct < 3.1);
+    CHECK(p.booth_display_mib_s > 7167.0 && p.booth_display_mib_s < 7169.0);
+    CHECK(p.booth_display_jitter_pct > 2.9 && p.booth_display_jitter_pct < 3.1);
     std::remove(path.c_str());
 }
 

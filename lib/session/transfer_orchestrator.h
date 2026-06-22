@@ -34,7 +34,7 @@ struct OrchestratorUiState {
     double live_mbps = 0.0;
     double peak_mbps = 0.0;
     double result_mbps = 0.0;
-    double demo_display_mib_s = 0.0;
+    double booth_display_mib_s = 0.0;
     std::string transfer_label;
     std::string notification;
     std::string dev_log;
@@ -108,7 +108,7 @@ private:
     void ensure_listener_active();
     void publish_state();
     ProgressCallback make_progress_callback();
-    void begin_demo_display_rate();
+    void begin_booth_display_rate();
     void ensure_wiring();
     void ensure_listener_started();
     void invalidate_dismiss();

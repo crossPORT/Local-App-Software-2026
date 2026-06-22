@@ -14,7 +14,7 @@ APPDIR="$WORKDIR/AppDir"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/rocketbox"
 
 cp -a "$INSTALL_PREFIX/bin/RocketBox" "$APPDIR/usr/bin/" 2>/dev/null || \
-  cp -a "$INSTALL_PREFIX/bin/data-transfer-demo" "$APPDIR/usr/bin/RocketBox"
+  cp -a "$INSTALL_PREFIX/bin/RocketBox" "$APPDIR/usr/bin/RocketBox"
 cp -a "$INSTALL_PREFIX/share/rocketbox/"* "$APPDIR/usr/share/rocketbox/" 2>/dev/null || true
 
 cat > "$APPDIR/AppRun" <<'EOF'

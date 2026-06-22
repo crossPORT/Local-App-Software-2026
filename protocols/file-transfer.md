@@ -123,11 +123,11 @@ Do not use loopback semantics in peer send/receive orchestration.
 
 ---
 
-## Demo display rate (UI only)
+## Booth display rate (UI only)
 
-`demo_display_mib_s` and jitter affect **shown** speed in wx/PWA charts during transfer. They do **not** change USB chunk timing, handshake gaps, or throughput measurement on the wire.
+`booth_display_mib_s` and jitter affect **shown** speed in wx/PWA charts during transfer. They do **not** change USB chunk timing, handshake gaps, or throughput measurement on the wire.
 
-Clear `fabricActivityMbps` / transfer chart state when idle — stale demo rate looks like a phantom transfer.
+Clear `fabricActivityMbps` / transfer chart state when idle — stale booth display rate looks like a phantom transfer.
 
 ---
 
@@ -174,7 +174,7 @@ Manual smoke:
 - [ ] Failed receive deletes partial file
 - [ ] Progress marshaled to UI thread
 - [ ] Integration + relevant unit tests pass
-- [ ] Demo/chart state cleared when transfer ends
+- [ ] Booth/chart state cleared when transfer ends
 
 ---
 
@@ -188,5 +188,5 @@ Manual smoke:
 | Sync bulk for large files | Slow, corrupt, or incomplete transfers |
 | Wrong `port_index` assumption | “No device” or transfer to wrong peer |
 | Two processes claiming one cable | libusb claim errors, random failures |
-| Demo rate left on UI after transfer | Green sparkline while idle |
+| Booth rate left on UI after transfer | Green sparkline while idle |
 | Edit core USB logic from GUI layer | Layering violation; hard to test |

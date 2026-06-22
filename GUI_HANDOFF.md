@@ -9,7 +9,7 @@ to use. Do not change their signatures or error semantics without coordination.
 | Handoff topic | Where it lives |
 |---------------|----------------|
 | Core API (`TransferResult`, `*_core()`) | `core/include/usb_transfer.h` — **source of truth** if this doc and headers differ |
-| RocketBox wx implementation | `apps/wx/` + `apps/demo/transfer_controller.{h,cpp}` |
+| RocketBox wx implementation | `apps/wx/` + `lib/session/transfer_controller.{h,cpp}` |
 | Engine (being aligned with Westcoast) | `core/src/usb_transfer_core.cpp` |
 | Agent / build context | [AGENTS.md](AGENTS.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 

@@ -38,23 +38,27 @@ cd apps/web/dist && python3 -m http.server 8080   # dev serve; use HTTPS in prod
 cmake -S . -B build -DBUILD_WX_GUI=OFF && cmake --build build -j
 ctest --test-dir build -L unit --output-on-failure
 ctest --test-dir build -L integration --output-on-failure
-cd apps/web && npm test
+cd apps/web && npm test    # vitest: session, config, roster, format, …
 ```
 
 Hardware tests (`ctest -L hardware`) need two USB cables and auto-skip when absent.
 
 ## Repository layout
 
+Monorepo convention: **`lib/`** = shared libraries, **`apps/`** = runnable products, **`tools/`** = CLIs, **`tests/`** = C++ test binaries.
+
 ```
 core/           USB engine (fabric_usb_core, libusb, ROCKETBX protocol)
-apps/demo/      Session orchestration (TransferOrchestrator, handshake)
-apps/wx/        RocketBox desktop UI (primary GUI)
-apps/web/       RocketBox PWA (WebUSB)
+lib/session/    Shared native session logic (rocketbox_session — handshake, orchestration)
+apps/wx/        RocketBox desktop app (wxWidgets UI)
+apps/web/       RocketBox PWA (WebUSB — TypeScript, parallel to lib/session)
 sim/            In-process fabric simulator for integration tests
-tools/          usb-probe, loopback-test, booth-cli
+tools/          usb-probe, loopback-test, booth-cli, …
 protocols/      Agent guides for session + file transfer
 docs/           Architecture, protocol, build, deployment
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency graph.
 
 ## Documentation
 

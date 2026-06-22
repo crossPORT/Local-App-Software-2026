@@ -29,7 +29,7 @@ private:
     wxTextCtrl* team_field_ = nullptr;
     wxChoice* receive_choice_ = nullptr;
     wxTextCtrl* folder_field_ = nullptr;
-    wxCheckBox* demo_check_ = nullptr;
+    wxCheckBox* booth_display_check_ = nullptr;
     IdentityProfile profile_;
     SaveCallback on_save_;
     SettingsDevActions dev_actions_;

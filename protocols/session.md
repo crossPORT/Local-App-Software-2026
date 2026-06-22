@@ -109,7 +109,7 @@ Defined in `core/include/usb_protocol.h` and mirrored in `session_handshake.*`.
 |----------|----------------|--------------|
 | `waitingForPartner` + outbound offer, no accept yet | Handshake wait | “Waiting for \<peer\> to accept…” |
 | `busy` + payload in flight | File transfer | “Sending / Receiving …” |
-| Demo display rate | **Display only** | Does not change USB timing |
+| Booth display rate | **Display only** | Does not change USB timing |
 
 Do not show “Transfer in progress” during accept wait.
 
@@ -121,7 +121,7 @@ Session logic exists in **two places** — keep them aligned:
 
 | Concern | C++ | PWA |
 |---------|-----|-----|
-| Orchestrator | `apps/demo/transfer_orchestrator.cpp` | `apps/web/src/lib/web_transfer_orchestrator.ts` |
+| Orchestrator | `lib/session/transfer_orchestrator.cpp` | `apps/web/src/lib/web_transfer_orchestrator.ts` |
 | Handshake defaults | `session_handshake.cpp` | `session_handshake.ts` |
 | Listener | `session_listener.cpp` | listener loop in web orchestrator |
 

@@ -1,4 +1,4 @@
-#include "demo_config.h"
+#include "session_config.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -43,7 +43,7 @@ bool parse_port_section(const std::string& line, int* port_out) {
     }
 }
 
-void set_config_value(DemoConfig& cfg, const std::string& key, const std::string& value) {
+void set_config_value(SessionConfig& cfg, const std::string& key, const std::string& value) {
     if (key == "source_dir") {
         cfg.source_dir = value;
     } else if (key == "target_dir") {
@@ -55,14 +55,14 @@ void set_config_value(DemoConfig& cfg, const std::string& key, const std::string
 
 }  // namespace
 
-bool load_demo_config_file(const std::string& path, int port_index, DemoConfig& out) {
+bool load_session_config_file(const std::string& path, int port_index, SessionConfig& out) {
     std::ifstream file(path);
     if (!file.is_open()) {
         return false;
     }
 
-    DemoConfig global{};
-    DemoConfig port_cfg{};
+    SessionConfig global{};
+    SessionConfig port_cfg{};
     int section_port = -1;
 
     std::string line;
@@ -99,23 +99,23 @@ bool load_demo_config_file(const std::string& path, int port_index, DemoConfig& 
     return !out.source_dir.empty() || !out.target_dir.empty() || !out.role.empty();
 }
 
-std::string resolve_demo_config_path(const std::string& cli_path) {
+std::string resolve_session_config_path(const std::string& cli_path) {
     if (!cli_path.empty()) {
         if (std::filesystem::is_regular_file(cli_path)) {
             return std::filesystem::absolute(cli_path).lexically_normal().string();
         }
     }
-    if (const char* env_path = std::getenv("CES_DEMO_CONFIG")) {
+    if (const char* env_path = std::getenv("ROCKETBOX_CONFIG")) {
         if (*env_path != '\0') {
             return env_path;
         }
     }
-    if (std::filesystem::is_regular_file("ces-demo.conf")) {
-        return "ces-demo.conf";
+    if (std::filesystem::is_regular_file("booth-shared.conf")) {
+        return "booth-shared.conf";
     }
     if (const char* home = std::getenv("HOME")) {
         const std::filesystem::path user_path =
-            std::filesystem::path(home) / ".config" / "sls-fabric" / "demo.conf";
+            std::filesystem::path(home) / ".config" / "sls-fabric" / "session.conf";
         if (std::filesystem::is_regular_file(user_path)) {
             return user_path.string();
         }
@@ -123,16 +123,16 @@ std::string resolve_demo_config_path(const std::string& cli_path) {
     return {};
 }
 
-bool load_demo_config(int port_index,
+bool load_session_config(int port_index,
                       const std::string& cli_path,
-                      DemoConfig& out,
+                      SessionConfig& out,
                       std::vector<std::string>* tried_paths) {
-    const std::string resolved = resolve_demo_config_path(cli_path);
+    const std::string resolved = resolve_session_config_path(cli_path);
     if (resolved.empty()) {
         return false;
     }
     if (tried_paths) {
         tried_paths->push_back(resolved);
     }
-    return load_demo_config_file(resolved, port_index, out);
+    return load_session_config_file(resolved, port_index, out);
 }

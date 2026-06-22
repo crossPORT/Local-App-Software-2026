@@ -31,15 +31,15 @@ export function ConnectionPanel({
     state.busy && !isOutboundHandshakeWait(state.statusMessage)
       ? effectiveDisplayMbps(
           Math.max(state.fabricActivityMbps, state.liveMbps),
-          state.demoDisplayMibS,
+          state.boothDisplayMibS,
           true,
         )
       : 0;
   const scaleFloorMbps =
     state.busy &&
     !isOutboundHandshakeWait(state.statusMessage) &&
-    state.identity.demo_display_mib_s > 0
-      ? Math.max(state.demoDisplayMibS, state.identity.demo_display_mib_s)
+    state.identity.booth_display_mib_s > 0
+      ? Math.max(state.boothDisplayMibS, state.identity.booth_display_mib_s)
       : chartMbps > 0
         ? chartMbps
         : 0;

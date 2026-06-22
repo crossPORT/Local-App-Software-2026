@@ -1,4 +1,4 @@
-#include "demo_config.h"
+#include "session_config.h"
 #include "main_frame.h"
 
 #include <wx/cmdline.h>
@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-class DemoApp : public wxApp {
+class RocketBoxApp : public wxApp {
 public:
     bool OnInit() override {
         wxCmdLineParser parser;
@@ -33,4 +33,4 @@ public:
     }
 };
 
-wxIMPLEMENT_APP(DemoApp);
+wxIMPLEMENT_APP(RocketBoxApp);

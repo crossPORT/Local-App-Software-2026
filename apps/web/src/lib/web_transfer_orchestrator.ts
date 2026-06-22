@@ -1,4 +1,4 @@
-import { rollDemoDisplayMibS } from './fabric_protocol';
+import { rollBoothDisplayMibS } from './fabric_protocol';
 import { formatBytes, formatTransferDoneMessage, isTransferCompleteMessage } from './format';
 import { parseAnnounceNote } from './announce_note';
 import {
@@ -163,7 +163,7 @@ export class WebTransferOrchestrator {
         liveMbps: 0,
         peakMbps: 0,
         resultMbps: 0,
-        demoDisplayMibS: 0,
+        boothDisplayMibS: 0,
         fabricActivityMbps: 0,
       });
     }, TRANSFER_DONE_DISMISS_MS);
@@ -187,16 +187,16 @@ export class WebTransferOrchestrator {
       notification: ok ? message : '',
       peakMbps: ok ? (speeds?.peak ?? 0) : 0,
       resultMbps: ok ? (speeds?.result ?? 0) : 0,
-      demoDisplayMibS: 0,
+      boothDisplayMibS: 0,
     });
     if (ok && isTransferCompleteMessage(message)) {
       this.scheduleDismissTransfer();
     }
   }
 
-  private demoRate(identity: IdentityProfile): number {
-    const base = identity.demo_display_mib_s;
-    return base > 0 ? rollDemoDisplayMibS(base, identity.demo_display_jitter_pct) : 0;
+  private boothDisplayRate(identity: IdentityProfile): number {
+    const base = identity.booth_display_mib_s;
+    return base > 0 ? rollBoothDisplayMibS(base, identity.booth_display_jitter_pct) : 0;
   }
 
   private bumpSessionActivity(): void {
@@ -466,7 +466,7 @@ export class WebTransferOrchestrator {
 
   private async runInboundAccept(offer: FabricSessionMessage, fromDialog: boolean): Promise<void> {
     const identity = this.callbacks.getIdentity();
-    const demoRate = this.demoRate(identity);
+    const boothDisplayRate = this.boothDisplayRate(identity);
     this.cancelDismissTimer();
     this.busy = true;
     this.pendingInbound = offer;
@@ -481,7 +481,7 @@ export class WebTransferOrchestrator {
       peakMbps: 0,
       resultMbps: 0,
       liveMbps: 0,
-      demoDisplayMibS: demoRate,
+      boothDisplayMibS: boothDisplayRate,
       statusMessage: fromDialog ? 'Receiving…' : `Waiting for ${offer.from_name} to send…`,
       errorMessage: '',
     });
@@ -496,7 +496,7 @@ export class WebTransferOrchestrator {
 
       this.callbacks.patch({
         statusMessage: `Receiving ${offer.payload_name}…`,
-        ...(demoRate > 0 ? { liveMbps: demoRate, fabricActivityMbps: demoRate } : {}),
+        ...(boothDisplayRate > 0 ? { liveMbps: boothDisplayRate, fabricActivityMbps: boothDisplayRate } : {}),
       });
 
       const { data, filename } = await this.usb.receiveFileTransfer(
@@ -507,8 +507,8 @@ export class WebTransferOrchestrator {
             bytesDone: done,
             bytesTotal: total,
             liveMbps:
-              demoRate > 0 ? demoRate : elapsed > 0 ? done / (1024 * 1024) / elapsed : 0,
-            ...(demoRate > 0 ? { peakMbps: demoRate } : {}),
+              boothDisplayRate > 0 ? boothDisplayRate : elapsed > 0 ? done / (1024 * 1024) / elapsed : 0,
+            ...(boothDisplayRate > 0 ? { peakMbps: boothDisplayRate } : {}),
           });
         },
       );
@@ -521,14 +521,14 @@ export class WebTransferOrchestrator {
 
       const elapsed = (performance.now() - t0) / 1000;
       const resultMbps =
-        demoRate > 0 ? demoRate : data.length / (1024 * 1024) / Math.max(elapsed, 0.001);
+        boothDisplayRate > 0 ? boothDisplayRate : data.length / (1024 * 1024) / Math.max(elapsed, 0.001);
       const saveName = offer.payload_name || filename;
       this.callbacks.downloadPayload(data, saveName);
       this.finishTransfer(
         true,
         formatTransferDoneMessage(false, resultMbps),
         '',
-        { peak: demoRate > 0 ? demoRate : resultMbps, result: resultMbps },
+        { peak: boothDisplayRate > 0 ? boothDisplayRate : resultMbps, result: resultMbps },
       );
     } catch (err) {
       if (!this.callbacks.isDisconnecting()) {
@@ -617,7 +617,7 @@ export class WebTransferOrchestrator {
 
     const identity = this.callbacks.getIdentity();
     const payload = await readFilePayload(file);
-    const demoRate = this.demoRate(identity);
+    const boothDisplayRate = this.boothDisplayRate(identity);
 
     this.pauseListener();
     await sleep(50);
@@ -650,7 +650,7 @@ export class WebTransferOrchestrator {
       peakMbps: 0,
       resultMbps: 0,
       liveMbps: 0,
-      demoDisplayMibS: 0,
+      boothDisplayMibS: 0,
       statusMessage: `Sending offer to ${peerName}…`,
       selectedPeer: peerName,
     });
@@ -726,7 +726,7 @@ export class WebTransferOrchestrator {
     this.callbacks.patch({
       waitingForPartner: false,
       statusMessage: `Sending ${file.name}…`,
-      ...(demoRate > 0 ? { liveMbps: demoRate, fabricActivityMbps: demoRate } : {}),
+      ...(boothDisplayRate > 0 ? { liveMbps: boothDisplayRate, fabricActivityMbps: boothDisplayRate } : {}),
     });
 
     const t0 = performance.now();
@@ -739,21 +739,21 @@ export class WebTransferOrchestrator {
             bytesDone: done,
             bytesTotal: total,
             liveMbps:
-              demoRate > 0 ? demoRate : elapsed > 0 ? done / (1024 * 1024) / elapsed : 0,
-            ...(demoRate > 0 ? { peakMbps: demoRate } : {}),
+              boothDisplayRate > 0 ? boothDisplayRate : elapsed > 0 ? done / (1024 * 1024) / elapsed : 0,
+            ...(boothDisplayRate > 0 ? { peakMbps: boothDisplayRate } : {}),
           });
         },
         file.name,
       );
       const elapsed = (performance.now() - t0) / 1000;
       const resultMbps =
-        demoRate > 0 ? demoRate : payload.length / (1024 * 1024) / Math.max(elapsed, 0.001);
+        boothDisplayRate > 0 ? boothDisplayRate : payload.length / (1024 * 1024) / Math.max(elapsed, 0.001);
       this.finishTransfer(
         true,
         formatTransferDoneMessage(true, resultMbps),
         '',
         {
-          peak: demoRate > 0 ? demoRate : resultMbps,
+          peak: boothDisplayRate > 0 ? boothDisplayRate : resultMbps,
           result: resultMbps,
         },
       );

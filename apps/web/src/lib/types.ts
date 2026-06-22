@@ -27,9 +27,9 @@ export interface IdentityProfile {
   ready_timeout_sec: number;
   session_header_timeout_ms: number;
   payload_header_timeout_ms: number;
-  demo_display_mib_s: number;
-  demo_display_jitter_pct: number;
-  demo_enabled: boolean;
+  booth_display_mib_s: number;
+  booth_display_jitter_pct: number;
+  booth_display_enabled: boolean;
   peers: PeerConfig[];
   config_path: string;
 }
@@ -66,7 +66,7 @@ export interface AppUiState {
   fabricActivitySeq: number;
   peakMbps: number;
   resultMbps: number;
-  demoDisplayMibS: number;
+  boothDisplayMibS: number;
   transferLabel: string;
   selectedPeer: string;
   lastAnnounceMs: number;
@@ -92,7 +92,7 @@ export const initialUiState = (identity: IdentityProfile, portIndex: number): Ap
   fabricActivitySeq: 0,
   peakMbps: 0,
   resultMbps: 0,
-  demoDisplayMibS: 0,
+  boothDisplayMibS: 0,
   transferLabel: '',
   selectedPeer: '',
   lastAnnounceMs: 0,

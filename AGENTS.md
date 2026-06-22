@@ -15,7 +15,7 @@ Read this first when working in this repository. Goal: USB file transfer to/from
 ## 30-second context
 
 - **Working reference:** `Westcoast-0.01_release.zip` (vendor release; Windows console tool with proven engine)
-- **This repo:** CMake project with `core/` engine + `apps/wx/` RocketBox UI + `apps/demo/` session logic + `tools/` CLIs
+- **This repo:** CMake monorepo — `core/` engine + `lib/session/` shared logic + `apps/wx/` desktop + `apps/web/` PWA + `tools/` CLIs
 - **Engine:** `core/src/usb_transfer_core.cpp` is ported from Westcoast (async send, ring-buffer receive, `ROCKETBX` header, mode-8 loopback). See [docs/WESTCOAST.md](docs/WESTCOAST.md).
 - **Do not** start the GUI server for the user; they run binaries themselves
 - **Do not** commit `Westcoast-0.01_release.zip` changes unless asked; treat it as read-only reference
@@ -29,8 +29,8 @@ cmake --build build -j
 
 All targets must compile:
 
-- `fabric_usb_core` (static lib)
-- `data-transfer-demo` (wx RocketBox), `usb-probe`, `usb-loopback-test`
+- `fabric_usb_core`, `rocketbox_session` (static libs)
+- `rocketbox` → **RocketBox** (wx desktop), `usb-probe`, `usb-loopback-test`
 
 ## File map
 
@@ -40,11 +40,12 @@ All targets must compile:
 | `core/include/usb_transfer.h` | Public core API: `TransferResult`, `*_core()` functions |
 | `core/src/usb_transfer_core.cpp` | Engine implementation — **primary port target for Westcoast** |
 | [GUI_HANDOFF.md](GUI_HANDOFF.md) | **Vendor GUI contract** — must-read for any UI work |
-| RocketBox wx app | `apps/wx/main_frame.{h,cpp}` + panels | Roster, send-to-peer, accept/reject (RocketBox MVP) |
-| Shared demo logic | `apps/demo/` (`transfer_orchestrator`, `session_listener`, …) | USB session coordination + `TransferController` |
-| Web PWA | `apps/web/` | WebUSB RocketBox |
+| `lib/session/` | Shared session layer (`transfer_orchestrator`, `session_listener`, `TransferController`, …) |
+| `apps/wx/` | RocketBox desktop UI — roster, send-to-peer, accept/reject |
+| `apps/web/` | RocketBox PWA (WebUSB) — TypeScript mirror of session behavior |
 | `tools/usb_probe.cpp` | Enumerate devices/endpoints (no full transfer) |
 | `tools/usb_loopback_test.cpp` | Two-port file loopback |
+| `tools/booth_cli.cpp` | Headless session CLI (links `rocketbox_session`) |
 | `scripts/setup-usb-access.sh` | Installs udev rule (needs sudo) |
 | `99-sls-fabric-usb.rules` | udev: MODE 0666 for 1772:0006 |
 | `tests/` | Automated suites: `unit-tests` (no hardware) + `hardware-tests` (needs cables) via CTest |
@@ -58,9 +59,12 @@ unzip -p Westcoast-0.01_release.zip Westcoast-0.01_release/main.cpp > /tmp/westc
 ## Layering rules
 
 1. **USB logic lives in `core/` only** — no wx/GTK in core, no `stdio` menu loops in core
-2. **UI lives in `apps/wx/`** (RocketBox MVP) — wxWidgets; marshal worker/orchestrator updates via `wxTheApp->CallAfter`
-3. **Tools link `fabric_usb_core` only** — no GUI dependency
-4. **New platforms** → new `apps/<platform>/` subdirectory linking core (e.g. future `apps/console/`, `apps/win32/`)
+2. **Session logic lives in `lib/session/`** — handshake, roster, orchestration; no UI toolkit includes
+3. **UI lives in `apps/wx/`** — wxWidgets only; marshal worker/orchestrator updates via `wxTheApp->CallAfter`
+4. **Web lives in `apps/web/`** — TypeScript; keep parity with `lib/session/` via golden fixtures + vitest
+5. **Raw USB tools link `fabric_usb_core` only** — e.g. `usb-probe`, `usb-loopback-test`
+6. **Session tools link `rocketbox_session`** — e.g. `booth-cli`, `fabric-session-test`
+7. **New native apps** → `apps/<name>/` linking `rocketbox_session` and/or `fabric_usb_core`
 
 ## GUI integration (from GUI_HANDOFF.md)
 
@@ -102,10 +106,10 @@ ctest --test-dir build -L hardware      # real fabric transfers; auto-skips (cod
 ctest --test-dir build                  # everything
 ```
 
-- `unit-tests` — session message format, **golden session fixtures** (`tests/fixtures/session/`), meta/path-traversal safety, identity + demo config parsing, peer roster, session role, core tuning (payload timeout, in-flight depth math/clamp, usbfs detection), **inbound receive partial-file cleanup** (`receive_payload`), fabric_sim transport. Add a unit test for any new pure logic.
+- `unit-tests` — session message format, **golden session fixtures** (`tests/fixtures/session/`), meta/path-traversal safety, identity + session config parsing, peer roster, session role, core tuning (payload timeout, in-flight depth math/clamp, usbfs detection), **inbound receive partial-file cleanup** (`receive_payload`), fabric_sim transport. Add a unit test for any new pure logic.
 - `integration-tests` — **full announce + offer/accept/ready + payload** over in-process `fabric_sim` with two `TransferOrchestrator` instances (ports 0↔1). Catches handshake timing, roster, auto-accept, and decline paths. Run after changing `transfer_orchestrator.cpp` or `session_listener.cpp`.
 - `hardware-tests` — round-trip integrity across sizes incl. chunk boundaries and a payload that exceeds the usbfs pool (proves the in-flight auto-clamp).
-- **PWA:** `cd apps/web && npm test` — vitest parity tests against the same golden session fixtures as C++.
+- **PWA:** `cd apps/web && npm test` — vitest unit tests for session codec, handshake timing, config, roster, format helpers (golden fixtures shared with C++).
 - Run a subset by substring: `./build/tests/unit-tests inflight` or `./build/tests/integration-tests handshake`
 
 Manual hardware diagnostics (with cables):

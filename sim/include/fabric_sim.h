@@ -8,7 +8,7 @@
 
 // In-process fabric emulator: two linked ports (0 ↔ 1) with ROCKETBX framing.
 // Enable with ROCKETBOX_SIM=1 or fabric_sim_set_enabled(true) (tests).
-// Lives outside core/ — demo/tools link fabric_usb_sim when sim support is needed.
+// Lives outside core/ — lib/tools link fabric_usb_sim when sim support is needed.
 
 bool fabric_sim_enabled();
 void fabric_sim_set_enabled(bool enabled);

@@ -1,7 +1,7 @@
 find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base)
 include(${wxWidgets_USE_FILE})
 
-add_executable(data-transfer-demo
+add_executable(rocketbox
     main.cpp
     main_frame.cpp
     connection_panel.cpp
@@ -14,12 +14,12 @@ add_executable(data-transfer-demo
     event_log_dialog.cpp
 )
 
-set_target_properties(data-transfer-demo PROPERTIES
+set_target_properties(rocketbox PROPERTIES
     OUTPUT_NAME RocketBox
 )
 
 if(APPLE)
-    set_target_properties(data-transfer-demo PROPERTIES
+    set_target_properties(rocketbox PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.crossport.rocketbox"
         MACOSX_BUNDLE_BUNDLE_NAME "RocketBox"
@@ -28,22 +28,22 @@ if(APPLE)
     )
 endif()
 
-target_include_directories(data-transfer-demo PRIVATE
+target_include_directories(rocketbox PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${wxWidgets_INCLUDE_DIRS}
 )
 
-target_link_libraries(data-transfer-demo PRIVATE
-    sls_demo_logic
+target_link_libraries(rocketbox PRIVATE
+    rocketbox_session
     ${wxWidgets_LIBRARIES}
 )
 
-target_compile_features(data-transfer-demo PRIVATE cxx_std_17)
+target_compile_features(rocketbox PRIVATE cxx_std_17)
 
 if(APPLE)
-    install(TARGETS data-transfer-demo BUNDLE DESTINATION .)
+    install(TARGETS rocketbox BUNDLE DESTINATION .)
 else()
-    install(TARGETS data-transfer-demo RUNTIME DESTINATION bin)
+    install(TARGETS rocketbox RUNTIME DESTINATION bin)
 endif()
 
 install(FILES

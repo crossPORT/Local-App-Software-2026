@@ -1,8 +1,8 @@
-#include "demo_display.h"
+#include "booth_display.h"
 
 #include <random>
 
-double demo_display_mib_s_with_jitter(double base_mib_s, double jitter_pct, double roll01) {
+double booth_display_mib_s_with_jitter(double base_mib_s, double jitter_pct, double roll01) {
     if (base_mib_s <= 0.0) {
         return 0.0;
     }
@@ -19,7 +19,7 @@ double demo_display_mib_s_with_jitter(double base_mib_s, double jitter_pct, doub
     return base_mib_s * factor;
 }
 
-double roll_demo_display_mib_s(double base_mib_s, double jitter_pct) {
+double roll_booth_display_mib_s(double base_mib_s, double jitter_pct) {
     if (base_mib_s <= 0.0) {
         return 0.0;
     }
@@ -28,5 +28,5 @@ double roll_demo_display_mib_s(double base_mib_s, double jitter_pct) {
     }
     static thread_local std::mt19937 rng{std::random_device{}()};
     std::uniform_real_distribution<double> dist(0.0, 1.0);
-    return demo_display_mib_s_with_jitter(base_mib_s, jitter_pct, dist(rng));
+    return booth_display_mib_s_with_jitter(base_mib_s, jitter_pct, dist(rng));
 }

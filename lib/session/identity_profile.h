@@ -35,11 +35,11 @@ struct IdentityProfile {
     int session_header_timeout_ms = 0;
     int payload_header_timeout_ms = 0;
     // When > 0, the transfer UI shows this MiB/s for live, peak, and average speed
-    // instead of measured USB throughput. For stage demos only; does not change
+    // instead of measured USB throughput. For trade-show booth displays only; does not change
     // the real transfer engine. Example: 7168 ≈ 7 GiB/s.
-    double demo_display_mib_s = 0.0;
+    double booth_display_mib_s = 0.0;
     // ±percent jitter applied once per transfer run (e.g. 3 => 6972..7364 for 7168 base).
-    double demo_display_jitter_pct = 0.0;
+    double booth_display_jitter_pct = 0.0;
     std::vector<PeerConfig> peers;
     std::string config_path;
 };

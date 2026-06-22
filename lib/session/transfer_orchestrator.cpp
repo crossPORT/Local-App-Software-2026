@@ -3,7 +3,7 @@
 #include "session_handshake.h"
 #include "announce_note.h"
 #include "booth_log.h"
-#include "demo_display.h"
+#include "booth_display.h"
 #include "fabric_link_policy.h"
 #include "fabric_meta_file.h"
 #include "fabric_tar_pack.h"
@@ -123,7 +123,7 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
     , handshake_(handshake_timing_from_identity(identity_))
     , on_ui_update_(std::move(on_ui_update)) {
     state_.identity = identity_;
-    state_.demo_display_mib_s = identity_.demo_display_mib_s;
+    state_.booth_display_mib_s = identity_.booth_display_mib_s;
     if (identity_.transfer_timeout_ms > 0) {
         set_payload_timeout_ms(static_cast<unsigned>(identity_.transfer_timeout_ms));
     }
@@ -133,10 +133,10 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
     booth_log(port_index_, "usb_inflight",
               "usbfs_limit_mb=" + std::to_string(usbfs_limit_mb())
                   + " queue_depth=" + std::to_string(inflight_queue_depth()));
-    if (identity_.demo_display_mib_s > 0.0) {
-        booth_log(port_index_, "demo_display",
-                  "base_mib_s=" + std::to_string(identity_.demo_display_mib_s)
-                      + " jitter_pct=" + std::to_string(identity_.demo_display_jitter_pct));
+    if (identity_.booth_display_mib_s > 0.0) {
+        booth_log(port_index_, "booth_display",
+                  "base_mib_s=" + std::to_string(identity_.booth_display_mib_s)
+                      + " jitter_pct=" + std::to_string(identity_.booth_display_jitter_pct));
     }
     roster_.seed_from_config(identity_.peers);
     state_.roster = roster_.peers();
@@ -274,7 +274,7 @@ void TransferOrchestrator::set_identity(IdentityProfile identity) {
         identity_ = std::move(identity);
         handshake_ = handshake_timing_from_identity(identity_);
         state_.identity = identity_;
-        state_.demo_display_mib_s = identity_.demo_display_mib_s;
+        state_.booth_display_mib_s = identity_.booth_display_mib_s;
         if (identity_.transfer_timeout_ms > 0) {
             set_payload_timeout_ms(static_cast<unsigned>(identity_.transfer_timeout_ms));
         }
@@ -934,7 +934,7 @@ void TransferOrchestrator::start_outbound_payload() {
         state_.bytes_done = 0;
         state_.bytes_total = staged.total_bytes;
         state_.status_message = "Sending " + staged.display_name + "…";
-        begin_demo_display_rate();
+        begin_booth_display_rate();
     }
     publish_state();
 
@@ -991,7 +991,7 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
             state_.bytes_total = offer.total_bytes;
         }
         state_.status_message = "Receiving " + offer.payload_name + "…";
-        begin_demo_display_rate();
+        begin_booth_display_rate();
     }
     publish_state();
 
@@ -1057,10 +1057,10 @@ ProgressCallback TransferOrchestrator::make_progress_callback() {
         const double live = (elapsed > 0.0 && done > 0)
             ? (static_cast<double>(done) / (1024.0 * 1024.0)) / elapsed
             : 0.0;
-        if (state_.demo_display_mib_s > 0.0) {
-            state_.live_mbps = state_.demo_display_mib_s;
-            if (state_.peak_mbps < state_.demo_display_mib_s) {
-                state_.peak_mbps = state_.demo_display_mib_s;
+        if (state_.booth_display_mib_s > 0.0) {
+            state_.live_mbps = state_.booth_display_mib_s;
+            if (state_.peak_mbps < state_.booth_display_mib_s) {
+                state_.peak_mbps = state_.booth_display_mib_s;
             }
         } else {
             state_.live_mbps = live;
@@ -1072,18 +1072,18 @@ ProgressCallback TransferOrchestrator::make_progress_callback() {
     };
 }
 
-void TransferOrchestrator::begin_demo_display_rate() {
-    if (identity_.demo_display_mib_s <= 0.0) {
-        state_.demo_display_mib_s = 0.0;
+void TransferOrchestrator::begin_booth_display_rate() {
+    if (identity_.booth_display_mib_s <= 0.0) {
+        state_.booth_display_mib_s = 0.0;
         return;
     }
-    state_.demo_display_mib_s = roll_demo_display_mib_s(identity_.demo_display_mib_s,
-                                                        identity_.demo_display_jitter_pct);
-    state_.live_mbps = state_.demo_display_mib_s;
-    booth_log(port_index_, "demo_display",
-              "ui_rate_mib_s=" + std::to_string(state_.demo_display_mib_s)
-                  + " base_mib_s=" + std::to_string(identity_.demo_display_mib_s)
-                  + " jitter_pct=" + std::to_string(identity_.demo_display_jitter_pct));
+    state_.booth_display_mib_s = roll_booth_display_mib_s(identity_.booth_display_mib_s,
+                                                        identity_.booth_display_jitter_pct);
+    state_.live_mbps = state_.booth_display_mib_s;
+    booth_log(port_index_, "booth_display",
+              "ui_rate_mib_s=" + std::to_string(state_.booth_display_mib_s)
+                  + " base_mib_s=" + std::to_string(identity_.booth_display_mib_s)
+                  + " jitter_pct=" + std::to_string(identity_.booth_display_jitter_pct));
 }
 
 void TransferOrchestrator::finish_transfer(bool ok,
@@ -1120,9 +1120,9 @@ void TransferOrchestrator::finish_transfer(bool ok,
                     state_.bytes_done = expected;
                 }
 
-                if (state_.demo_display_mib_s > 0.0) {
-                    state_.result_mbps = state_.demo_display_mib_s;
-                    state_.peak_mbps = state_.demo_display_mib_s;
+                if (state_.booth_display_mib_s > 0.0) {
+                    state_.result_mbps = state_.booth_display_mib_s;
+                    state_.peak_mbps = state_.booth_display_mib_s;
                 } else {
                     const uint64_t speed_bytes =
                         transferred > 0 ? transferred : expected;
@@ -1143,9 +1143,9 @@ void TransferOrchestrator::finish_transfer(bool ok,
                 }
             } else if (state_.bytes_total > 0) {
                 state_.bytes_done = state_.bytes_total;
-                if (state_.demo_display_mib_s > 0.0) {
-                    state_.result_mbps = state_.demo_display_mib_s;
-                    state_.peak_mbps = state_.demo_display_mib_s;
+                if (state_.booth_display_mib_s > 0.0) {
+                    state_.result_mbps = state_.booth_display_mib_s;
+                    state_.peak_mbps = state_.booth_display_mib_s;
                 } else if (state_.peak_mbps > 0.0) {
                     state_.result_mbps = state_.peak_mbps;
                 }
@@ -1201,7 +1201,7 @@ void TransferOrchestrator::reset_connection() {
         state_.peak_mbps = 0.0;
         state_.result_mbps = 0.0;
         state_.live_mbps = 0.0;
-        state_.demo_display_mib_s = identity_.demo_display_mib_s;
+        state_.booth_display_mib_s = identity_.booth_display_mib_s;
         state_.pending_offer.reset();
     }
 
@@ -1307,7 +1307,7 @@ void TransferOrchestrator::run_loopback_test(const std::string& path) {
             state_.transfer_label = basename_of(path);
             state_.peak_mbps = 0.0;
             state_.result_mbps = 0.0;
-            begin_demo_display_rate();
+            begin_booth_display_rate();
         }
         listener_->pause();
         TransferResult result =

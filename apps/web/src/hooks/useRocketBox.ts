@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadIdentityProfileAsync, saveIdentityProfile, applyDemoSpeedSettings } from '../lib/config';
+import { loadIdentityProfileAsync, saveIdentityProfile, applyBoothDisplaySettings } from '../lib/config';
 import { PeerRoster } from '../lib/peer_roster';
 import { formatUsbConnectError } from '../lib/user_errors';
 import type { AppUiState, IdentityProfile } from '../lib/types';
@@ -109,7 +109,7 @@ export function useRocketBox() {
       liveMbps: 0,
       peakMbps: 0,
       resultMbps: 0,
-      demoDisplayMibS: 0,
+      boothDisplayMibS: 0,
       fabricActivityMbps: 0,
     });
   }, [patch]);
@@ -343,7 +343,7 @@ export function useRocketBox() {
   const saveIdentity = useCallback(
     (identity: IdentityProfile) => {
       saveIdentityProfile(identityPortHint, identity);
-      const applied = applyDemoSpeedSettings(identity, identityPortHint);
+      const applied = applyBoothDisplaySettings(identity, identityPortHint);
       rosterRef.current.seedFromConfig(applied.peers);
       const portIndex = portIndexRef.current;
       patch({

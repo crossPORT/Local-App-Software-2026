@@ -1,4 +1,4 @@
-// Headless repro for drop->send path (no GTK drag).
+// Headless repro for drop->send path (no wx drag-and-drop UI).
 #include "fabric_meta_file.h"
 #include "transfer_controller.h"
 

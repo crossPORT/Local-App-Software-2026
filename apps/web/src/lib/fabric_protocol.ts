@@ -61,7 +61,7 @@ export function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Arr
   return out;
 }
 
-export function demoDisplayMibSWithJitter(base: number, jitterPct: number, roll01: number): number {
+export function boothDisplayMibSWithJitter(base: number, jitterPct: number, roll01: number): number {
   if (base <= 0) {
     return 0;
   }
@@ -73,6 +73,6 @@ export function demoDisplayMibSWithJitter(base: number, jitterPct: number, roll0
   return base * (1 + (clamped * 2 - 1) * span);
 }
 
-export function rollDemoDisplayMibS(base: number, jitterPct: number): number {
-  return demoDisplayMibSWithJitter(base, jitterPct, Math.random());
+export function rollBoothDisplayMibS(base: number, jitterPct: number): number {
+  return boothDisplayMibSWithJitter(base, jitterPct, Math.random());
 }

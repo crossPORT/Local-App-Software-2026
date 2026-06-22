@@ -96,7 +96,7 @@ wxString label_and_size(const std::string& label, uint64_t bytes) {
     return wxString::FromUTF8((label + " · " + format_bytes(bytes)).c_str());
 }
 
-std::string format_final_speed(double peak_mbps, double result_mbps, bool /*demo_display*/) {
+std::string format_final_speed(double peak_mbps, double result_mbps, bool /*booth_display*/) {
     const double speed = result_mbps > 0.0 ? result_mbps
                                            : (peak_mbps > 0.0 ? peak_mbps : 0.0);
     if (speed <= 0.0) {
@@ -109,14 +109,14 @@ std::string format_final_speed(double peak_mbps, double result_mbps, bool /*demo
 std::string format_speed_line(double live_mbps,
                               double peak_mbps,
                               double result_mbps,
-                              bool demo_display,
+                              bool booth_display,
                               bool transferring,
                               bool sending) {
     if (transferring) {
         std::string line = transfer_live_message(sending, live_mbps);
         return line;
     }
-    return format_final_speed(peak_mbps, result_mbps, demo_display);
+    return format_final_speed(peak_mbps, result_mbps, booth_display);
 }
 
 bool transfer_is_sending(const std::string& status) {
@@ -358,13 +358,13 @@ void TransferProgressPanel::ApplyState(bool busy,
                                        double live_mbps,
                                        double peak_mbps,
                                        double result_mbps,
-                                       double demo_display_mib_s,
+                                       double booth_display_mib_s,
                                        const std::string& transfer_label,
                                        const std::string& status,
                                        const std::string& notification,
                                        const std::string& error) {
     const Phase phase = derive_phase(busy, waiting, bytes_total, status, notification, error);
-    const bool demo_display = demo_display_mib_s > 0.0;
+    const bool booth_display = booth_display_mib_s > 0.0;
     const bool sending = transfer_is_sending(status);
     const bool receiving = transfer_is_receiving(status);
     const bool outbound = sending || !receiving;
@@ -438,7 +438,7 @@ void TransferProgressPanel::ApplyState(bool busy,
             }
             {
                 const std::string speed = format_speed_line(
-                    live_mbps, peak_mbps, result_mbps, demo_display, true, outbound);
+                    live_mbps, peak_mbps, result_mbps, booth_display, true, outbound);
                 speed_label_->SetLabel(wxString::FromUTF8(speed.c_str()));
             }
             speed_label_->SetForegroundColour(kAccent);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { demoPresetLabel, receiveStatusToString } from '../lib/config';
+import { boothDisplayPresetLabel, receiveStatusToString } from '../lib/config';
 import { theme } from '../lib/theme';
 import type { IdentityProfile, PeerConfig, ReceiveStatus } from '../lib/types';
 
@@ -24,7 +24,7 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave }: Setting
   const [peers, setPeers] = useState<PeerConfig[]>(
     identity.peers.length > 0 ? identity.peers.map((peer) => ({ ...peer })) : [],
   );
-  const [demoEnabled, setDemoEnabled] = useState(identity.demo_enabled);
+  const [boothDisplayEnabled, setBoothDisplayEnabled] = useState(identity.booth_display_enabled);
   const [error, setError] = useState('');
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -49,7 +49,7 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave }: Setting
       display_name,
       team: String(data.get('team') ?? '').trim(),
       receive_status: String(data.get('receive_status') ?? 'ask_first') as ReceiveStatus,
-      demo_enabled: demoEnabled,
+      booth_display_enabled: boothDisplayEnabled,
       peers: nextPeers,
     });
   };
@@ -113,14 +113,14 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave }: Setting
             <label className="settings-toggle-label">
               <input
                 type="checkbox"
-                checked={demoEnabled}
-                onChange={(e) => setDemoEnabled(e.target.checked)}
+                checked={boothDisplayEnabled}
+                onChange={(e) => setBoothDisplayEnabled(e.target.checked)}
               />
-              <span>Demo mode</span>
+              <span>Booth display speed</span>
             </label>
             <p className="settings-hint" style={{ color: theme.muted }}>
-              {demoEnabled
-                ? `Transfer speeds use ${demoPresetLabel()} during active transfers.`
+              {boothDisplayEnabled
+                ? `Transfer speeds use ${boothDisplayPresetLabel()} during active transfers.`
                 : 'Transfer speeds reflect measured USB throughput.'}
             </p>
           </div>

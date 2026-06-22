@@ -76,14 +76,14 @@ export function isOutboundHandshakeWait(statusMessage: string): boolean {
 /** Live/chart speed: measured rate, or display rate while a transfer is active. */
 export function effectiveDisplayMbps(
   liveMbps: number,
-  demoDisplayMibS: number,
+  boothDisplayMibS: number,
   busy: boolean,
 ): number {
   if (liveMbps > 0) {
     return liveMbps;
   }
-  if (busy && demoDisplayMibS > 0) {
-    return demoDisplayMibS;
+  if (busy && boothDisplayMibS > 0) {
+    return boothDisplayMibS;
   }
   return 0;
 }

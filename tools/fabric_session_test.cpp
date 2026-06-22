@@ -68,7 +68,7 @@ int run_receiver(int recv_port,
 int main(int argc, char* argv[]) {
     const int recv_port = (argc >= 2) ? std::atoi(argv[1]) : 0;
     const int send_port = (argc >= 3) ? std::atoi(argv[2]) : 1;
-    const std::string config_path = (argc >= 4) ? argv[3] : "ces-demo.conf";
+    const std::string config_path = (argc >= 4) ? argv[3] : "booth-shared.conf";
     const std::string done_file = "/tmp/fabric-session-recv-done";
 
     std::remove(done_file.c_str());

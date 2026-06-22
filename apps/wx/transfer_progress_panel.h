@@ -20,7 +20,7 @@ public:
                     double live_mbps,
                     double peak_mbps,
                     double result_mbps,
-                    double demo_display_mib_s,
+                    double booth_display_mib_s,
                     const std::string& transfer_label,
                     const std::string& status,
                     const std::string& notification,

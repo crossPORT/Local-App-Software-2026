@@ -42,7 +42,7 @@ Do not commit extracted files or the zip’s IDE cache into git unless explicitl
 
 Westcoast comments at top of `main.cpp` document the GUI handoff contract: core functions take parameters, return `TransferResult`, optional progress callback, no stdout/stdin.
 
-That contract is captured for this repo in **[GUI_HANDOFF.md](../GUI_HANDOFF.md)**. RocketBox wx in `apps/wx/` implements it via `apps/demo/`. When porting the engine, preserve the handoff API in `core/include/usb_transfer.h` — do not break GUI integration.
+That contract is captured for this repo in **[GUI_HANDOFF.md](../GUI_HANDOFF.md)**. RocketBox wx in `apps/wx/` implements it via `lib/session/`. When porting the engine, preserve the handoff API in `core/include/usb_transfer.h` — do not break GUI integration.
 
 ## Key implementation details (from Westcoast)
 
@@ -76,7 +76,7 @@ That contract is captured for this repo in **[GUI_HANDOFF.md](../GUI_HANDOFF.md)
 
 Westcoast uses `libusb_handle_events_timeout` with `struct timeval` — available on Linux libusb. Replace any Windows-only APIs with portable C++17.
 
-Keep `TransferResult` and `ProgressCallback` signatures in `usb_transfer.h` unchanged so `apps/wx/`, `apps/demo/`, and `tools/` require minimal edits.
+Keep `TransferResult` and `ProgressCallback` signatures in `usb_transfer.h` unchanged so `apps/wx/`, `lib/session/`, and `tools/` require minimal edits.
 
 ## Relationship to this repo
 
@@ -86,7 +86,7 @@ Westcoast main.cpp (reference)
         ▼ port algorithms, not structure
 core/src/usb_transfer_core.cpp
         │
+        ├── lib/session/  (shared session logic)
         ├── apps/wx/      (RocketBox UI)
-        ├── apps/demo/    (session logic)
         └── tools/        (existing CLIs)
 ```

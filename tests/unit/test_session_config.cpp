@@ -1,6 +1,6 @@
 #include "test_util.h"
 
-#include "demo_config.h"
+#include "session_config.h"
 
 #include <cstdio>
 #include <fstream>
@@ -10,7 +10,7 @@
 namespace {
 
 std::string write_conf(const std::string& body) {
-    char tmpl[] = "/tmp/slsfabric-test-democonf-XXXXXX";
+    char tmpl[] = "/tmp/slsfabric-test-sessionconf-XXXXXX";
     const int fd = mkstemp(tmpl);
     if (fd < 0) {
         return {};
@@ -24,14 +24,14 @@ std::string write_conf(const std::string& body) {
 
 }  // namespace
 
-FABRIC_TEST(demo_config_global_values) {
+FABRIC_TEST(session_config_global_values) {
     const std::string path = write_conf(
         "source_dir=/src\n"
         "target_dir=/dst\n"
         "role=sender\n");
 
-    DemoConfig cfg;
-    CHECK(load_demo_config_file(path, 0, cfg));
+    SessionConfig cfg;
+    CHECK(load_session_config_file(path, 0, cfg));
     CHECK_STREQ(cfg.source_dir, "/src");
     CHECK_STREQ(cfg.target_dir, "/dst");
     CHECK_STREQ(cfg.role, "sender");
@@ -39,38 +39,38 @@ FABRIC_TEST(demo_config_global_values) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(demo_config_port_override) {
+FABRIC_TEST(session_config_port_override) {
     const std::string path = write_conf(
         "role=sender\n"
         "[port0]\n"
         "role=receiver\n"
         "target_dir=/p0\n");
 
-    DemoConfig p0;
-    CHECK(load_demo_config_file(path, 0, p0));
+    SessionConfig p0;
+    CHECK(load_session_config_file(path, 0, p0));
     CHECK_STREQ(p0.role, "receiver");
     CHECK_STREQ(p0.target_dir, "/p0");
 
-    DemoConfig p1;
-    CHECK(load_demo_config_file(path, 1, p1));
+    SessionConfig p1;
+    CHECK(load_session_config_file(path, 1, p1));
     CHECK_STREQ(p1.role, "sender");  // falls back to global
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(demo_config_ignores_comments_and_blanks) {
+FABRIC_TEST(session_config_ignores_comments_and_blanks) {
     const std::string path = write_conf(
         "# a comment\n"
         "\n"
         "role=sender\n"
         "   # indented comment\n");
 
-    DemoConfig cfg;
-    CHECK(load_demo_config_file(path, 0, cfg));
+    SessionConfig cfg;
+    CHECK(load_session_config_file(path, 0, cfg));
     CHECK_STREQ(cfg.role, "sender");
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(demo_config_missing_file_returns_false) {
-    DemoConfig cfg;
-    CHECK(!load_demo_config_file("/tmp/does-not-exist-slsfabric.conf", 0, cfg));
+FABRIC_TEST(session_config_missing_file_returns_false) {
+    SessionConfig cfg;
+    CHECK(!load_session_config_file("/tmp/does-not-exist-slsfabric.conf", 0, cfg));
 }

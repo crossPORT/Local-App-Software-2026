@@ -159,7 +159,7 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
                                  const std::string& fabric_device_label,
                                  bool busy,
                                  double live_mbps,
-                                 double demo_display_mib_s,
+                                 double booth_display_mib_s,
                                  int64_t last_announce_ms,
                                  uint32_t fabric_activity_seq,
                                  const std::string& status_message,
@@ -189,7 +189,7 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
     }
 
     const double display_mbps =
-        live_mbps > 0.0 ? live_mbps : (busy && demo_display_mib_s > 0.0 ? demo_display_mib_s : 0.0);
+        live_mbps > 0.0 ? live_mbps : (busy && booth_display_mib_s > 0.0 ? booth_display_mib_s : 0.0);
 
     if (busy && display_mbps > 0.0) {
         speed_label_->SetLabel(wxString::FromUTF8(format_mbps_rate(display_mbps).c_str()));
@@ -205,7 +205,7 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
 
     const double chart_scale =
         display_mbps > 0.0 ? display_mbps
-        : (demo_display_mib_s > 0.0 ? demo_display_mib_s : 0.0);
+        : (booth_display_mib_s > 0.0 ? booth_display_mib_s : 0.0);
 
     SyncActivityMonitor(fabric_connected,
                         fabric_activity_seq,

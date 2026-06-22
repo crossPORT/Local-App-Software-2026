@@ -1,6 +1,6 @@
 #include "identity_profile.h"
 
-#include "demo_config.h"
+#include "session_config.h"
 
 #include <cctype>
 #include <filesystem>
@@ -119,23 +119,23 @@ void apply_identity_key(IdentityProfile& cfg, const std::string& key, const std:
         } catch (...) {
             cfg.payload_header_timeout_ms = 0;
         }
-    } else if (key == "demo_display_mib_s") {
+    } else if (key == "booth_display_mib_s") {
         try {
-            cfg.demo_display_mib_s = std::stod(value);
-            if (cfg.demo_display_mib_s < 0.0) {
-                cfg.demo_display_mib_s = 0.0;
+            cfg.booth_display_mib_s = std::stod(value);
+            if (cfg.booth_display_mib_s < 0.0) {
+                cfg.booth_display_mib_s = 0.0;
             }
         } catch (...) {
-            cfg.demo_display_mib_s = 0.0;
+            cfg.booth_display_mib_s = 0.0;
         }
-    } else if (key == "demo_display_jitter_pct") {
+    } else if (key == "booth_display_jitter_pct") {
         try {
-            cfg.demo_display_jitter_pct = std::stod(value);
-            if (cfg.demo_display_jitter_pct < 0.0) {
-                cfg.demo_display_jitter_pct = 0.0;
+            cfg.booth_display_jitter_pct = std::stod(value);
+            if (cfg.booth_display_jitter_pct < 0.0) {
+                cfg.booth_display_jitter_pct = 0.0;
             }
         } catch (...) {
-            cfg.demo_display_jitter_pct = 0.0;
+            cfg.booth_display_jitter_pct = 0.0;
         }
     } else if (key == "source_dir") {
         (void)value;
@@ -253,12 +253,12 @@ bool load_profile_file(const std::string& path, int port_index, IdentityProfile&
     out.payload_header_timeout_ms = port_cfg.payload_header_timeout_ms != 0
                                           ? port_cfg.payload_header_timeout_ms
                                           : global.payload_header_timeout_ms;
-    out.demo_display_mib_s = port_cfg.demo_display_mib_s > 0.0
-                                 ? port_cfg.demo_display_mib_s
-                                 : global.demo_display_mib_s;
-    out.demo_display_jitter_pct = port_cfg.demo_display_jitter_pct > 0.0
-                                      ? port_cfg.demo_display_jitter_pct
-                                      : global.demo_display_jitter_pct;
+    out.booth_display_mib_s = port_cfg.booth_display_mib_s > 0.0
+                                 ? port_cfg.booth_display_mib_s
+                                 : global.booth_display_mib_s;
+    out.booth_display_jitter_pct = port_cfg.booth_display_jitter_pct > 0.0
+                                      ? port_cfg.booth_display_jitter_pct
+                                      : global.booth_display_jitter_pct;
     out.peers = global.peers;
     out.config_path = path;
     return !out.display_name.empty() || !out.peers.empty();
@@ -291,10 +291,10 @@ ReceiveStatus receive_status_from_string(const std::string& value) {
 bool load_identity_profile(int port_index,
                            const std::string& cli_config_path,
                            IdentityProfile& out) {
-    DemoConfig legacy{};
-    const std::string path = resolve_demo_config_path(cli_config_path);
+    SessionConfig legacy{};
+    const std::string path = resolve_session_config_path(cli_config_path);
     if (!path.empty()) {
-        load_demo_config_file(path, port_index, legacy);
+        load_session_config_file(path, port_index, legacy);
     }
 
     IdentityProfile profile{};
@@ -374,11 +374,11 @@ bool save_identity_profile(const IdentityProfile& profile) {
     if (profile.payload_header_timeout_ms > 0) {
         file << "payload_header_timeout_ms=" << profile.payload_header_timeout_ms << '\n';
     }
-    if (profile.demo_display_mib_s > 0.0) {
-        file << "demo_display_mib_s=" << profile.demo_display_mib_s << '\n';
+    if (profile.booth_display_mib_s > 0.0) {
+        file << "booth_display_mib_s=" << profile.booth_display_mib_s << '\n';
     }
-    if (profile.demo_display_jitter_pct > 0.0) {
-        file << "demo_display_jitter_pct=" << profile.demo_display_jitter_pct << '\n';
+    if (profile.booth_display_jitter_pct > 0.0) {
+        file << "booth_display_jitter_pct=" << profile.booth_display_jitter_pct << '\n';
     }
 
     for (std::size_t i = 0; i < profile.peers.size(); ++i) {

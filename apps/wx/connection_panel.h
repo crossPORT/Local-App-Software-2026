@@ -16,7 +16,7 @@ public:
                     const std::string& fabric_device_label,
                     bool busy,
                     double live_mbps,
-                    double demo_display_mib_s,
+                    double booth_display_mib_s,
                     int64_t last_announce_ms,
                     uint32_t fabric_activity_seq,
                     const std::string& status_message,

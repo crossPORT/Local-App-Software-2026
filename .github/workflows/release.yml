@@ -66,7 +66,7 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
 
       - name: Build
-        run: cmake --build build --config Release --target data-transfer-demo -j 4
+        run: cmake --build build --config Release --target rocketbox -j 4
 
       - name: Install staging tree
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
