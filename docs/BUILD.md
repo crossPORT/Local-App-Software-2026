@@ -32,7 +32,7 @@ open build/apps/wx/RocketBox.app
 
 ```bash
 cmake --install build --prefix build/install
-cd build && cpack -G DragNDrop
+./scripts/build-dmg.sh build/install build 0.1.0
 ```
 
 ## Windows

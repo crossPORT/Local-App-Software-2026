@@ -81,14 +81,11 @@ jobs:
       - name: Install staging tree
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
 
-      - name: CPack (dmg)
-        working-directory: build
-        run: cpack -G DragNDrop -C Release
-
-      - name: Collect packages
+      - name: Create DMG
         run: |
+          chmod +x scripts/build-dmg.sh
           mkdir -p "${{ runner.temp }}/out"
-          find build -maxdepth 1 -name '*.dmg' -exec cp -v {} "${{ runner.temp }}/out/" \;
+          scripts/build-dmg.sh "${{ runner.temp }}/install" "${{ runner.temp }}/out" "${{ env.RELEASE_TAG }}"
           ls -la "${{ runner.temp }}/out/"
 
       - uses: actions/upload-artifact@v4

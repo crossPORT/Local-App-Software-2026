@@ -44,18 +44,18 @@ if(APPLE)
     install(TARGETS rocketbox BUNDLE DESTINATION .)
 else()
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
+
+    install(FILES
+        ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
+        ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
+        DESTINATION share/rocketbox
+    )
+
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/demo-config/
+        DESTINATION share/rocketbox/demo-config
+        FILES_MATCHING PATTERN "*.conf" PATTERN "README.txt"
+    )
 endif()
-
-install(FILES
-    ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
-    ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
-    DESTINATION share/rocketbox
-)
-
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/demo-config/
-    DESTINATION share/rocketbox/demo-config
-    FILES_MATCHING PATTERN "*.conf" PATTERN "README.txt"
-)
 
 if(UNIX AND NOT APPLE)
     set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
