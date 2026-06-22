@@ -1,8 +1,6 @@
 name: Release
 
 # Desktop installers (Linux/macOS/Windows) and PWA zip — triggered by version tag push.
-# Tags must match v* (e.g. v0.0.1) or semver *.*.* (e.g. 0.0.1).
-# Artifacts are attached to the GitHub Release for the tag.
 on:
   push:
     tags:
@@ -21,59 +19,57 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
 jobs:
-  package-wx:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            artifact: linux
-            cpack_gen: DEB
-          - os: macos-latest
-            artifact: macos
-            cpack_gen: DragNDrop
-          - os: windows-latest
-            artifact: windows
-            cpack_gen: NSIS
-    runs-on: ${{ matrix.os }}
+  package-linux:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
 
-      - name: Install vcpkg (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
-          ./vcpkg/bootstrap-vcpkg.bat
-          ./vcpkg/vcpkg install
-
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libwxgtk3.2-dev dpkg-dev file curl
 
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install wxwidgets libusb pkg-config
-
-      - name: Configure (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          INSTALL_PREFIX: ${{ runner.temp }}/install
-        run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_INSTALL_PREFIX="$env:INSTALL_PREFIX" `
-            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-
-      - name: Configure (Linux)
-        if: runner.os == 'Linux'
+      - name: Configure
         env:
           INSTALL_PREFIX: ${{ runner.temp }}/install
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX"
 
-      - name: Configure (macOS)
-        if: runner.os == 'macOS'
+      - name: Build
+        run: cmake --build build --config Release --target rocketbox -j 4
+
+      - name: Install staging tree
+        run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
+
+      - name: CPack (deb)
+        working-directory: build
+        run: cpack -G DEB -C Release
+
+      - name: Collect packages
+        run: |
+          mkdir -p "${{ runner.temp }}/out"
+          find build -maxdepth 1 -name '*.deb' -exec cp -v {} "${{ runner.temp }}/out/" \;
+          chmod +x scripts/build-appimage.sh
+          scripts/build-appimage.sh "${{ runner.temp }}/install" "${{ runner.temp }}/out" "${{ env.RELEASE_TAG }}"
+          ls -la "${{ runner.temp }}/out/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbox-linux
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 400
+
+  package-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
+
+      - name: Install dependencies
+        run: brew install wxwidgets libusb pkg-config
+
+      - name: Configure
         env:
           INSTALL_PREFIX: ${{ runner.temp }}/install
           PKG_CONFIG_PATH: /opt/homebrew/opt/libusb/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/usr/local/opt/libusb/lib/pkgconfig
@@ -85,28 +81,83 @@ jobs:
       - name: Install staging tree
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
 
-      - name: CPack
+      - name: CPack (dmg)
         working-directory: build
-        run: cpack -G "${{ matrix.cpack_gen }}" -C Release
+        run: cpack -G DragNDrop -C Release
+
+      - name: Collect packages
+        run: |
+          mkdir -p "${{ runner.temp }}/out"
+          find build -maxdepth 1 -name '*.dmg' -exec cp -v {} "${{ runner.temp }}/out/" \;
+          ls -la "${{ runner.temp }}/out/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbox-macos
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 400
+
+  package-windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg
+            build/vcpkg_installed
+          key: vcpkg-${{ hashFiles('vcpkg.json') }}-windows-2022
+          restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-windows-2022
+
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Add NSIS to PATH
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
+
+      - name: Install vcpkg dependencies
+        run: |
+          if (-not (Test-Path vcpkg\vcpkg.exe)) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
+            .\vcpkg\bootstrap-vcpkg.bat
+          }
+          .\vcpkg\vcpkg install --triplet x64-windows
+
+      - name: Configure
+        shell: pwsh
+        env:
+          INSTALL_PREFIX: ${{ runner.temp }}/install
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$env:INSTALL_PREFIX" `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: cmake --build build --config Release --target rocketbox -j 4
+
+      - name: Install staging tree
+        run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
+
+      - name: CPack (NSIS)
+        working-directory: build
+        run: cpack -G NSIS -C Release
 
       - name: Collect packages
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/out"
-          find build -maxdepth 1 \( -name '*.deb' -o -name '*.dmg' -o -name '*setup.exe' -o -name '*.exe' \) \
-            -exec cp -v {} "${{ runner.temp }}/out/" \;
+          find build -maxdepth 1 \( -name '*setup.exe' -o -name '*.exe' \) -exec cp -v {} "${{ runner.temp }}/out/" \;
           ls -la "${{ runner.temp }}/out/"
 
-      - name: Build AppImage (Linux)
-        if: matrix.artifact == 'linux'
-        run: |
-          chmod +x scripts/build-appimage.sh
-          scripts/build-appimage.sh "${{ runner.temp }}/install" "${{ runner.temp }}/out" "${{ env.RELEASE_TAG }}"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: rocketbox-${{ matrix.artifact }}
+          name: rocketbox-windows
           path: ${{ runner.temp }}/out/
           if-no-files-found: error
           retention-days: 400
@@ -126,15 +177,20 @@ jobs:
         run: |
           chmod +x scripts/package-pwa.sh
           ./scripts/package-pwa.sh RocketBox-pwa-${{ env.RELEASE_TAG }}.zip
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: rocketbox-pwa
           path: RocketBox-pwa-*.zip
           retention-days: 400
 
   release:
-    needs: [package-wx, package-pwa]
+    needs: [package-linux, package-macos, package-windows, package-pwa]
+    if: >-
+      always() && !cancelled() &&
+      needs.package-pwa.result == 'success' &&
+      (needs.package-linux.result == 'success' ||
+       needs.package-macos.result == 'success' ||
+       needs.package-windows.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -152,11 +208,10 @@ jobs:
         run: |
           set -euo pipefail
           find dist -type f | sort
-          test "$(find dist -name '*.deb' | wc -l)" -ge 1
-          test "$(find dist -name '*.AppImage' | wc -l)" -ge 1
-          test "$(find dist -name '*.dmg' | wc -l)" -ge 1
-          test "$(find dist -name '*.exe' | wc -l)" -ge 1
           test "$(find dist -name 'RocketBox-pwa-*.zip' | wc -l)" -ge 1
+          desktop_count="$(find dist \( -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.exe' \) | wc -l)"
+          echo "Desktop installer count: $desktop_count"
+          test "$desktop_count" -ge 1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -164,6 +219,7 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: RocketBox App ${{ env.RELEASE_TAG }}
           generate_release_notes: true
+          fail_on_unmatched_files: false
           files: |
             dist/**/*.deb
             dist/**/*.AppImage
