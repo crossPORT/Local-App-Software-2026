@@ -1,5 +1,7 @@
 #include "session_config.h"
 
+#include "platform_util.h"
+
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -15,15 +17,6 @@ std::string trim(std::string value) {
         value.pop_back();
     }
     return value;
-}
-
-std::string expand_home(std::string path) {
-    if (path.size() >= 2 && path[0] == '~' && path[1] == '/') {
-        if (const char* home = std::getenv("HOME")) {
-            path.replace(0, 1, home);
-        }
-    }
-    return path;
 }
 
 bool parse_port_section(const std::string& line, int* port_out) {
@@ -84,7 +77,7 @@ bool load_session_config_file(const std::string& path, int port_index, SessionCo
         }
 
         const std::string key = trim(line.substr(0, eq));
-        const std::string value = expand_home(trim(line.substr(eq + 1)));
+        const std::string value = platform::expand_home(trim(line.substr(eq + 1)));
         if (section_port < 0) {
             set_config_value(global, key, value);
         } else if (section_port == port_index) {
@@ -110,7 +103,8 @@ std::string resolve_session_config_path(const std::string& cli_path) {
             return env_path;
         }
     }
-    if (const char* home = std::getenv("HOME")) {
+    const std::string home = platform::home_directory();
+    if (!home.empty()) {
         const std::filesystem::path user_path =
             std::filesystem::path(home) / ".config" / "sls-fabric" / "session.conf";
         if (std::filesystem::is_regular_file(user_path)) {

@@ -1,65 +1,15 @@
 #include "fabric_tar_pack.h"
 
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
+#include "platform_util.h"
+
 #include <filesystem>
 #include <string>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <vector>
 
 namespace {
 
-bool run_command(std::vector<std::string> args, std::string* error_out) {
-    if (args.empty()) {
-        return false;
-    }
-
-    std::vector<char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const std::string& arg : args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    }
-    argv.push_back(nullptr);
-
-    const pid_t pid = fork();
-    if (pid < 0) {
-        if (error_out) {
-            *error_out = "fork failed";
-        }
-        return false;
-    }
-    if (pid == 0) {
-        execvp(argv[0], argv.data());
-        _exit(127);
-    }
-
-    int status = 0;
-    if (waitpid(pid, &status, 0) < 0) {
-        if (error_out) {
-            *error_out = "waitpid failed";
-        }
-        return false;
-    }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        if (error_out) {
-            *error_out = std::string(args[0]) + " exited with status "
-                         + std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : -1);
-        }
-        return false;
-    }
-    return true;
-}
-
 std::string temp_tar_path() {
-    char path_template[] = "/tmp/slsfabric-send-XXXXXX.tar";
-    const int fd = mkstemps(path_template, 4);
-    if (fd < 0) {
-        return {};
-    }
-    close(fd);
-    return path_template;
+    return platform::create_empty_temp_file("slsfabric-send-", ".tar");
 }
 
 }  // namespace
@@ -79,7 +29,7 @@ std::string create_tar_for_file(const std::string& file_path,
 
     if (!source_root.empty()) {
         std::string root = source_root;
-        if (root.back() != '/') {
+        if (root.back() != '/' && root.back() != '\\') {
             root += '/';
         }
         if (file_path.compare(0, root.size(), root) == 0) {
@@ -109,7 +59,7 @@ std::string create_tar_for_file(const std::string& file_path,
         return {};
     }
 
-    if (!run_command({"tar", "cf", tar_path, "-C", base_dir, member}, error_out)) {
+    if (!platform::run_command({"tar", "cf", tar_path, "-C", base_dir, member}, error_out)) {
         std::remove(tar_path.c_str());
         return {};
     }
@@ -144,7 +94,7 @@ std::string create_tar_for_directory(const std::string& directory_path,
         return {};
     }
 
-    if (!run_command({"tar", "cf", tar_path, "-C", base_dir, member}, error_out)) {
+    if (!platform::run_command({"tar", "cf", tar_path, "-C", base_dir, member}, error_out)) {
         std::remove(tar_path.c_str());
         return {};
     }
@@ -177,5 +127,5 @@ bool extract_tar_to_dir(const std::string& tar_path,
         return false;
     }
 
-    return run_command({"tar", "xf", tar_path, "-C", target_dir}, error_out);
+    return platform::run_command({"tar", "xf", tar_path, "-C", target_dir}, error_out);
 }

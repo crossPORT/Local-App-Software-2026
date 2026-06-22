@@ -1,10 +1,10 @@
 #include "fabric_meta_file.h"
 
-#include <cstdio>
+#include "platform_util.h"
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <unistd.h>
 
 namespace {
 
@@ -66,25 +66,13 @@ std::string write_meta_temp_file(const FabricSendMeta& meta) {
         return {};
     }
 
-    char path_template[] = "/tmp/slsfabric-meta-XXXXXX";
-    const int fd = mkstemp(path_template);
-    if (fd < 0) {
-        return {};
-    }
-
     std::ostringstream payload;
     payload << kMetaHeaderV2;
     payload << "type=" << sanitize_type(meta.type) << '\n';
     payload << "name=" << safe_name << '\n';
     const std::string text = payload.str();
 
-    if (write(fd, text.data(), text.size()) != static_cast<ssize_t>(text.size())) {
-        close(fd);
-        std::remove(path_template);
-        return {};
-    }
-    close(fd);
-    return path_template;
+    return platform::write_temp_text_file("slsfabric-meta-", text);
 }
 
 bool read_meta_file(const std::string& path, FabricSendMeta& out) {

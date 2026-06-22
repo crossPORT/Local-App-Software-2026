@@ -1,5 +1,6 @@
 #include "identity_profile.h"
 
+#include "platform_util.h"
 #include "session_config.h"
 
 #include <cctype>
@@ -20,12 +21,7 @@ std::string trim(std::string value) {
 }
 
 std::string expand_home(std::string path) {
-    if (path.size() >= 2 && path[0] == '~' && path[1] == '/') {
-        if (const char* home = std::getenv("HOME")) {
-            path.replace(0, 1, home);
-        }
-    }
-    return path;
+    return platform::expand_home(std::move(path));
 }
 
 bool parse_peer_section(const std::string& line, int* peer_index) {

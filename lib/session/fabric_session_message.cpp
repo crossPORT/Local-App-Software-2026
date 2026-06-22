@@ -1,9 +1,9 @@
 #include "fabric_session_message.h"
 
-#include <cstdio>
+#include "platform_util.h"
+
 #include <fstream>
 #include <sstream>
-#include <unistd.h>
 
 namespace {
 
@@ -124,12 +124,6 @@ std::string write_session_temp_file(const FabricSessionMessage& message) {
         return {};
     }
 
-    char path_template[] = "/tmp/slsfabric-session-XXXXXX";
-    const int fd = mkstemp(path_template);
-    if (fd < 0) {
-        return {};
-    }
-
     std::ostringstream payload;
     payload << kSessionHeader;
     payload << "kind=" << session_kind_to_string(message.kind) << '\n';
@@ -156,13 +150,7 @@ std::string write_session_temp_file(const FabricSessionMessage& message) {
     }
 
     const std::string text = payload.str();
-    if (write(fd, text.data(), text.size()) != static_cast<ssize_t>(text.size())) {
-        close(fd);
-        std::remove(path_template);
-        return {};
-    }
-    close(fd);
-    return path_template;
+    return platform::write_temp_text_file("slsfabric-session-", text);
 }
 
 bool read_session_file(const std::string& path, FabricSessionMessage& out) {

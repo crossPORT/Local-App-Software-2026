@@ -1,4 +1,5 @@
 add_library(rocketbox_session STATIC
+    platform_util.cpp
     transfer_controller.cpp
     session_config.cpp
     session_role.cpp

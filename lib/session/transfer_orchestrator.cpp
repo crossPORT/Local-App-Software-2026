@@ -1,5 +1,6 @@
 #include "transfer_orchestrator.h"
 
+#include "platform_util.h"
 #include "session_handshake.h"
 #include "announce_note.h"
 #include "booth_log.h"
@@ -18,7 +19,6 @@
 #include <fstream>
 #include <sstream>
 #include <thread>
-#include <unistd.h>
 
 namespace {
 
@@ -90,7 +90,7 @@ bool looks_like_done_display(const std::string& text) {
 namespace {
 
 void load_shared_booth_path(int& send_port, int& recv_port) {
-    std::ifstream file("/tmp/slsfabric-booth-path.conf");
+    std::ifstream file(platform::shared_booth_path_config());
     if (!file.is_open()) {
         return;
     }

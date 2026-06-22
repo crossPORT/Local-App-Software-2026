@@ -2,6 +2,7 @@
 
 #include "booth_log.h"
 #include "fabric_session_message.h"
+#include "platform_util.h"
 #include "usb_protocol.h"
 
 #include <algorithm>
@@ -10,18 +11,13 @@
 #include <random>
 #include <sstream>
 #include <thread>
-#include <unistd.h>
 
 namespace {
 
 constexpr unsigned kSessionSendTimeoutMs = 2500;
 
 std::string temp_receive_path() {
-    char path_template[] = "/tmp/slsfabric-sess-recv-XXXXXX";
-    if (mkstemp(path_template) < 0) {
-        return {};
-    }
-    return path_template;
+    return platform::create_empty_temp_file("slsfabric-sess-recv-");
 }
 
 }  // namespace

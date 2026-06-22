@@ -6,6 +6,7 @@
 #include "usb_protocol.h"
 
 #include "fabric_meta_file.h"
+#include "platform_util.h"
 
 #include <cstdio>
 #include <chrono>
@@ -398,13 +399,13 @@ void TransferController::start_worker(TransferKind kind,
                 break;
             }
             case TransferKind::ReceiveMetaThenFile: {
-                char meta_template[] = "/tmp/slsfabric-meta-recv-XXXXXX";
-                if (mkstemp(meta_template) < 0) {
+                const std::string meta_recv_path =
+                    platform::create_empty_temp_file("slsfabric-meta-recv-");
+                if (meta_recv_path.empty()) {
                     result.ok = false;
                     result.error_message = "Could not create temp path for metadata";
                     break;
                 }
-                const std::string meta_recv_path(meta_template);
                 TransferResult meta_result{};
                 run_usb_locked([&] {
                     meta_result =

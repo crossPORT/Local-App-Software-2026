@@ -1,33 +1,19 @@
 #include "booth_log.h"
 
-#include <chrono>
+#include "platform_util.h"
+
 #include <cstdlib>
 #include <deque>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <unistd.h>
 
 namespace {
 
 std::mutex log_mutex;
-std::string log_path = "/tmp/slsfabric-booth.log";
-
-std::string timestamp_now() {
-    const auto now = std::chrono::system_clock::now();
-    const auto t = std::chrono::system_clock::to_time_t(now);
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()) % 1000;
-    std::tm tm_buf{};
-    localtime_r(&t, &tm_buf);
-    std::ostringstream out;
-    out << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%S")
-        << '.' << std::setw(3) << std::setfill('0') << ms.count();
-    return out.str();
-}
+std::string log_path = platform::default_booth_log_path();
 
 void write_line(const std::string& line) {
     std::lock_guard<std::mutex> lock(log_mutex);
@@ -35,7 +21,7 @@ void write_line(const std::string& line) {
     if (file.is_open()) {
         file << line << '\n';
     }
-    if (std::getenv("SLSFABRIC_LOG_STDERR") || isatty(STDERR_FILENO)) {
+    if (std::getenv("SLSFABRIC_LOG_STDERR") || platform::stderr_is_tty()) {
         std::cerr << line << '\n';
     }
 }
@@ -56,7 +42,7 @@ void booth_log_clear() {
     std::lock_guard<std::mutex> lock(log_mutex);
     std::ofstream file(log_path, std::ios::trunc);
     if (file.is_open()) {
-        file << timestamp_now() << " [boot] log cleared\n";
+        file << platform::format_timestamp_iso8601_ms() << " [boot] log cleared\n";
     }
 }
 
@@ -92,7 +78,7 @@ void booth_log(int port, const std::string& event, const std::string& detail) {
     }
 
     std::ostringstream line;
-    line << timestamp_now() << " [port=" << port << "] " << event;
+    line << platform::format_timestamp_iso8601_ms() << " [port=" << port << "] " << event;
     if (!detail.empty()) {
         line << " | " << detail;
     }
