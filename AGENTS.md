@@ -58,7 +58,7 @@ All targets must compile:
 ## wx integration
 
 - Send/receive via `TransferController` → `*_core()` on a **worker thread**
-- **`port_index`:** per instance (`--port 0` / `--port 1` for two cables)
+- **`port_index`:** CLI `--port N` (`apps/wx/main.cpp`), or **Connect USB** picker when multiple fabric devices are connected (`fabric_device_picker.cpp`); passed into `TransferOrchestrator` / `TransferController`
 - **Progress:** worker callback → `wxTheApp->CallAfter` before touching widgets
 - **Errors:** show `TransferResult.error_message` verbatim; core does not throw
 - **libusb:** one `libusb_context*` for app lifetime (`TransferController` ctor/dtor)
@@ -107,8 +107,6 @@ Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
 ## Priority open work
 
 1. **Hardware validation** — run `usb-probe`, `usb-loopback-test`, and RocketBox wx against real FPGA
-2. Optional: `apps/console/` — thin headless diagnostic CLI for raw USB engine modes
-3. Optional: cancel support for in-flight transfers
 
 ## Conventions
 

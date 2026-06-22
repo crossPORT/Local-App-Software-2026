@@ -68,7 +68,7 @@ apps/wx/main.cpp
 | One `libusb_context*` for app lifetime | `TransferController` ctor/dtor |
 | Send / receive on worker thread | `TransferController::start_worker` |
 | One transfer at a time (per orchestrator rules) | `TransferOrchestrator` + UI state |
-| `port_index` from `--port` CLI | `TransferController` |
+| `port_index` from `--port` CLI or cable picker (`fabric_device_picker.cpp`) | `MainFrame` → `TransferOrchestrator` |
 | Progress ~every 4 MB, worker thread | core `progress_cb` → wx `CallAfter` |
 | Show `error_message` verbatim on failure | status / error panels |
 | Core functions silent (no stdout) | all I/O returns `TransferResult` only |
@@ -99,7 +99,7 @@ Prefer `usb-loopback-test` and integration tests to validate core/session change
 - **`port_index`** selects the Nth matching device (0-based) in libusb device list order
 - **`count_fabric_devices(ctx)`** returns how many are connected
 
-Loopback on one PC requires **two** devices (two cables). Run two RocketBox instances with `--port 0` and `--port 1`.
+Loopback on one PC requires **two** devices (two cables). Run two RocketBox instances. Use `--port 0` and `--port 1`, or pick the cable in the **Connect USB** dialog when multiple devices are present.
 
 ## Dependencies
 

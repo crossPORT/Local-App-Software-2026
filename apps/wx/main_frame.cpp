@@ -219,16 +219,18 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_CLOSE(MainFrame::OnClose)
 wxEND_EVENT_TABLE()
 
-MainFrame::MainFrame(const std::string& config_path)
+MainFrame::MainFrame(const std::string& config_path, int cli_port_index)
     : wxFrame(nullptr,
               wxID_ANY,
               "RocketBox Transfer",
               wxDefaultPosition,
               wxDefaultSize)
+    , cli_port_index_(cli_port_index)
     , config_path_(config_path) {
     SetBackgroundColour(kBg);
 
-    load_identity_profile(0, config_path_, identity_);
+    const int config_port = cli_port_index_ >= 0 ? cli_port_index_ : 0;
+    load_identity_profile(config_port, config_path_, identity_);
     if (!identity_.config_path.empty()) {
         config_path_ = identity_.config_path;
     }
@@ -314,6 +316,12 @@ int MainFrame::ResolveFabricPortIndex() {
 
     if (devices.empty()) {
         return -1;
+    }
+    if (cli_port_index_ >= 0) {
+        if (cli_port_index_ >= static_cast<int>(devices.size())) {
+            return -1;
+        }
+        return cli_port_index_;
     }
     if (devices.size() == 1) {
         return 0;

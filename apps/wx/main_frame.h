@@ -18,7 +18,7 @@ enum class LinkLed { Offline, Announcing, Connected, Transferring };
 
 class MainFrame : public wxFrame {
 public:
-    explicit MainFrame(const std::string& config_path);
+    explicit MainFrame(const std::string& config_path, int cli_port_index = -1);
 
 private:
     void BuildUi();
@@ -51,6 +51,7 @@ private:
     bool StartOrchestrator();
     int ResolveFabricPortIndex();
 
+    int cli_port_index_ = -1;
     int port_index_ = -1;
     int content_width_ = 560;
     bool fabric_connected_ = false;

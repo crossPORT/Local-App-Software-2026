@@ -8,7 +8,7 @@
 
 RocketBox is the end-user software for the SLS switched USB fabric. Each participant runs RocketBox on their laptop with a fabric USB cable attached. The app discovers peers on the fabric, negotiates a session, and transfers files directly over USB — not over the corporate network.
 
-**Hardware:** SLS fabric USB device (vendor/product **1772:0006**). One app instance per cable. Two cables on one PC (e.g. local testing): run two instances with `--port 0` and `--port 1`.
+**Hardware:** SLS fabric USB device (vendor/product **1772:0006**). One RocketBox window per cable. With two cables on one PC, launch RocketBox twice — each window binds to one cable (see [Using RocketBox](#using-rocketbox)).
 
 ## What you get
 
@@ -39,7 +39,7 @@ On **Linux only**, the operating system blocks normal apps (and browsers) from t
 
 **What to do:**
 
-1. **If you installed the `.deb` package** — the installer usually copies the rule automatically. **Unplug and replug the USB cable once** after install.
+1. **If you installed the `.deb` package** — the post-install script copies the rule when `/etc/udev/rules.d/99-sls-fabric-usb.rules` is not already present. **Unplug and replug the USB cable once** after install.
 2. **If you use the AppImage, or the rule was not installed** — run once (requires admin password):
 
    ```bash
@@ -47,11 +47,13 @@ On **Linux only**, the operating system blocks normal apps (and browsers) from t
    sudo udevadm control --reload-rules && sudo udevadm trigger
    ```
 
-   If you only have the zip/source tree, use the helper script instead:
+   If you only have a source checkout, use the helper script instead:
 
    ```bash
    ./scripts/setup-usb-access.sh
    ```
+
+   The rule file is also at the repo root as `99-sls-fabric-usb.rules`.
 
 3. **Unplug and replug the fabric USB cable** after installing the rule.
 
@@ -63,7 +65,7 @@ The rule file (`99-sls-fabric-usb.rules`) grants read/write access to device `17
 
 ### Windows
 
-1. Download `RocketBox-*-windows-x64-setup.exe` from [Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest).
+1. Download `RocketBox-*-setup.exe` from [Releases](https://github.com/crossPORT/Local-App-Software-2026/releases/latest).
 2. Run the installer. Windows SmartScreen may warn on unsigned builds — choose to run anyway if your IT policy allows.
 3. Launch **RocketBox** from the Start Menu.
 4. Connect the fabric USB cable, then start a transfer.
@@ -85,8 +87,10 @@ No udev-style rules are required on macOS.
 
 ```bash
 sudo apt install ./rocketbox_*_amd64.deb
-rocketbox
+RocketBox
 ```
+
+The installed binary is `RocketBox` (in `/usr/bin/`). The `.deb` does not add a desktop menu entry today.
 
 After install, complete the [USB access rule](#linux-usb-access-rule-required-one-time) step if the device is not detected (unplug/replug the cable).
 
@@ -97,7 +101,7 @@ chmod +x RocketBox-*-linux-x64.AppImage
 ./RocketBox-*-linux-x64.AppImage
 ```
 
-You must install the [USB access rule](#linux-usb-access-rule-required-one-time) manually when using AppImage.
+You must install the [USB access rule](#linux-usb-access-rule-required-one-time) manually when using AppImage. The bundled rule lives inside the AppImage at `usr/share/rocketbox/99-sls-fabric-usb.rules`, or use the repo file / `scripts/setup-usb-access.sh` from a checkout.
 
 ### Web app (PWA)
 
@@ -116,7 +120,7 @@ Configure booth identity (display name, port) in the in-app **Settings** — set
 1. **Connect** the fabric USB cable to the laptop before or after launching the app.
 2. **Wait for discovery** — peers on the same fabric appear in the roster when their session is active.
 3. **Send a file** — choose a recipient and file; progress is shown until complete.
-4. **Two cables on one machine** — launch two desktop instances: `RocketBox --port 0` and `RocketBox --port 1`.
+4. **Two cables on one machine** — launch RocketBox twice. With two devices connected, the second launch shows a **Connect USB** dialog to pick a cable. To skip the dialog, pass `--port 0` and `--port 1`. Optional `--config` loads booth identity from a file (samples in `demo-config/`).
 
 If the device is not listed: confirm the cable is seated, no other program has exclusive USB access, and on Linux that the udev rule is installed and the cable was replugged.
 
@@ -124,7 +128,10 @@ If the device is not listed: confirm the cable is seated, no other program has e
 
 ## Trade-show / demo setups
 
-Optional sample identity configs (display names, port indices) live in `demo-config/` for booth scenarios. They are **not** loaded automatically — copy or import values through app Settings when running a demo.
+Optional sample identity configs for booth setups live in `demo-config/`. They are **not** loaded automatically.
+
+- **Desktop:** launch with `--config path/to/file.conf` (and `--port N` when using `shared.conf` with `[port0]` / `[port1]` sections). Settings edits apply in memory; they are written back to disk only when the app was started with `--config`.
+- **PWA:** set display name, team, and receive folder in **Settings** (stored in the browser).
 
 ---
 
