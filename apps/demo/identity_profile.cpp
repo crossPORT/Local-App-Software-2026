@@ -83,6 +83,60 @@ void apply_identity_key(IdentityProfile& cfg, const std::string& key, const std:
         } catch (...) {
             cfg.usb_inflight_mb = 0;
         }
+    } else if (key == "accept_ready_gap_ms") {
+        try {
+            cfg.accept_ready_gap_ms = std::max(0, std::stoi(value));
+        } catch (...) {
+            cfg.accept_ready_gap_ms = 0;
+        }
+    } else if (key == "accept_reply_delay_ms") {
+        try {
+            cfg.accept_reply_delay_ms = std::max(0, std::stoi(value));
+        } catch (...) {
+            cfg.accept_reply_delay_ms = 0;
+        }
+    } else if (key == "accept_timeout_sec") {
+        try {
+            cfg.accept_timeout_sec = std::max(0, std::stoi(value));
+        } catch (...) {
+            cfg.accept_timeout_sec = 0;
+        }
+    } else if (key == "ready_timeout_sec") {
+        try {
+            cfg.ready_timeout_sec = std::max(0, std::stoi(value));
+        } catch (...) {
+            cfg.ready_timeout_sec = 0;
+        }
+    } else if (key == "session_header_timeout_ms") {
+        try {
+            cfg.session_header_timeout_ms = std::max(0, std::stoi(value));
+        } catch (...) {
+            cfg.session_header_timeout_ms = 0;
+        }
+    } else if (key == "payload_header_timeout_ms") {
+        try {
+            cfg.payload_header_timeout_ms = std::max(0, std::stoi(value));
+        } catch (...) {
+            cfg.payload_header_timeout_ms = 0;
+        }
+    } else if (key == "demo_display_mib_s") {
+        try {
+            cfg.demo_display_mib_s = std::stod(value);
+            if (cfg.demo_display_mib_s < 0.0) {
+                cfg.demo_display_mib_s = 0.0;
+            }
+        } catch (...) {
+            cfg.demo_display_mib_s = 0.0;
+        }
+    } else if (key == "demo_display_jitter_pct") {
+        try {
+            cfg.demo_display_jitter_pct = std::stod(value);
+            if (cfg.demo_display_jitter_pct < 0.0) {
+                cfg.demo_display_jitter_pct = 0.0;
+            }
+        } catch (...) {
+            cfg.demo_display_jitter_pct = 0.0;
+        }
     } else if (key == "source_dir") {
         (void)value;
     }
@@ -181,6 +235,30 @@ bool load_profile_file(const std::string& path, int port_index, IdentityProfile&
     out.usb_inflight_mb = port_cfg.usb_inflight_mb != 0
                               ? port_cfg.usb_inflight_mb
                               : global.usb_inflight_mb;
+    out.accept_ready_gap_ms = port_cfg.accept_ready_gap_ms != 0
+                                  ? port_cfg.accept_ready_gap_ms
+                                  : global.accept_ready_gap_ms;
+    out.accept_reply_delay_ms = port_cfg.accept_reply_delay_ms != 0
+                                    ? port_cfg.accept_reply_delay_ms
+                                    : global.accept_reply_delay_ms;
+    out.accept_timeout_sec = port_cfg.accept_timeout_sec != 0
+                                 ? port_cfg.accept_timeout_sec
+                                 : global.accept_timeout_sec;
+    out.ready_timeout_sec = port_cfg.ready_timeout_sec != 0
+                                ? port_cfg.ready_timeout_sec
+                                : global.ready_timeout_sec;
+    out.session_header_timeout_ms = port_cfg.session_header_timeout_ms != 0
+                                        ? port_cfg.session_header_timeout_ms
+                                        : global.session_header_timeout_ms;
+    out.payload_header_timeout_ms = port_cfg.payload_header_timeout_ms != 0
+                                          ? port_cfg.payload_header_timeout_ms
+                                          : global.payload_header_timeout_ms;
+    out.demo_display_mib_s = port_cfg.demo_display_mib_s > 0.0
+                                 ? port_cfg.demo_display_mib_s
+                                 : global.demo_display_mib_s;
+    out.demo_display_jitter_pct = port_cfg.demo_display_jitter_pct > 0.0
+                                      ? port_cfg.demo_display_jitter_pct
+                                      : global.demo_display_jitter_pct;
     out.peers = global.peers;
     out.config_path = path;
     return !out.display_name.empty() || !out.peers.empty();
@@ -277,6 +355,30 @@ bool save_identity_profile(const IdentityProfile& profile) {
     }
     if (profile.usb_inflight_mb > 0) {
         file << "usb_inflight_mb=" << profile.usb_inflight_mb << '\n';
+    }
+    if (profile.accept_ready_gap_ms > 0) {
+        file << "accept_ready_gap_ms=" << profile.accept_ready_gap_ms << '\n';
+    }
+    if (profile.accept_reply_delay_ms > 0) {
+        file << "accept_reply_delay_ms=" << profile.accept_reply_delay_ms << '\n';
+    }
+    if (profile.accept_timeout_sec > 0) {
+        file << "accept_timeout_sec=" << profile.accept_timeout_sec << '\n';
+    }
+    if (profile.ready_timeout_sec > 0) {
+        file << "ready_timeout_sec=" << profile.ready_timeout_sec << '\n';
+    }
+    if (profile.session_header_timeout_ms > 0) {
+        file << "session_header_timeout_ms=" << profile.session_header_timeout_ms << '\n';
+    }
+    if (profile.payload_header_timeout_ms > 0) {
+        file << "payload_header_timeout_ms=" << profile.payload_header_timeout_ms << '\n';
+    }
+    if (profile.demo_display_mib_s > 0.0) {
+        file << "demo_display_mib_s=" << profile.demo_display_mib_s << '\n';
+    }
+    if (profile.demo_display_jitter_pct > 0.0) {
+        file << "demo_display_jitter_pct=" << profile.demo_display_jitter_pct << '\n';
     }
 
     for (std::size_t i = 0; i < profile.peers.size(); ++i) {

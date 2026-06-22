@@ -1,0 +1,18 @@
+RocketBox — USB fabric file transfer
+=====================================
+
+Desktop (wx)
+  Launch RocketBox from the Start Menu / Applications / installed menu entry.
+  Connect the SLS fabric USB cable before opening the app.
+
+  Linux USB access (one-time):
+    sudo cp /usr/share/rocketbox/99-sls-fabric-usb.rules /etc/udev/rules.d/
+    sudo udevadm control --reload-rules && sudo udevadm trigger
+    Unplug and replug the cable.
+
+Web (PWA)
+  https://crossport.github.io/Local-App-Software-2026/
+  Requires Chrome or Edge, HTTPS, and a connected fabric device.
+
+Downloads
+  https://github.com/crossPORT/Local-App-Software-2026/releases/latest

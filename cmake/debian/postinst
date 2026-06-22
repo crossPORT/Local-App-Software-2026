@@ -1,0 +1,10 @@
+#!/bin/sh
+# Optional udev rule install after deb package install.
+set -e
+RULE_SRC="/usr/share/rocketbox/99-sls-fabric-usb.rules"
+RULE_DST="/etc/udev/rules.d/99-sls-fabric-usb.rules"
+if [ -f "$RULE_SRC" ] && [ ! -f "$RULE_DST" ]; then
+    cp "$RULE_SRC" "$RULE_DST"
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger 2>/dev/null || true
+fi

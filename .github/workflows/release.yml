@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package-wx:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: linux
+            cpack_gen: DEB
+          - os: macos-latest
+            artifact: macos
+            cpack_gen: DragNDrop
+          - os: windows-latest
+            artifact: windows
+            cpack_gen: NSIS
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
+          ./vcpkg/bootstrap-vcpkg.bat
+          ./vcpkg/vcpkg install
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libwxgtk3.2-dev dpkg-dev file curl
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install wxwidgets libusb pkg-config
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          INSTALL_PREFIX: ${{ runner.temp }}/install
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$env:INSTALL_PREFIX" `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
+        env:
+          INSTALL_PREFIX: ${{ runner.temp }}/install
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX"
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        env:
+          INSTALL_PREFIX: ${{ runner.temp }}/install
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
+
+      - name: Build
+        run: cmake --build build --config Release --target data-transfer-demo -j 4
+
+      - name: Install staging tree
+        run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
+
+      - name: CPack
+        working-directory: build
+        run: cpack -G "${{ matrix.cpack_gen }}" -C Release
+
+      - name: Collect packages
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/out"
+          find build -maxdepth 1 \( -name '*.deb' -o -name '*.dmg' -o -name '*setup.exe' -o -name '*.exe' \) \
+            -exec cp -v {} "${{ runner.temp }}/out/" \;
+          ls -la "${{ runner.temp }}/out/"
+
+      - name: Build AppImage (Linux)
+        if: matrix.artifact == 'linux'
+        run: |
+          chmod +x scripts/build-appimage.sh
+          scripts/build-appimage.sh "${{ runner.temp }}/install" "${{ runner.temp }}/out" "${{ github.ref_name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocketbox-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+
+  release:
+    needs: package-wx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release files
+        run: find dist -type f | sort
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

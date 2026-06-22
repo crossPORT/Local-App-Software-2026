@@ -76,6 +76,7 @@ public:
                              ProgressCallback progress_cb = nullptr);
     int fabric_device_count() const;
     bool fabric_port_available() const;
+    std::string fabric_device_label() const;
     void request_shutdown();
     bool is_shutting_down() const;
     bool fabric_device_bus_addr(int port_index, uint8_t* bus, uint8_t* addr) const;
@@ -104,5 +105,6 @@ private:
     std::atomic<bool> progress_seen_{false};
     mutable std::atomic<bool> last_port_present_{false};
     mutable std::atomic<int> last_device_count_{0};
+    mutable std::string cached_device_label_;
     std::string transfer_detail_;
 };

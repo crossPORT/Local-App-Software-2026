@@ -4,6 +4,7 @@
 #include "fabric_session_message.h"
 #include "usb_protocol.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <random>
@@ -71,10 +72,21 @@ bool send_session_message(TransferController& controller,
 
 SessionListener::SessionListener(TransferController* controller,
                                  int port_index,
-                                 MessageCallback on_message)
+                                 MessageCallback on_message,
+                                 BeforeListenCallback on_before_listen)
     : controller_(controller)
     , port_index_(port_index)
-    , on_message_(std::move(on_message)) {}
+    , on_message_(std::move(on_message))
+    , on_before_listen_(std::move(on_before_listen)) {}
+
+void SessionListener::set_session_header_timeout_ms(unsigned ms) {
+    session_header_timeout_ms_ =
+        ms > 0 ? ms : usb_protocol::kSessionHeaderTimeoutMs;
+}
+
+void SessionListener::set_tight_poll(bool enabled) {
+    tight_poll_.store(enabled, std::memory_order_release);
+}
 
 SessionListener::~SessionListener() {
     stop();
@@ -110,6 +122,10 @@ void SessionListener::resume() {
     pause_cv_.notify_all();
 }
 
+bool SessionListener::is_paused() const {
+    return paused_.load(std::memory_order_acquire);
+}
+
 bool SessionListener::recently_finished_receive(std::chrono::milliseconds gap) const {
     const int64_t end_ms = last_receive_end_ms_.load(std::memory_order_acquire);
     if (end_ms == 0) {
@@ -137,13 +153,20 @@ void SessionListener::listen_loop() {
             continue;
         }
 
+        if (on_before_listen_) {
+            on_before_listen_();
+        }
+
         const std::string recv_path = temp_receive_path();
         if (recv_path.empty()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             continue;
         }
 
-        unsigned header_timeout = usb_protocol::kSessionHeaderTimeoutMs;
+        unsigned header_timeout = session_header_timeout_ms_;
+        if (tight_poll_.load(std::memory_order_acquire)) {
+            header_timeout = std::min(header_timeout, handshake_poll_timeout_ms_);
+        }
         if (stop_.load(std::memory_order_acquire)) {
             header_timeout = 400;
         }
@@ -182,9 +205,9 @@ void SessionListener::listen_loop() {
         std::remove(recv_path.c_str());
 
         if (!result.ok) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            if (!tight_poll_.load(std::memory_order_acquire)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
         }
     }
 }

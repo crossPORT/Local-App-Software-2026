@@ -1,0 +1,11 @@
+FABRIC-SESSION-v1
+kind=offer
+from=Bob
+team=Test
+session_id=golden-offer-01
+to=Alice
+note=fixture
+payload_type=file
+payload_name=handshake.bin
+files=1
+total_bytes=4096

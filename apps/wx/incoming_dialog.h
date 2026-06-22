@@ -11,6 +11,7 @@ public:
 
     IncomingDialog(wxWindow* parent,
                    const PendingOffer& offer,
+                   int accept_dialog_sec,
                    DecisionCallback on_decision);
 
 private:

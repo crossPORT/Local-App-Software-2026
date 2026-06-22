@@ -39,17 +39,41 @@ void PeerRoster::touch_peer(const std::string& display_name,
                             const std::string& team,
                             ReceiveStatus status,
                             int port_index) {
+    if (display_name.empty()) {
+        return;
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     const auto now = std::chrono::steady_clock::now();
+
+    // Announce is source of truth: one live peer per USB port.
+    if (port_index >= 0) {
+        for (PeerEntry& peer : peers_) {
+            if (peer.port_index == port_index) {
+                peer.id = make_peer_id(port_index, display_name);
+                peer.display_name = display_name;
+                peer.last_seen = now;
+                peer.online = true;
+                if (!team.empty()) {
+                    peer.team = team;
+                }
+                peer.receive_status = status;
+                return;
+            }
+        }
+    }
+
     for (PeerEntry& peer : peers_) {
-        if (peer.display_name == display_name
-            || (port_index >= 0 && peer.port_index == port_index)) {
+        if (peer.display_name == display_name) {
             peer.last_seen = now;
             peer.online = true;
             if (!team.empty()) {
                 peer.team = team;
             }
             peer.receive_status = status;
+            if (port_index >= 0) {
+                peer.port_index = port_index;
+                peer.id = make_peer_id(port_index, display_name);
+            }
             return;
         }
     }

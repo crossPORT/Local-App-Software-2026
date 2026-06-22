@@ -1,0 +1,12 @@
+{
+  "name": "rocketbox",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "libusb",
+    {
+      "name": "wxwidgets",
+      "default-features": false,
+      "features": []
+    }
+  ]
+}

@@ -1,5 +1,8 @@
 /build/
 /build-asan/
+/build/install/
+/apps/web/node_modules/
+/apps/web/dist/
 /Westcoast-0.01_release.zip
 /::buf
 *.o

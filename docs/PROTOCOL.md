@@ -21,7 +21,7 @@ Interface: `0`. Claim interface and detach kernel driver if active (handled in c
 
 | Offset | Size | Field |
 |--------|------|-------|
-| 0 | 8 | Magic ASCII `"BORNDIE"` |
+| 0 | 8 | Magic ASCII `"ROCKETBX"` |
 | 8 | 8 | File size (uint64, little-endian) |
 | 16 | 16 | Reserved (zero) |
 

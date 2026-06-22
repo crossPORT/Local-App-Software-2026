@@ -6,14 +6,17 @@ Read this first when working in this repository. Goal: USB file transfer to/from
 
 1. **[GUI_HANDOFF.md](GUI_HANDOFF.md)** — vendor GUI contract: the `*_core()` functions, threading, progress, errors, port index `0`
 2. **This file** — repo layout, build, open work
-3. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
-4. **[docs/WESTCOAST.md](docs/WESTCOAST.md)** — engine port from the zip
+3. **[protocols/session.md](protocols/session.md)** — session handshake best practices (no-buffer fabric, timing, listener rules)
+4. **[protocols/file-transfer.md](protocols/file-transfer.md)** — ROCKETBX payload best practices (send/receive, mutex, staging)
+5. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, GitHub Pages, release installers
+6. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
+7. **[docs/WESTCOAST.md](docs/WESTCOAST.md)** — engine port from the zip
 
 ## 30-second context
 
 - **Working reference:** `Westcoast-0.01_release.zip` (vendor release; Windows console tool with proven engine)
 - **This repo:** CMake project with `core/` engine + `apps/wx/` RocketBox UI + `apps/demo/` session logic + `tools/` CLIs
-- **Engine:** `core/src/usb_transfer_core.cpp` is ported from Westcoast (async send, ring-buffer receive, `BORNDIE` header, mode-8 loopback). See [docs/WESTCOAST.md](docs/WESTCOAST.md).
+- **Engine:** `core/src/usb_transfer_core.cpp` is ported from Westcoast (async send, ring-buffer receive, `ROCKETBX` header, mode-8 loopback). See [docs/WESTCOAST.md](docs/WESTCOAST.md).
 - **Do not** start the GUI server for the user; they run binaries themselves
 - **Do not** commit `Westcoast-0.01_release.zip` changes unless asked; treat it as read-only reference
 
@@ -94,14 +97,17 @@ int count_fabric_devices(ctx);
 Automated suites live in `tests/` and run via CTest (dependency-free framework, no GoogleTest). Keep the **core/session logic covered here** so GUI work stays stable.
 
 ```bash
-ctest --test-dir build -L unit       # pure logic, NO hardware — run in CI / before commits
-ctest --test-dir build -L hardware   # real fabric transfers; auto-skips (code 77) if <2 devices
-ctest --test-dir build               # everything
+ctest --test-dir build -L unit          # pure logic, NO hardware — run in CI / before commits
+ctest --test-dir build -L integration   # fabric_sim + TransferOrchestrator handshake (no USB)
+ctest --test-dir build -L hardware      # real fabric transfers; auto-skips (code 77) if <2 devices
+ctest --test-dir build                  # everything
 ```
 
-- `unit-tests` — session message format, meta/path-traversal safety, identity + demo config parsing, peer roster, session role, core tuning (payload timeout, in-flight depth math/clamp, usbfs detection), **inbound receive partial-file cleanup** (`receive_payload`). Add a unit test for any new pure logic.
+- `unit-tests` — session message format, **golden session fixtures** (`tests/fixtures/session/`), meta/path-traversal safety, identity + demo config parsing, peer roster, session role, core tuning (payload timeout, in-flight depth math/clamp, usbfs detection), **inbound receive partial-file cleanup** (`receive_payload`), fabric_sim transport. Add a unit test for any new pure logic.
+- `integration-tests` — **full announce + offer/accept/ready + payload** over in-process `fabric_sim` with two `TransferOrchestrator` instances (ports 0↔1). Catches handshake timing, roster, auto-accept, and decline paths. Run after changing `transfer_orchestrator.cpp` or `session_listener.cpp`.
 - `hardware-tests` — round-trip integrity across sizes incl. chunk boundaries and a payload that exceeds the usbfs pool (proves the in-flight auto-clamp).
-- Run a subset by substring: `./build/tests/unit-tests inflight`.
+- **PWA:** `cd apps/web && npm test` — vitest parity tests against the same golden session fixtures as C++.
+- Run a subset by substring: `./build/tests/unit-tests inflight` or `./build/tests/integration-tests handshake`
 
 Manual hardware diagnostics (with cables):
 
@@ -127,6 +133,8 @@ Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
 - Update this file’s “Priority open work” when major items complete
 
 ## Common mistakes to avoid
+
+See also **[protocols/session.md](protocols/session.md)** and **[protocols/file-transfer.md](protocols/file-transfer.md)** for handshake timing and payload sequencing.
 
 - Putting GTK includes in `core/`
 - Changing header magic/endpoints without checking Westcoast reference and FPGA expectations

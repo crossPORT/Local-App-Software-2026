@@ -63,6 +63,10 @@ int count_fabric_devices(libusb_context* ctx);
 // True when this port index can be opened and claimed right now (not just enumerated).
 bool fabric_port_available(libusb_context* ctx, int port_index);
 
+// Pick the fabric sort index for this process: 0 when one cable; otherwise the
+// first index that can be opened now. Returns -1 when none are connected.
+int resolve_fabric_port_index(libusb_context* ctx);
+
 // Bus/address for the Nth matching device (port_index). False if unplugged.
 bool fabric_device_bus_addr(libusb_context* ctx,
                             int port_index,

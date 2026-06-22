@@ -16,8 +16,8 @@ inline bool presence_when_probe_busy(bool last_known_present) {
     return last_known_present;
 }
 
-// Fabric connectivity is derived from enumeration only: our port index is
-// present on the bus. No periodic announce traffic on the shared medium.
+// Fabric link presence comes from enumeration. Peer names arrive via throttled
+// announce session messages (see announce_note + transfer_orchestrator).
 inline bool fabric_connected_from_enumeration(bool port_ok) {
     return port_ok;
 }

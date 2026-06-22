@@ -2,6 +2,7 @@
 
 #include "booth_log.h"
 #include "fabric_link_policy.h"
+#include "fabric_sim.h"
 #include "usb_protocol.h"
 
 #include "fabric_meta_file.h"
@@ -9,8 +10,7 @@
 #include <cstdio>
 #include <chrono>
 #include <libusb-1.0/libusb.h>
-#include <thread>
-#include <unistd.h>
+#include <sstream>
 
 namespace {
 
@@ -119,8 +119,9 @@ TransferResult TransferController::send_on_port(int port_index,
     if (!lock.try_lock_for(kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
-    TransferResult result = send_file_core(usb_ctx_, path, port_index, std::move(progress_cb),
-                                           timeout_ms);
+    TransferResult result = fabric_sim_enabled()
+        ? fabric_sim_send_file(path, port_index, std::move(progress_cb), timeout_ms)
+        : send_file_core(usb_ctx_, path, port_index, std::move(progress_cb), timeout_ms);
     booth_log(port_index_,
               result.ok ? "usb_send_ok" : "usb_send_fail",
               path + " bytes=" + std::to_string(result.bytes_transferred)
@@ -142,8 +143,10 @@ TransferResult TransferController::receive_on_port(int port_index,
     if (!lock.try_lock_for(kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
-    TransferResult result = receive_file_core(usb_ctx_, path, port_index, std::move(progress_cb),
-                             header_timeout_ms);
+    TransferResult result = fabric_sim_enabled()
+        ? fabric_sim_receive_file(path, port_index, std::move(progress_cb), header_timeout_ms)
+        : receive_file_core(usb_ctx_, path, port_index, std::move(progress_cb),
+                            header_timeout_ms);
     if (!result.ok && header_timeout_ms <= usb_protocol::kSessionHeaderTimeoutMs + 1) {
         // Session listener polls frequently; only log non-timeout failures.
         if (result.error_message != "Header read failed") {
@@ -170,8 +173,10 @@ TransferResult TransferController::loopback_on_ports(const std::string& path,
     if (!lock.try_lock_for(kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
-    return loopback_transfer_core(
-        usb_ctx_, path, send_port_index, recv_port_index, std::move(progress_cb));
+    return fabric_sim_enabled()
+        ? fabric_sim_loopback(path, send_port_index, recv_port_index, std::move(progress_cb))
+        : loopback_transfer_core(
+              usb_ctx_, path, send_port_index, recv_port_index, std::move(progress_cb));
 }
 
 void TransferController::run_payload_send(const std::string& path,
@@ -196,7 +201,8 @@ int TransferController::fabric_device_count() const {
         // zero here would look like an unplug, so keep the last known count.
         return last_device_count_.load(std::memory_order_relaxed);
     }
-    const int count = count_fabric_devices(usb_ctx_);
+    const int count = fabric_sim_enabled() ? fabric_sim_count_devices()
+                                           : count_fabric_devices(usb_ctx_);
     last_device_count_.store(count, std::memory_order_relaxed);
     return count;
 }
@@ -216,9 +222,28 @@ bool TransferController::fabric_port_available() const {
     // two booth processes probing every tick, a claim-based check makes each
     // side intermittently see the fabric as "lost" when the other side (or our
     // own transfer) holds the interface, which manifests as constant flapping.
-    const bool present = count_fabric_devices(usb_ctx_) > port_index_;
+    const bool present = fabric_sim_enabled()
+        ? fabric_sim_port_available(port_index_)
+        : count_fabric_devices(usb_ctx_) > port_index_;
     last_port_present_.store(present, std::memory_order_relaxed);
     return present;
+}
+
+std::string TransferController::fabric_device_label() const {
+    if (!usb_ctx_ || port_index_ < 0) {
+        return cached_device_label_;
+    }
+    uint8_t bus = 0;
+    uint8_t addr = 0;
+    if (!fabric_device_bus_addr(port_index_, &bus, &addr)) {
+        return cached_device_label_;
+    }
+    std::ostringstream out;
+    out << "USB cable · bus " << static_cast<int>(bus)
+        << " · addr " << static_cast<int>(addr)
+        << " · port " << port_index_;
+    cached_device_label_ = out.str();
+    return cached_device_label_;
 }
 
 bool TransferController::fabric_device_bus_addr(int port_index,
@@ -231,7 +256,9 @@ bool TransferController::fabric_device_bus_addr(int port_index,
     if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
         return false;
     }
-    return ::fabric_device_bus_addr(usb_ctx_, port_index, bus, addr);
+    return fabric_sim_enabled()
+        ? fabric_sim_device_bus_addr(port_index, bus, addr)
+        : ::fabric_device_bus_addr(usb_ctx_, port_index, bus, addr);
 }
 
 std::vector<FabricUsbDevice> TransferController::list_fabric_devices() const {
@@ -242,7 +269,8 @@ std::vector<FabricUsbDevice> TransferController::list_fabric_devices() const {
     if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
         return {};
     }
-    return ::list_fabric_devices(usb_ctx_);
+    return fabric_sim_enabled() ? fabric_sim_list_devices()
+                                : ::list_fabric_devices(usb_ctx_);
 }
 
 void TransferController::start_worker(TransferKind kind,

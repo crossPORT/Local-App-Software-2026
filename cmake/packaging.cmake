@@ -1,0 +1,31 @@
+# CPack configuration for RocketBox wx desktop app.
+# Included from apps/wx/CMakeLists.txt when the GUI target exists.
+
+set(CPACK_PACKAGE_NAME "RocketBox")
+set(CPACK_PACKAGE_VENDOR "crossPORT")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "RocketBox USB fabric file transfer")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "RocketBox")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_CONTACT "support@crossport.io")
+
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "RocketBox")
+    set(CPACK_NSIS_PACKAGE_NAME "RocketBox")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MODIFY_PATH OFF)
+elseif(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+    set(CPACK_DMG_VOLUME_NAME "RocketBox")
+    set(CPACK_DMG_FORMAT "UDZO")
+else()
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_DEBIAN_PACKAGE_NAME "rocketbox")
+    set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libwxgtk3.2-1t64 | libwxgtk3.2-1, libusb-1.0-0")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+    set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+endif()
+
+include(CPack)

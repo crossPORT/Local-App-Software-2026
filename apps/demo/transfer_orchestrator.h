@@ -3,6 +3,7 @@
 #include "fabric_session_message.h"
 #include "identity_profile.h"
 #include "peer_roster.h"
+#include "session_handshake.h"
 #include "transfer_controller.h"
 
 #include <atomic>
@@ -13,6 +14,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+enum class TransferDoneKind { None, Sent, Received };
 
 struct PendingOffer {
     FabricSessionMessage message;
@@ -29,11 +32,19 @@ struct OrchestratorUiState {
     uint64_t bytes_done = 0;
     uint64_t bytes_total = 0;
     double live_mbps = 0.0;
+    double peak_mbps = 0.0;
+    double result_mbps = 0.0;
+    double demo_display_mib_s = 0.0;
+    std::string transfer_label;
     std::string notification;
     std::string dev_log;
     bool fabric_connected = false;
     int fabric_devices_seen = 0;
     bool fabric_port_open = false;
+    int fabric_port_index = 0;
+    std::string fabric_device_label;
+    int64_t last_announce_ms = 0;
+    uint32_t fabric_activity_seq = 0;
 };
 
 class TransferOrchestrator {
@@ -64,6 +75,12 @@ public:
 
     void run_loopback_test(const std::string& path);
 
+    /** Clears the post-transfer Done panel (Ready idle state). */
+    void dismiss_transfer_display();
+
+    /** Clear transfer errors, cancel a stuck handshake, and resume listening. */
+    void reset_connection();
+
 private:
     void tick_presence();
     void start_presence_loop();
@@ -72,6 +89,8 @@ private:
     void handle_accept(const FabricSessionMessage& message);
     void handle_decline(const FabricSessionMessage& message);
     void handle_ready(const FabricSessionMessage& message);
+    void handle_announce(const FabricSessionMessage& message);
+    void maybe_send_announce(int64_t now_ms);
 
     bool send_session_reply(const FabricSessionMessage& request,
                             SessionMessageKind kind);
@@ -80,10 +99,21 @@ private:
                                    std::string* error_out);
     void run_inbound_payload(const FabricSessionMessage& offer);
     void start_outbound_payload();
-    void finish_transfer(bool ok, const std::string& message, const std::string& error = {});
+    void finish_transfer(bool ok,
+                         const std::string& message,
+                         const std::string& error = {},
+                         const TransferResult* result = nullptr,
+                         TransferDoneKind done_kind = TransferDoneKind::None);
+    void clear_outbound_session();
+    void ensure_listener_active();
     void publish_state();
+    ProgressCallback make_progress_callback();
+    void begin_demo_display_rate();
     void ensure_wiring();
     void ensure_listener_started();
+    void invalidate_dismiss();
+    void schedule_dismiss_transfer_display();
+    void bump_fabric_activity();
 
     struct StagedPayload {
         std::string path;
@@ -101,6 +131,7 @@ private:
 
     int port_index_ = 0;
     IdentityProfile identity_;
+    HandshakeTiming handshake_;
     PeerRoster roster_;
     UiCallback on_ui_update_;
 
@@ -125,6 +156,9 @@ private:
     int working_send_port_ = 1;
     int working_recv_port_ = 0;
     bool fabric_was_connected_ = false;
+    int64_t last_announce_ms_ = 0;
+
+    std::atomic<uint64_t> dismiss_epoch_{0};
 
     // Presence-probe throttle (presence thread only).
     int64_t last_probe_ms_ = 0;

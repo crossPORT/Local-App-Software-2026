@@ -1,5 +1,6 @@
 #pragma once
 
+#include "connection_panel.h"
 #include "identity_profile.h"
 #include "transfer_orchestrator.h"
 
@@ -12,17 +13,17 @@
 
 class RosterPanel;
 class TransferProgressPanel;
-class EventLogDialog;
 
 enum class LinkLed { Offline, Announcing, Connected, Transferring };
 
 class MainFrame : public wxFrame {
 public:
-    explicit MainFrame(int port_index, const std::string& config_path);
+    explicit MainFrame(const std::string& config_path);
 
 private:
     void BuildUi();
     void FitToContent();
+    void GrowToFitContent();
     void ApplyOrchestratorState(const OrchestratorUiState& state);
     void UpdateConnectionStatus(const OrchestratorUiState& state);
     void UpdateWindowTitle();
@@ -40,16 +41,19 @@ private:
     void MaybeShowIncomingDialog(const OrchestratorUiState& state);
     void OnSettings();
     void OnSettingsMenu(wxCommandEvent& event);
-    void OnLoopbackDev();
     void OnUsbDiagnostics();
-    void OnEventLog();
+    void OnEventLog(wxWindow* parent = nullptr);
     void OnEventLogMenu(wxCommandEvent& event);
+    void OnResetConnection();
     void BuildMenuBar();
     void OnFirstShow(wxShowEvent& event);
     void OnClose(wxCloseEvent& event);
+    bool StartOrchestrator();
+    int ResolveFabricPortIndex();
 
-    int port_index_ = 0;
-    int content_width_ = 460;
+    int port_index_ = -1;
+    int content_width_ = 560;
+    bool fabric_connected_ = false;
     std::string config_path_;
     IdentityProfile identity_;
 
@@ -58,6 +62,8 @@ private:
     wxStaticText* node_name_label_ = nullptr;
     wxStaticText* status_message_label_ = nullptr;
     wxPanel* connection_indicator_ = nullptr;
+    wxPanel* connection_card_ = nullptr;
+    ConnectionPanel* connection_panel_ = nullptr;
     wxTimer* led_pulse_timer_ = nullptr;
     wxTimer* shutdown_poll_timer_ = nullptr;
     LinkLed link_led_ = LinkLed::Offline;
@@ -66,7 +72,7 @@ private:
     std::string selected_peer_;
     std::optional<std::string> shown_offer_id_;
     bool orchestrator_started_ = false;
-    EventLogDialog* event_log_dialog_ = nullptr;
+    int modal_depth_ = 0;
 
     wxDECLARE_EVENT_TABLE();
 };

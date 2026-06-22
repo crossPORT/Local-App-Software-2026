@@ -13,8 +13,8 @@ constexpr int kInterface = 0;
 constexpr unsigned char kEndpointDataOut = 0x02;
 constexpr unsigned char kEndpointDataIn = 0x81;
 
-// 32-byte file header — magic "BORNDIE" (Westcoast reference)
-constexpr char kHeaderMagic[8] = {'B', 'O', 'R', 'N', '2', 'D', 'I', 'E'};
+// 32-byte file header — magic "ROCKETBX"
+constexpr char kHeaderMagic[8] = {'R', 'O', 'C', 'K', 'E', 'T', 'B', 'X'};
 constexpr std::size_t kHeaderSize = 32;
 
 constexpr std::size_t kChunkSize = 4 * 1024 * 1024;
@@ -44,5 +44,11 @@ constexpr unsigned kAcceptReceiverMarginSec = 3;
 // After the receiver accepts, how long the sender waits for the receiver to be
 // ready + the payload handshake to start before giving up.
 constexpr unsigned kReadyTimeoutSec = 20;
+// Pause between accept and ready replies so the sender's session listener can
+// re-arm its USB read before the second message arrives (fabric does not buffer).
+constexpr unsigned kAcceptReadyGapMs = 400;
+// Receiver must wait longer than the sender's post-offer listener re-arm gap
+// before sending accept, or the accept is lost on the no-buffer fabric path.
+constexpr unsigned kAcceptReplyDelayMs = kAcceptReadyGapMs * 2;
 
 }  // namespace usb_protocol

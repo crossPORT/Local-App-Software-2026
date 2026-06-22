@@ -9,13 +9,12 @@
 namespace {
 
 const wxColour kBg(0x0f, 0x14, 0x19);
-const wxColour kPanel(0x1a, 0x23, 0x32);
 const wxColour kText(0xf0, 0xf4, 0xf8);
 const wxColour kMuted(0x88, 0x99, 0xaa);
 const wxColour kLogBg(0x12, 0x18, 0x22);
 
 enum {
-    ID_RefreshLog = wxID_HIGHEST + 400,
+    ID_RefreshLog = wxID_HIGHEST + 800,
     ID_CopyLog,
     ID_ClearLog,
     ID_PortFilter,
@@ -61,9 +60,11 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
     port_filter_ = new wxCheckBox(this, ID_PortFilter, "Only this app (port filter)");
     port_filter_->SetValue(true);
     port_filter_->SetForegroundColour(kText);
+    port_filter_->SetBackgroundColour(kBg);
     auto_refresh_ = new wxCheckBox(this, ID_AutoRefresh, "Auto-refresh");
     auto_refresh_->SetValue(true);
     auto_refresh_->SetForegroundColour(kText);
+    auto_refresh_->SetBackgroundColour(kBg);
     filter_row->Add(port_filter_, 0, wxRIGHT, 16);
     filter_row->Add(auto_refresh_, 0);
     root->Add(filter_row, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
@@ -73,7 +74,7 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
                                "",
                                wxDefaultPosition,
                                wxDefaultSize,
-                               wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP | wxTE_RICH2);
+                               wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP);
     log_view_->SetBackgroundColour(kLogBg);
     log_view_->SetForegroundColour(kText);
     wxFont mono = log_view_->GetFont();
@@ -94,24 +95,24 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
     btn_row->Add(close_btn, 0);
     root->Add(btn_row, 0, wxEXPAND | wxALL, 10);
 
-    Bind(wxEVT_BUTTON, &EventLogDialog::OnRefresh, this, ID_RefreshLog);
-    Bind(wxEVT_BUTTON, &EventLogDialog::OnCopy, this, ID_CopyLog);
-    Bind(wxEVT_BUTTON, &EventLogDialog::OnClear, this, ID_ClearLog);
-    Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
-        refresh_timer_.Stop();
-        event.Skip();
-    });
-    Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Close(); }, wxID_CLOSE);
-    Bind(wxEVT_CHECKBOX, &EventLogDialog::OnFilterChanged, this, ID_PortFilter);
-    Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+    refresh_btn->Bind(wxEVT_BUTTON, &EventLogDialog::OnRefresh, this);
+    copy_btn->Bind(wxEVT_BUTTON, &EventLogDialog::OnCopy, this);
+    clear_btn->Bind(wxEVT_BUTTON, &EventLogDialog::OnClear, this);
+    close_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { EndModal(wxID_CLOSE); });
+    port_filter_->Bind(wxEVT_CHECKBOX, &EventLogDialog::OnFilterChanged, this);
+    auto_refresh_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
         if (auto_refresh_->GetValue()) {
             refresh_timer_.Start(1000);
         } else {
             refresh_timer_.Stop();
         }
         ReloadLog();
-    }, ID_AutoRefresh);
+    });
     Bind(wxEVT_TIMER, &EventLogDialog::OnAutoRefreshTimer, this, ID_LogRefreshTimer);
+    Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+        refresh_timer_.Stop();
+        event.Skip();
+    });
 
     SetSizer(root);
     ReloadLog();

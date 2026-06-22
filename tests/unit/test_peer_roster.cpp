@@ -75,6 +75,40 @@ FABRIC_TEST(roster_touch_adds_new) {
     }
 }
 
+FABRIC_TEST(roster_touch_same_port_different_name_updates_entry) {
+    PeerRoster roster;
+    roster.seed_from_config(
+        {make_peer("CAD-Workstation", "CAD", ReceiveStatus::AskFirst, 0)});
+
+    roster.touch_peer("Alice", "CAD", ReceiveStatus::Open, 0);
+    CHECK_EQ(roster.peers().size(), static_cast<size_t>(1));
+
+    auto byPort = roster.find_by_port(0);
+    CHECK(byPort.has_value());
+    if (byPort) {
+        CHECK_STREQ(byPort->display_name, "Alice");
+        CHECK(byPort->online);
+        CHECK(byPort->receive_status == ReceiveStatus::Open);
+    }
+
+    CHECK(!roster.find_by_name("CAD-Workstation").has_value());
+    CHECK(roster.find_by_name("Alice").has_value());
+}
+
+FABRIC_TEST(roster_touch_updates_port_on_name_match) {
+    PeerRoster roster;
+    roster.seed_from_config(
+        {make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1)});
+
+    roster.touch_peer("Creative-Desk", "Creative", ReceiveStatus::Busy, 2);
+    auto p = roster.find_by_name("Creative-Desk");
+    CHECK(p.has_value());
+    if (p) {
+        CHECK_EQ(p->port_index, 2);
+        CHECK(p->receive_status == ReceiveStatus::Busy);
+    }
+}
+
 FABRIC_TEST(roster_set_online) {
     PeerRoster roster;
     roster.seed_from_config(

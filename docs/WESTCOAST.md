@@ -22,7 +22,7 @@ Do not commit extracted files or the zip’s IDE cache into git unless explicitl
 | `receive_file_core` | same | Ring buffer + writer thread |
 | `open_device_by_index` / `close_device` | same | Already similar; merge error handling |
 | `bulk_write_all` / `bulk_read_all` | same | Sync helpers for headers |
-| File header `BORNDIE` | `core/include/usb_protocol.h` | Replace `FABR` 16-byte header |
+| File header `ROCKETBX` | `core/include/usb_protocol.h` | Replaced Westcoast `BORNDIE` / legacy `FABR` headers |
 
 ## What NOT to port wholesale
 
@@ -65,7 +65,7 @@ That contract is captured for this repo in **[GUI_HANDOFF.md](../GUI_HANDOFF.md)
 
 ## Porting checklist
 
-- [x] Replace header with 32-byte `BORNDIE` in `usb_protocol.h`
+- [x] Replace header with 32-byte `ROCKETBX` in `usb_protocol.h` (was Westcoast `BORNDIE`)
 - [x] Port async `send_file_core` with queue depth 32
 - [x] Port ring-buffer `receive_file_core` with writer thread
 - [x] Rework `loopback_transfer_core` to Westcoast mode 8 pipeline (`file_cross_connect_core`)

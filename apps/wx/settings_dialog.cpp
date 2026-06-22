@@ -1,91 +1,166 @@
 #include "settings_dialog.h"
 
+#include "demo_display.h"
+
+#include <algorithm>
+#include <sstream>
 #include <wx/dirdlg.h>
 #include <wx/filedlg.h>
 #include <wx/sizer.h>
 
-enum { ID_SaveSettings = wxID_HIGHEST + 300, ID_PickFolder, ID_LoopbackDev, ID_UsbDiagnostics, ID_EventLog };
+namespace {
+
+const wxColour kBg(0x0f, 0x14, 0x19);
+const wxColour kField(0x12, 0x18, 0x22);
+const wxColour kText(0xf0, 0xf4, 0xf8);
+const wxColour kMuted(0x88, 0x99, 0xaa);
+const wxColour kAccent(0x00, 0xd4, 0xaa);
+
+wxStaticText* MakeLabel(wxWindow* parent, const wxString& text, const wxColour& fg = kText) {
+    auto* label = new wxStaticText(parent, wxID_ANY, text);
+    label->SetForegroundColour(fg);
+    label->SetBackgroundColour(parent->GetBackgroundColour());
+    return label;
+}
+
+void StyleField(wxTextCtrl* field) {
+    field->SetBackgroundColour(kField);
+    field->SetForegroundColour(kText);
+}
+
+void StyleButton(wxButton* button, bool primary = false) {
+    button->SetBackgroundColour(primary ? kAccent : kField);
+    button->SetForegroundColour(primary ? kBg : kText);
+    const wxSize best = button->GetBestSize();
+    button->SetMinSize(wxSize(std::max(best.GetWidth() + 12, 72), std::max(best.GetHeight(), 28)));
+}
+
+wxString ProfileText(const std::string& value) {
+    return wxString::FromUTF8(value.c_str());
+}
+
+}  // namespace
+
+enum {
+    ID_SettingsSave = wxID_HIGHEST + 500,
+    ID_SettingsPickFolder,
+    ID_SettingsDiagnostics,
+    ID_SettingsEventLog,
+};
 
 SettingsDialog::SettingsDialog(wxWindow* parent,
                                const IdentityProfile& profile,
                                SaveCallback on_save,
                                const SettingsDevActions& dev_actions)
-    : wxDialog(parent, wxID_ANY, "Settings", wxDefaultPosition, wxSize(420, 430))
+    : wxDialog(parent,
+               wxID_ANY,
+               "Settings",
+               wxDefaultPosition,
+               wxSize(460, 580),
+               wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , profile_(profile)
     , on_save_(std::move(on_save))
     , dev_actions_(dev_actions) {
+    SetBackgroundColour(kBg);
+
+    auto* panel = new wxPanel(this, wxID_ANY);
+    panel->SetBackgroundColour(kBg);
+
+    constexpr int kWrapWidth = 400;
     auto* root = new wxBoxSizer(wxVERTICAL);
     auto add_row = [&](const wxString& label, wxWindow* field) {
-        root->Add(new wxStaticText(this, wxID_ANY, label), 0, wxLEFT | wxRIGHT | wxTOP, 10);
+        root->Add(MakeLabel(panel, label), 0, wxLEFT | wxRIGHT | wxTOP, 10);
         root->Add(field, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
     };
 
-    name_field_ = new wxTextCtrl(this, wxID_ANY, profile.display_name);
-    team_field_ = new wxTextCtrl(this, wxID_ANY, profile.team);
-    receive_choice_ = new wxChoice(this, wxID_ANY);
+    name_field_ = new wxTextCtrl(panel, wxID_ANY, ProfileText(profile.display_name));
+    team_field_ = new wxTextCtrl(panel, wxID_ANY, ProfileText(profile.team));
+    receive_choice_ = new wxChoice(panel, wxID_ANY);
     receive_choice_->Append("Auto-accept (open)");
     receive_choice_->Append("Ask first");
     receive_choice_->Append("Busy (treated as open in v1)");
     receive_choice_->SetSelection(profile.receive_status == ReceiveStatus::Open ? 0
                                  : profile.receive_status == ReceiveStatus::Busy ? 2
                                                                                  : 1);
-    folder_field_ = new wxTextCtrl(this, wxID_ANY, profile.receive_folder);
+    folder_field_ = new wxTextCtrl(panel, wxID_ANY, ProfileText(profile.receive_folder));
+
+    StyleField(name_field_);
+    StyleField(team_field_);
+    StyleField(folder_field_);
 
     add_row("Display name", name_field_);
     add_row("Team", team_field_);
     add_row("Incoming files", receive_choice_);
-    auto* receive_hint = new wxStaticText(
-        this,
-        wxID_ANY,
-        "Receive is always on. This controls whether incoming transfers\n"
-        "auto-save or show an accept/reject prompt first.");
-    receive_hint->Wrap(380);
-    root->Add(receive_hint, 0, wxLEFT | wxRIGHT, 10);
-    root->Add(new wxStaticText(this, wxID_ANY, "Receive folder"), 0, wxLEFT | wxRIGHT | wxTOP, 10);
+
+    auto* receive_hint = MakeLabel(
+        panel,
+        "Receive is always on. This controls whether incoming transfers auto-save or "
+        "show an accept/reject prompt first.",
+        kMuted);
+    receive_hint->Wrap(kWrapWidth);
+    root->Add(receive_hint, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+
+    root->Add(MakeLabel(panel, "Receive folder"), 0, wxLEFT | wxRIGHT | wxTOP, 10);
 
     auto* folder_row = new wxBoxSizer(wxHORIZONTAL);
-    auto* browse_folder = new wxButton(this, ID_PickFolder, "Browse…");
+    auto* browse_folder = new wxButton(panel, ID_SettingsPickFolder, "Browse...");
+    StyleButton(browse_folder);
     folder_row->Add(folder_field_, 1, wxRIGHT, 6);
-    folder_row->Add(browse_folder, 0);
+    folder_row->Add(browse_folder, 0, wxALIGN_CENTER_VERTICAL);
     root->Add(folder_row, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    auto* tune_hint = new wxStaticText(
-        this,
-        wxID_ANY,
-        "Advanced tuning (transfer_timeout_ms, usb_inflight_mb) lives in the\n"
-        "config file — see booth-portN.conf comments or Developer → USB diagnostics.");
-    tune_hint->Wrap(380);
+    demo_check_ = new wxCheckBox(panel, wxID_ANY, "Demo mode");
+    demo_check_->SetValue(profile.demo_display_mib_s > 0.0);
+    demo_check_->SetForegroundColour(kText);
+    demo_check_->SetBackgroundColour(kBg);
+    root->Add(demo_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
+
+    std::ostringstream demo_msg;
+    demo_msg.setf(std::ios::fixed);
+    demo_msg.precision(0);
+    demo_msg << "When enabled, transfer speeds use ~" << (kDemoDisplayPresetMibS / 1024.0)
+             << " GiB/s (+/- " << kDemoDisplayPresetJitterPct
+             << "%) during active transfers.";
+    auto* demo_hint = MakeLabel(panel, wxString::FromUTF8(demo_msg.str().c_str()), kMuted);
+    demo_hint->Wrap(kWrapWidth);
+    root->Add(demo_hint, 0, wxLEFT | wxRIGHT, 10);
+
+    auto* tune_hint = MakeLabel(
+        panel,
+        "Advanced tuning lives in the config file (see booth-portN.conf comments or "
+        "Developer → USB diagnostics).",
+        kMuted);
+    tune_hint->Wrap(kWrapWidth);
     root->Add(tune_hint, 0, wxLEFT | wxRIGHT | wxTOP, 10);
 
-    root->Add(new wxStaticText(this, wxID_ANY, "Advanced"),
-              0, wxLEFT | wxRIGHT | wxTOP, 14);
-    auto* adv_hint = new wxStaticText(this, wxID_ANY, "Engineering tools — not needed for normal transfers.");
-    adv_hint->Wrap(380);
-    root->Add(adv_hint, 0, wxLEFT | wxRIGHT, 6);
+    root->Add(MakeLabel(panel, "Advanced"), 0, wxLEFT | wxRIGHT | wxTOP, 12);
+
     auto* adv_row = new wxBoxSizer(wxHORIZONTAL);
-    auto* loopback_btn = new wxButton(this, ID_LoopbackDev, "Loopback…");
-    auto* diag_btn = new wxButton(this, ID_UsbDiagnostics, "Diagnostics");
-    auto* log_btn = new wxButton(this, ID_EventLog, "Event log…");
-    adv_row->Add(loopback_btn, 1, wxRIGHT, 4);
+    auto* diag_btn = new wxButton(panel, ID_SettingsDiagnostics, "Diagnostics");
+    auto* log_btn = new wxButton(panel, ID_SettingsEventLog, "Event log...");
+    StyleButton(diag_btn);
+    StyleButton(log_btn);
     adv_row->Add(diag_btn, 1, wxRIGHT, 4);
     adv_row->Add(log_btn, 1);
     root->Add(adv_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
-    auto* save = new wxButton(this, ID_SaveSettings, "Save");
+    auto* save = new wxButton(panel, ID_SettingsSave, "Save");
+    StyleButton(save, true);
     root->Add(save, 0, wxALIGN_RIGHT | wxALL, 12);
 
-    Bind(wxEVT_BUTTON, &SettingsDialog::OnSave, this, ID_SaveSettings);
-    Bind(wxEVT_BUTTON, &SettingsDialog::OnPickFolder, this, ID_PickFolder);
-    Bind(wxEVT_BUTTON, &SettingsDialog::OnLoopback, this, ID_LoopbackDev);
-    Bind(wxEVT_BUTTON, &SettingsDialog::OnDiagnostics, this, ID_UsbDiagnostics);
-    Bind(wxEVT_BUTTON, &SettingsDialog::OnEventLog, this, ID_EventLog);
-    SetSizer(root);
-}
+    panel->SetSizer(root);
 
-void SettingsDialog::OnLoopback(wxCommandEvent&) {
-    if (dev_actions_.on_loopback) {
-        dev_actions_.on_loopback();
-    }
+    auto* outer = new wxBoxSizer(wxVERTICAL);
+    outer->Add(panel, 1, wxEXPAND | wxALL, 8);
+    SetSizer(outer);
+
+    SetMinSize(wxSize(440, 480));
+    CentreOnParent();
+
+    save->Bind(wxEVT_BUTTON, &SettingsDialog::OnSave, this);
+    browse_folder->Bind(wxEVT_BUTTON, &SettingsDialog::OnPickFolder, this);
+    diag_btn->Bind(wxEVT_BUTTON, &SettingsDialog::OnDiagnostics, this);
+    log_btn->Bind(wxEVT_BUTTON, &SettingsDialog::OnEventLog, this);
 }
 
 void SettingsDialog::OnDiagnostics(wxCommandEvent&) {
@@ -96,7 +171,7 @@ void SettingsDialog::OnDiagnostics(wxCommandEvent&) {
 
 void SettingsDialog::OnEventLog(wxCommandEvent&) {
     if (dev_actions_.on_event_log) {
-        dev_actions_.on_event_log();
+        dev_actions_.on_event_log(this);
     }
 }
 
@@ -115,6 +190,13 @@ void SettingsDialog::OnSave(wxCommandEvent&) {
                               : receive_sel == 2 ? ReceiveStatus::Busy
                                                  : ReceiveStatus::AskFirst;
     profile_.receive_folder = folder_field_->GetValue().ToStdString();
+    if (demo_check_->GetValue()) {
+        profile_.demo_display_mib_s = kDemoDisplayPresetMibS;
+        profile_.demo_display_jitter_pct = kDemoDisplayPresetJitterPct;
+    } else {
+        profile_.demo_display_mib_s = 0.0;
+        profile_.demo_display_jitter_pct = 0.0;
+    }
     if (on_save_) {
         on_save_(profile_);
     }

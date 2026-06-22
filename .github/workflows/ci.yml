@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  VITE_BASE_PATH: /Local-App-Software-2026/
+
+jobs:
+  native-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_WX_GUI=OFF
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+      - name: Unit tests
+        run: ctest --test-dir build -L unit --output-on-failure
+      - name: Integration tests
+        run: ctest --test-dir build -L integration --output-on-failure
+
+  build-wx:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
+          ./vcpkg/bootstrap-vcpkg.bat
+          ./vcpkg/vcpkg install
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libwxgtk3.2-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install wxwidgets libusb pkg-config
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
+
+      - name: Build RocketBox
+        run: cmake --build build --config Release --target data-transfer-demo -j 4
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install
+        working-directory: apps/web
+        run: npm ci
+      - name: Test
+        working-directory: apps/web
+        run: npm test
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /Local-App-Software-2026/

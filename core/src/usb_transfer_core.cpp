@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <libusb-1.0/libusb.h>
@@ -132,10 +133,11 @@ double elapsed_seconds(const Clock::time_point& start) {
 }
 
 double mib_per_second(uint64_t bytes, double seconds) {
-    if (seconds <= 0.0) {
+    if (bytes == 0) {
         return 0.0;
     }
-    return (static_cast<double>(bytes) / (1024.0 * 1024.0)) / seconds;
+    const double effective_seconds = std::max(seconds, 0.001);
+    return (static_cast<double>(bytes) / (1024.0 * 1024.0)) / effective_seconds;
 }
 
 TransferResult make_result(bool ok,
@@ -232,16 +234,26 @@ libusb_device_handle* open_device_by_index(libusb_context* ctx,
     }
 
     if (libusb_kernel_driver_active(handle, usb_protocol::kInterface) == 1) {
+        fprintf(stderr, "[USB-DIAG] detaching kernel driver on port %d\n", index);
         libusb_detach_kernel_driver(handle, usb_protocol::kInterface);
     }
 
-    if (libusb_claim_interface(handle, usb_protocol::kInterface) != LIBUSB_SUCCESS) {
+    int claim_rc = libusb_claim_interface(handle, usb_protocol::kInterface);
+    fprintf(stderr, "[USB-DIAG] claim_interface port=%d rc=%d (%s)\n",
+            index, claim_rc, libusb_strerror(static_cast<libusb_error>(claim_rc)));
+    if (claim_rc != LIBUSB_SUCCESS) {
         libusb_close(handle);
         if (error_out) {
             *error_out = "Could not claim USB interface";
         }
         return nullptr;
     }
+
+    int ch_out = libusb_clear_halt(handle, usb_protocol::kEndpointDataOut);
+    int ch_in  = libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
+    fprintf(stderr, "[USB-DIAG] clear_halt port=%d EP_OUT=%d (%s) EP_IN=%d (%s)\n",
+            index, ch_out, libusb_strerror(static_cast<libusb_error>(ch_out)),
+            ch_in,  libusb_strerror(static_cast<libusb_error>(ch_in)));
 
     return handle;
 }
@@ -257,12 +269,15 @@ void close_device(libusb_device_handle* handle) {
 bool bulk_write_all(libusb_device_handle* handle,
                     const uint8_t* data,
                     std::size_t len,
-                    int timeout_ms) {
+                    int timeout_ms,
+                    std::string* error_out = nullptr) {
     std::size_t offset = 0;
     while (offset < len) {
         int transferred = 0;
         const std::size_t to_write =
             std::min(len - offset, usb_protocol::kChunkSize);
+        fprintf(stderr, "[USB-DIAG] bulk_write EP=0x%02x len=%zu timeout=%dms\n",
+                usb_protocol::kEndpointDataOut, to_write, timeout_ms);
         const int rc = libusb_bulk_transfer(
             handle,
             usb_protocol::kEndpointDataOut,
@@ -270,7 +285,12 @@ bool bulk_write_all(libusb_device_handle* handle,
             static_cast<int>(to_write),
             &transferred,
             timeout_ms);
+        fprintf(stderr, "[USB-DIAG] bulk_write result: rc=%d (%s) transferred=%d\n",
+                rc, libusb_strerror(static_cast<libusb_error>(rc)), transferred);
         if (rc != LIBUSB_SUCCESS) {
+            if (error_out) {
+                *error_out = std::string(libusb_strerror(static_cast<libusb_error>(rc)));
+            }
             return false;
         }
         offset += static_cast<std::size_t>(transferred);
@@ -295,6 +315,9 @@ bool bulk_read_all(libusb_device_handle* handle,
             &transferred,
             timeout_ms);
         if (rc != LIBUSB_SUCCESS) {
+            fprintf(stderr, "[USB-DIAG] bulk_read EP=0x%02x len=%zu timeout=%dms rc=%d (%s)\n",
+                    usb_protocol::kEndpointDataIn, to_read, timeout_ms,
+                    rc, libusb_strerror(static_cast<libusb_error>(rc)));
             return false;
         }
         offset += static_cast<std::size_t>(transferred);
@@ -436,16 +459,18 @@ TransferResult file_cross_connect_core(libusb_context* ctx,
 
     FileHeader tx_hdr{};
     fill_file_header(&tx_hdr, file_size);
+    std::string write_err;
     if (!bulk_write_all(send_handle,
                         reinterpret_cast<uint8_t*>(&tx_hdr),
                         sizeof(tx_hdr),
-                        static_cast<int>(usb_protocol::kFileTimeoutMs))) {
+                        static_cast<int>(usb_protocol::kFileTimeoutMs),
+                        &write_err)) {
         close_device(send_handle);
         close_device(recv_handle);
         in_file.close();
         out_file.close();
         return make_result(false, 0, file_size, elapsed_seconds(started),
-                           "Header send failed");
+                           "Header send failed: " + write_err);
     }
 
     FileHeader rx_hdr{};
@@ -682,11 +707,13 @@ TransferResult send_file_core(libusb_context* ctx,
 
     FileHeader hdr{};
     fill_file_header(&hdr, file_size);
+    std::string hdr_write_err;
     if (!bulk_write_all(handle,
                         reinterpret_cast<uint8_t*>(&hdr),
                         sizeof(hdr),
-                        static_cast<int>(timeout_ms))) {
-        result.error_message = "Header send failed";
+                        static_cast<int>(timeout_ms),
+                        &hdr_write_err)) {
+        result.error_message = "Header send failed: " + hdr_write_err;
         close_device(handle);
         file.close();
         return result;
@@ -731,19 +758,22 @@ TransferResult send_file_core(libusb_context* ctx,
         q.completed = false;
         q.in_flight = true;
 
+        fprintf(stderr, "[USB-DIAG] async_submit EP=0x%02x wire=%dB timeout=%ums\n",
+                usb_protocol::kEndpointDataOut, n,
+                static_cast<unsigned>(timeout_ms));
         libusb_fill_bulk_transfer(
             q.xfr,
             handle,
             usb_protocol::kEndpointDataOut,
             q.buf.data(),
-            static_cast<int>(usb_protocol::kChunkSize),
+            n,
             queued_cb,
             &q,
             static_cast<int>(timeout_ms));
         const int submit_rc = libusb_submit_transfer(q.xfr);
+        fprintf(stderr, "[USB-DIAG] async_submit rc=%d (%s)\n",
+                submit_rc, libusb_strerror(static_cast<libusb_error>(submit_rc)));
         if (submit_rc != 0) {
-            // Device gone (cable pulled): no completion callback will arrive, so
-            // don't count this as in-flight or the event loop spins forever.
             q.in_flight = false;
             error = true;
             error_msg = "USB submit failed, rc=" + std::to_string(submit_rc);
@@ -775,6 +805,9 @@ TransferResult send_file_core(libusb_context* ctx,
             --active;
 
             if (q.status != LIBUSB_TRANSFER_COMPLETED) {
+                fprintf(stderr, "[USB-DIAG] async_complete FAILED status=%d "
+                        "(0=ok,1=err,2=timeout,3=cancel,4=stall,5=nodev,6=overflow)\n",
+                        q.status);
                 error = true;
                 error_msg = "USB transfer failed, status=" + std::to_string(q.status);
                 break;
@@ -1130,6 +1163,22 @@ bool fabric_port_available(libusb_context* ctx, int port_index) {
     libusb_release_interface(handle, usb_protocol::kInterface);
     libusb_close(handle);
     return true;
+}
+
+int resolve_fabric_port_index(libusb_context* ctx) {
+    const std::vector<FabricUsbDevice> devices = list_fabric_devices(ctx);
+    if (devices.empty()) {
+        return -1;
+    }
+    if (devices.size() == 1) {
+        return 0;
+    }
+    for (int index = 0; index < static_cast<int>(devices.size()); ++index) {
+        if (fabric_port_available(ctx, index)) {
+            return index;
+        }
+    }
+    return 0;
 }
 
 bool fabric_device_bus_addr(libusb_context* ctx,

@@ -6,9 +6,8 @@
 #include <wx/wx.h>
 
 struct SettingsDevActions {
-    std::function<void()> on_loopback;
     std::function<void()> on_diagnostics;
-    std::function<void()> on_event_log;
+    std::function<void(wxWindow* dialog_parent)> on_event_log;
 };
 
 class SettingsDialog : public wxDialog {
@@ -23,7 +22,6 @@ public:
 private:
     void OnSave(wxCommandEvent& event);
     void OnPickFolder(wxCommandEvent& event);
-    void OnLoopback(wxCommandEvent& event);
     void OnDiagnostics(wxCommandEvent& event);
     void OnEventLog(wxCommandEvent& event);
 
@@ -31,6 +29,7 @@ private:
     wxTextCtrl* team_field_ = nullptr;
     wxChoice* receive_choice_ = nullptr;
     wxTextCtrl* folder_field_ = nullptr;
+    wxCheckBox* demo_check_ = nullptr;
     IdentityProfile profile_;
     SaveCallback on_save_;
     SettingsDevActions dev_actions_;

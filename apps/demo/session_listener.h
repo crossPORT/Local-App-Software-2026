@@ -14,15 +14,22 @@ class SessionListener {
 public:
     using MessageCallback = std::function<void(const FabricSessionMessage&)>;
 
+    using BeforeListenCallback = std::function<void()>;
+
     SessionListener(TransferController* controller,
                     int port_index,
-                    MessageCallback on_message);
+                    MessageCallback on_message,
+                    BeforeListenCallback on_before_listen = {});
     ~SessionListener();
+
+    void set_session_header_timeout_ms(unsigned ms);
+    void set_tight_poll(bool enabled);
 
     void start();
     void stop();
     void pause();
     void resume();
+    bool is_paused() const;
     bool recently_finished_receive(std::chrono::milliseconds gap) const;
 
 private:
@@ -31,6 +38,11 @@ private:
     TransferController* controller_ = nullptr;
     int port_index_ = 0;
     MessageCallback on_message_;
+    BeforeListenCallback on_before_listen_;
+
+    unsigned session_header_timeout_ms_ = 2000;
+    unsigned handshake_poll_timeout_ms_ = 350;
+    std::atomic<bool> tight_poll_{false};
 
     std::thread thread_;
     std::atomic<bool> stop_{false};

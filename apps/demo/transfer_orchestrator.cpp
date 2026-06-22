@@ -1,9 +1,13 @@
 #include "transfer_orchestrator.h"
 
+#include "session_handshake.h"
+#include "announce_note.h"
 #include "booth_log.h"
+#include "demo_display.h"
 #include "fabric_link_policy.h"
 #include "fabric_meta_file.h"
 #include "fabric_tar_pack.h"
+#include "link_status.h"
 #include "receive_payload.h"
 #include "session_listener.h"
 #include "usb_protocol.h"
@@ -50,6 +54,37 @@ std::string basename_of(const std::string& path) {
     return p.filename().string();
 }
 
+class ListenerPauseGuard {
+public:
+    explicit ListenerPauseGuard(SessionListener* listener)
+        : listener_(listener) {
+        if (listener_) {
+            listener_->pause();
+        }
+    }
+
+    ~ListenerPauseGuard() {
+        if (listener_) {
+            listener_->resume();
+        }
+    }
+
+    ListenerPauseGuard(const ListenerPauseGuard&) = delete;
+    ListenerPauseGuard& operator=(const ListenerPauseGuard&) = delete;
+
+private:
+    SessionListener* listener_;
+};
+
+bool looks_like_done_display(const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+    return text.find("Sent at") != std::string::npos
+           || text.find("Received at") != std::string::npos
+           || text == "Sent" || text == "Received";
+}
+
 }  // namespace
 
 namespace {
@@ -85,8 +120,10 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
                                            UiCallback on_ui_update)
     : port_index_(port_index)
     , identity_(std::move(identity))
+    , handshake_(handshake_timing_from_identity(identity_))
     , on_ui_update_(std::move(on_ui_update)) {
     state_.identity = identity_;
+    state_.demo_display_mib_s = identity_.demo_display_mib_s;
     if (identity_.transfer_timeout_ms > 0) {
         set_payload_timeout_ms(static_cast<unsigned>(identity_.transfer_timeout_ms));
     }
@@ -96,15 +133,23 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
     booth_log(port_index_, "usb_inflight",
               "usbfs_limit_mb=" + std::to_string(usbfs_limit_mb())
                   + " queue_depth=" + std::to_string(inflight_queue_depth()));
+    if (identity_.demo_display_mib_s > 0.0) {
+        booth_log(port_index_, "demo_display",
+                  "base_mib_s=" + std::to_string(identity_.demo_display_mib_s)
+                      + " jitter_pct=" + std::to_string(identity_.demo_display_jitter_pct));
+    }
     roster_.seed_from_config(identity_.peers);
     state_.roster = roster_.peers();
 
     controller_ = std::make_unique<TransferController>(port_index_, nullptr);
 
+    // Announces run from tick_presence(), not before each USB read — the fabric
+    // does not buffer session messages; blocking on OUT for announce drops offers.
     listener_ = std::make_unique<SessionListener>(
         controller_.get(),
         port_index_,
         [this](const FabricSessionMessage& message) { on_session_message(message); });
+    listener_->set_session_header_timeout_ms(handshake_.session_header_timeout_ms);
     publish_state();
 }
 
@@ -172,6 +217,7 @@ void TransferOrchestrator::ensure_listener_started() {
 
 void TransferOrchestrator::stop() {
     shutting_down_.store(true, std::memory_order_release);
+    invalidate_dismiss();
     if (controller_) {
         controller_->request_shutdown();
     }
@@ -226,7 +272,9 @@ void TransferOrchestrator::set_identity(IdentityProfile identity) {
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         identity_ = std::move(identity);
+        handshake_ = handshake_timing_from_identity(identity_);
         state_.identity = identity_;
+        state_.demo_display_mib_s = identity_.demo_display_mib_s;
         if (identity_.transfer_timeout_ms > 0) {
             set_payload_timeout_ms(static_cast<unsigned>(identity_.transfer_timeout_ms));
         }
@@ -235,8 +283,17 @@ void TransferOrchestrator::set_identity(IdentityProfile identity) {
         }
         roster_.seed_from_config(identity_.peers);
         state_.roster = roster_.peers();
+        last_announce_ms_ = 0;
     }
     save_identity_profile(identity_);
+    publish_state();
+}
+
+void TransferOrchestrator::bump_fabric_activity() {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        ++state_.fabric_activity_seq;
+    }
     publish_state();
 }
 
@@ -323,6 +380,9 @@ bool TransferOrchestrator::send_session_with_routing(const FabricSessionMessage&
               ok ? "session_send_ok" : "session_send_fail",
               session_kind_to_string(message.kind)
                   + (error_out && !error_out->empty() ? " err=" + *error_out : ""));
+    if (ok) {
+        bump_fabric_activity();
+    }
     return ok;
 }
 
@@ -368,28 +428,42 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        invalidate_dismiss();
         state_.busy = true;
         state_.waiting_for_partner = true;
+        state_.transfer_label.clear();
+        state_.bytes_total = staged.total_bytes;
+        state_.bytes_done = 0;
+        state_.peak_mbps = 0.0;
+        state_.result_mbps = 0.0;
         state_.status_message = "Sending offer to " + peer->display_name + "…";
         state_.error_message.clear();
     }
     publish_state();
 
     payload_thread_ = std::thread([this, staged, offer, peer]() {
-        listener_->pause();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        {
+            ListenerPauseGuard listener_guard(listener_.get());
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-        std::string send_error;
-        const bool sent = send_session_with_routing(offer, false, &send_error);
-        ensure_listener_started();
-        listener_->resume();
+            std::string send_error;
+            const bool sent = send_session_with_routing(offer, false, &send_error);
 
-        if (!sent) {
-            if (staged.is_temp) {
-                std::remove(staged.path.c_str());
+            if (!sent) {
+                if (staged.is_temp) {
+                    std::remove(staged.path.c_str());
+                }
+                finish_transfer(false, "Send failed", send_error);
+                return;
             }
-            finish_transfer(false, "Send failed", send_error);
-            return;
+            // Keep USB IN free so the receiver can read the offer (fabric does not buffer).
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(handshake_.accept_ready_gap_ms));
+        }
+        ensure_listener_started();
+        ensure_listener_active();
+        if (listener_) {
+            listener_->set_tight_poll(true);
         }
 
         {
@@ -398,14 +472,21 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
             outbound_offer_ = offer;
             awaiting_ready_ = false;
             state_.waiting_for_partner = true;
+            state_.transfer_label = staged.display_name;
+            state_.bytes_total = staged.total_bytes;
+            state_.peak_mbps = 0.0;
+            state_.result_mbps = 0.0;
             state_.status_message = "Waiting for " + peer->display_name
-                + " to accept… (" + std::to_string(usb_protocol::kAcceptTimeoutSec) + "s)";
+                + " to accept… (" + std::to_string(handshake_.accept_timeout_sec) + "s)";
             state_.error_message.clear();
         }
         publish_state();
 
         const auto now0 = std::chrono::steady_clock::now();
-        const auto accept_deadline = now0 + std::chrono::seconds(usb_protocol::kAcceptTimeoutSec);
+        const auto accept_deadline = now0 + std::chrono::seconds(handshake_.accept_timeout_sec);
+        const auto retransmit_at = now0 + std::chrono::milliseconds(
+            handshake_.accept_reply_delay_ms + handshake_.accept_ready_gap_ms + 150);
+        bool offer_retransmitted = false;
         std::chrono::steady_clock::time_point ready_deadline{};
         bool accepted_seen = false;
         int last_shown_remaining = -1;
@@ -427,6 +508,21 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
 
             const auto now = std::chrono::steady_clock::now();
 
+            if (!accepted && !offer_retransmitted && now >= retransmit_at) {
+                offer_retransmitted = true;
+                {
+                    ListenerPauseGuard listener_guard(listener_.get());
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    std::string send_error;
+                    if (send_session_with_routing(offer, false, &send_error)) {
+                        booth_log(port_index_, "offer_retransmit", "to=" + peer->display_name);
+                        std::this_thread::sleep_for(
+                            std::chrono::milliseconds(handshake_.accept_ready_gap_ms));
+                    }
+                }
+                ensure_listener_active();
+            }
+
             if (!accepted) {
                 if (now >= accept_deadline) {
                     if (staged.is_temp) {
@@ -434,11 +530,12 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
                     }
                     outbound_offer_.reset();
                     staged_payload_ = {};
+                    awaiting_ready_ = false;
                     finish_transfer(false,
                                     "Timed out",
                                     "No response from " + peer->display_name
                                         + " within "
-                                        + std::to_string(usb_protocol::kAcceptTimeoutSec) + "s");
+                                        + std::to_string(handshake_.accept_timeout_sec) + "s");
                     return;
                 }
                 const int remaining = 1 + static_cast<int>(
@@ -455,7 +552,7 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
             } else {
                 if (!accepted_seen) {
                     accepted_seen = true;
-                    ready_deadline = now + std::chrono::seconds(usb_protocol::kReadyTimeoutSec);
+                    ready_deadline = now + std::chrono::seconds(handshake_.ready_timeout_sec);
                 }
                 if (now >= ready_deadline) {
                     if (staged.is_temp) {
@@ -463,6 +560,7 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
                     }
                     outbound_offer_.reset();
                     staged_payload_ = {};
+                    awaiting_ready_ = false;
                     finish_transfer(false,
                                     "Timed out",
                                     peer->display_name
@@ -473,11 +571,15 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
 
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
+        if (listener_) {
+            listener_->set_tight_poll(false);
+        }
     });
     return true;
 }
 
 void TransferOrchestrator::on_session_message(const FabricSessionMessage& message) {
+    bump_fabric_activity();
     booth_log(port_index_,
               "session_recv",
               session_kind_to_string(message.kind) + " from=" + message.from_name
@@ -496,7 +598,7 @@ void TransferOrchestrator::on_session_message(const FabricSessionMessage& messag
             handle_ready(message);
             break;
         case SessionMessageKind::Announce:
-            // Legacy peers may still send announces; ignore (presence is enumeration-only).
+            handle_announce(message);
             break;
         case SessionMessageKind::Unknown:
             break;
@@ -529,18 +631,22 @@ void TransferOrchestrator::tick_presence() {
         }
         if (was_busy) {
             finish_transfer(false,
-                            "Fabric disconnected",
+                            "Device disconnected",
                             "USB cable unplugged or power change");
         }
         publish_state();
     }
 
     const bool fabric_connected = fabric_link::fabric_connected_from_enumeration(port_ok);
+    const bool fabric_just_connected = fabric_connected && !fabric_was_connected_;
 
-    if (fabric_connected) {
-        roster_.set_all_peers_online();
-    } else {
+    if (!fabric_connected) {
         roster_.set_all_peers_offline();
+    } else {
+        roster_.mark_stale_peers_offline(std::chrono::seconds(45));
+        if (fabric_just_connected) {
+            last_announce_ms_ = 0;
+        }
     }
 
     fabric_was_connected_ = port_ok;
@@ -551,13 +657,118 @@ void TransferOrchestrator::tick_presence() {
         state_.fabric_connected = fabric_connected;
         state_.fabric_devices_seen = devices_seen;
         state_.fabric_port_open = port_ok;
+        state_.fabric_port_index = port_index_;
+        if (!fabric_connected) {
+            state_.fabric_device_label.clear();
+        } else {
+            const std::string label = controller_->fabric_device_label();
+            if (!label.empty()) {
+                state_.fabric_device_label = label;
+            }
+        }
         state_.roster = roster;
+        state_.last_announce_ms = last_announce_ms_;
+    }
+    publish_state();
+    maybe_send_announce(now);
+}
+
+void TransferOrchestrator::handle_announce(const FabricSessionMessage& message) {
+    if (message.from_name.empty() || message.from_name == identity_.display_name) {
+        return;
+    }
+
+    int peer_port = port_index_ == 0 ? 1 : 0;
+    ReceiveStatus peer_status = ReceiveStatus::AskFirst;
+    parse_announce_note(message.note, peer_port, &peer_port, &peer_status);
+    roster_.touch_peer(message.from_name, message.team, peer_status, peer_port);
+
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.roster = roster_.peers();
     }
     publish_state();
 }
 
+void TransferOrchestrator::clear_outbound_session() {
+    outbound_offer_.reset();
+    staged_payload_ = {};
+    awaiting_ready_ = false;
+    active_offer_.reset();
+}
+
+void TransferOrchestrator::ensure_listener_active() {
+    if (listener_) {
+        listener_->resume();
+    }
+}
+
+void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
+    if (identity_.display_name.empty()) {
+        return;
+    }
+    if (listener_ && listener_->is_paused()) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        // While waiting for accept/ready, do not send announces — they use the
+        // same ROCKETBX payload header wire format and the receiver may
+        // mistake them for the incoming file (typically ~100–200 B).
+        if (outbound_offer_) {
+            return;
+        }
+    }
+
+    bool fabric_connected = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        fabric_connected = state_.fabric_connected;
+    }
+    if (!fabric_connected) {
+        return;
+    }
+
+    constexpr int64_t kAnnounceIntervalMs = 15000;
+    if (last_announce_ms_ != 0 && now_ms - last_announce_ms_ < kAnnounceIntervalMs) {
+        return;
+    }
+
+    FabricSessionMessage message{};
+    message.kind = SessionMessageKind::Announce;
+    message.from_name = identity_.display_name;
+    message.team = identity_.team;
+    message.session_id = make_session_id();
+    message.note = build_announce_note(port_index_, identity_.receive_status);
+
+    std::string error;
+    if (send_session_with_routing(message, false, &error)) {
+        last_announce_ms_ = now_ms;
+        booth_log(port_index_,
+                  "announce_sent",
+                  "from=" + message.from_name + " note=" + message.note);
+    } else if (!error.empty()) {
+        booth_log(port_index_, "announce_fail", error);
+    }
+}
+
 void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
     if (!message.to_name.empty() && message.to_name != identity_.display_name) {
+        booth_log(port_index_,
+                  "offer_rejected",
+                  "to=" + message.to_name + " local=" + identity_.display_name + " from="
+                      + message.from_name);
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.error_message.clear();
+    }
+
+    if (is_busy()) {
+        booth_log(port_index_, "offer_rejected", "busy from=" + message.from_name);
         return;
     }
 
@@ -569,7 +780,6 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
     }
 
     if (effective == ReceiveStatus::Open) {
-        listener_->pause();
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             state_.pending_offer = PendingOffer{message};
@@ -602,12 +812,14 @@ void TransferOrchestrator::accept_pending_offer() {
     }
 
     payload_thread_ = std::thread([this, offer_copy]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(handshake_.accept_reply_delay_ms));
         if (!send_session_reply(offer_copy.message, SessionMessageKind::Accept)) {
-            listener_->resume();
             finish_transfer(false, "Accept failed", state_.error_message);
             return;
         }
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(handshake_.accept_ready_gap_ms));
         run_inbound_payload(offer_copy.message);
     });
 }
@@ -628,10 +840,9 @@ void TransferOrchestrator::decline_pending_offer() {
     }
 
     payload_thread_ = std::thread([this, offer_copy]() {
-        listener_->pause();
+        ListenerPauseGuard listener_guard(listener_.get());
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         send_session_reply(offer_copy.message, SessionMessageKind::Decline);
-        listener_->resume();
         std::lock_guard<std::mutex> lock(state_mutex_);
         state_.status_message = "Declined transfer from " + offer_copy.message.from_name;
         publish_state();
@@ -668,20 +879,21 @@ void TransferOrchestrator::handle_accept(const FabricSessionMessage& message) {
 }
 
 void TransferOrchestrator::handle_decline(const FabricSessionMessage& message) {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    if (!outbound_offer_ || outbound_offer_->session_id != message.session_id) {
-        return;
+    StagedPayload staged;
+    std::string from_name;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!outbound_offer_ || outbound_offer_->session_id != message.session_id) {
+            return;
+        }
+        from_name = message.from_name;
+        staged = staged_payload_;
+        clear_outbound_session();
     }
-    if (staged_payload_.is_temp && !staged_payload_.path.empty()) {
-        std::remove(staged_payload_.path.c_str());
+    if (staged.is_temp && !staged.path.empty()) {
+        std::remove(staged.path.c_str());
     }
-    staged_payload_ = {};
-    outbound_offer_.reset();
-    state_.busy = false;
-    state_.waiting_for_partner = false;
-    state_.status_message = "Transfer declined by " + message.from_name;
-    state_.error_message = "Declined";
-    publish_state();
+    finish_transfer(false, "Transfer declined by " + from_name, "Declined");
 }
 
 void TransferOrchestrator::handle_ready(const FabricSessionMessage& message) {
@@ -691,6 +903,12 @@ void TransferOrchestrator::handle_ready(const FabricSessionMessage& message) {
         if (!outbound_offer_ || outbound_offer_->session_id != message.session_id) {
             return;
         }
+        if (!awaiting_ready_) {
+            // Accept may have been dropped on the no-buffer fabric; ready implies acceptance.
+            awaiting_ready_ = true;
+            state_.status_message = "Accepted — waiting for receiver to prepare…";
+            publish_state();
+        }
         should_send = awaiting_ready_;
     }
     if (should_send) {
@@ -699,12 +917,24 @@ void TransferOrchestrator::handle_ready(const FabricSessionMessage& message) {
 }
 
 void TransferOrchestrator::start_outbound_payload() {
+    // handle_ready runs on the session listener thread; pause synchronously so
+    // listen_loop cannot immediately start another USB read and race send_on_port.
+    if (listener_) {
+        listener_->pause();
+    }
+
     StagedPayload staged;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         staged = staged_payload_;
         state_.waiting_for_partner = false;
+        state_.transfer_label = staged.display_name;
+        state_.peak_mbps = 0.0;
+        state_.result_mbps = 0.0;
+        state_.bytes_done = 0;
+        state_.bytes_total = staged.total_bytes;
         state_.status_message = "Sending " + staged.display_name + "…";
+        begin_demo_display_rate();
     }
     publish_state();
 
@@ -713,20 +943,10 @@ void TransferOrchestrator::start_outbound_payload() {
     }
 
     payload_thread_ = std::thread([this, staged]() {
-        listener_->pause();
-        ProgressCallback progress = [this](uint64_t done, uint64_t total, double elapsed) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            state_.bytes_done = done;
-            state_.bytes_total = total;
-            state_.live_mbps = (elapsed > 0.0 && done > 0)
-                ? (static_cast<double>(done) / (1024.0 * 1024.0)) / elapsed
-                : 0.0;
-            publish_state();
-        };
+        ListenerPauseGuard listener_guard(listener_.get());
         TransferResult result =
-            controller_->send_on_port(port_index_, staged.path, progress,
+            controller_->send_on_port(port_index_, staged.path, make_progress_callback(),
                                       payload_timeout_ms());
-        listener_->resume();
 
         if (staged.is_temp) {
             std::remove(staged.path.c_str());
@@ -734,15 +954,14 @@ void TransferOrchestrator::start_outbound_payload() {
 
         finish_transfer(result.ok,
                         result.ok ? "Send complete" : "Send failed",
-                        result.error_message);
-        outbound_offer_.reset();
-        staged_payload_ = {};
-        awaiting_ready_ = false;
+                        result.error_message,
+                        &result,
+                        result.ok ? TransferDoneKind::Sent : TransferDoneKind::None);
     });
 }
 
 void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer) {
-    listener_->pause();
+    ListenerPauseGuard listener_guard(listener_.get());
 
     const std::string out_path =
         build_inbound_payload_path(identity_.receive_folder, offer.payload_name);
@@ -756,29 +975,28 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
     // sender only transmits the payload after it sees ready, and its payload
     // header uses a long timeout, so the receiver starting slightly later is safe.
     if (!send_session_reply(offer, SessionMessageKind::Ready)) {
-        listener_->resume();
         finish_transfer(false, "Ready failed", state_.error_message);
         return;
     }
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        invalidate_dismiss();
         state_.busy = true;
-        state_.status_message = "Waiting for " + offer.from_name + " to send…";
+        state_.transfer_label = offer.payload_name;
+        state_.peak_mbps = 0.0;
+        state_.result_mbps = 0.0;
+        state_.bytes_done = 0;
+        if (offer.total_bytes > 0) {
+            state_.bytes_total = offer.total_bytes;
+        }
+        state_.status_message = "Receiving " + offer.payload_name + "…";
+        begin_demo_display_rate();
     }
     publish_state();
 
-    ProgressCallback progress = [this](uint64_t done, uint64_t total, double elapsed) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        state_.bytes_done = done;
-        state_.bytes_total = total;
-        state_.live_mbps = (elapsed > 0.0 && done > 0)
-            ? (static_cast<double>(done) / (1024.0 * 1024.0)) / elapsed
-            : 0.0;
-        publish_state();
-    };
     TransferResult result = controller_->receive_on_port(
-        port_index_, out_path, progress, usb_protocol::kPayloadHeaderTimeoutMs);
+        port_index_, out_path, make_progress_callback(), handshake_.payload_header_timeout_ms);
 
     if (!result.ok) {
         const FailedInboundReceive failed = handle_failed_inbound_receive(result, out_path);
@@ -788,8 +1006,22 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
                       out_path + " bytes=" + std::to_string(failed.cleanup.bytes_removed)
                           + (failed.cleanup.removed ? " removed" : " remove_failed"));
         }
-        listener_->resume();
         finish_transfer(false, "Receive failed", failed.error_message);
+        return;
+    }
+
+    if (offer.total_bytes > 0 && result.bytes_transferred != offer.total_bytes) {
+        const PartialReceiveCleanup cleanup = cleanup_partial_receive_file(out_path);
+        if (cleanup.existed_before) {
+            booth_log(port_index_,
+                      "partial_cleanup",
+                      out_path + " size_mismatch bytes="
+                          + std::to_string(cleanup.bytes_removed));
+        }
+        finish_transfer(false,
+                        "Receive failed",
+                        "Expected " + std::to_string(offer.total_bytes) + " bytes, got "
+                            + std::to_string(result.bytes_transferred));
         return;
     }
 
@@ -804,37 +1036,262 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
                           out_path + " tar_extract_fail bytes="
                               + std::to_string(cleanup.bytes_removed));
             }
-            listener_->resume();
             finish_transfer(false, "Receive failed", extract_error);
             return;
         }
         std::remove(out_path.c_str());
     }
 
-    listener_->resume();
+    finish_transfer(true,
+                    "Receive complete",
+                    {},
+                    &result,
+                    TransferDoneKind::Received);
+}
 
-    {
+ProgressCallback TransferOrchestrator::make_progress_callback() {
+    return [this](uint64_t done, uint64_t total, double elapsed) {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        state_.notification = "Received " + offer.payload_name + " from " + offer.from_name;
-    }
+        state_.bytes_done = done;
+        state_.bytes_total = total;
+        const double live = (elapsed > 0.0 && done > 0)
+            ? (static_cast<double>(done) / (1024.0 * 1024.0)) / elapsed
+            : 0.0;
+        if (state_.demo_display_mib_s > 0.0) {
+            state_.live_mbps = state_.demo_display_mib_s;
+            if (state_.peak_mbps < state_.demo_display_mib_s) {
+                state_.peak_mbps = state_.demo_display_mib_s;
+            }
+        } else {
+            state_.live_mbps = live;
+            if (live > state_.peak_mbps) {
+                state_.peak_mbps = live;
+            }
+        }
+        publish_state();
+    };
+}
 
-    finish_transfer(true, "Receive complete → " + out_path, {});
+void TransferOrchestrator::begin_demo_display_rate() {
+    if (identity_.demo_display_mib_s <= 0.0) {
+        state_.demo_display_mib_s = 0.0;
+        return;
+    }
+    state_.demo_display_mib_s = roll_demo_display_mib_s(identity_.demo_display_mib_s,
+                                                        identity_.demo_display_jitter_pct);
+    state_.live_mbps = state_.demo_display_mib_s;
+    booth_log(port_index_, "demo_display",
+              "ui_rate_mib_s=" + std::to_string(state_.demo_display_mib_s)
+                  + " base_mib_s=" + std::to_string(identity_.demo_display_mib_s)
+                  + " jitter_pct=" + std::to_string(identity_.demo_display_jitter_pct));
 }
 
 void TransferOrchestrator::finish_transfer(bool ok,
                                            const std::string& message,
-                                           const std::string& error) {
+                                           const std::string& error,
+                                           const TransferResult* result,
+                                           TransferDoneKind done_kind) {
+    const bool schedule_dismiss =
+        ok && (done_kind == TransferDoneKind::Sent || done_kind == TransferDoneKind::Received);
     booth_log(port_index_,
               ok ? "transfer_done" : "transfer_fail",
               message + (error.empty() ? "" : " err=" + error));
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    state_.busy = false;
-    state_.waiting_for_partner = false;
-    state_.bytes_done = 0;
-    state_.bytes_total = 0;
-    state_.status_message = message;
-    state_.error_message = ok ? "" : error;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        clear_outbound_session();
+        state_.busy = false;
+        state_.waiting_for_partner = false;
+        state_.status_message = message;
+        state_.error_message = ok ? "" : error;
+        state_.live_mbps = 0.0;
+
+        if (ok) {
+            if (result != nullptr) {
+                const uint64_t transferred = result->bytes_transferred;
+                const uint64_t expected = result->expected_bytes > 0
+                                              ? result->expected_bytes
+                                              : state_.bytes_total;
+                if (expected > 0) {
+                    state_.bytes_total = expected;
+                }
+                if (transferred > 0) {
+                    state_.bytes_done = transferred;
+                } else if (expected > 0) {
+                    state_.bytes_done = expected;
+                }
+
+                if (state_.demo_display_mib_s > 0.0) {
+                    state_.result_mbps = state_.demo_display_mib_s;
+                    state_.peak_mbps = state_.demo_display_mib_s;
+                } else {
+                    const uint64_t speed_bytes =
+                        transferred > 0 ? transferred : expected;
+                    double measured = result->mbps;
+                    if (measured <= 0.0 && speed_bytes > 0 && result->seconds > 0.0) {
+                        const double effective_seconds = std::max(result->seconds, 0.001);
+                        measured = (static_cast<double>(speed_bytes) / (1024.0 * 1024.0))
+                                   / effective_seconds;
+                    }
+                    if (measured > 0.0) {
+                        state_.result_mbps = measured;
+                        if (state_.peak_mbps < measured) {
+                            state_.peak_mbps = measured;
+                        }
+                    } else if (state_.peak_mbps > 0.0) {
+                        state_.result_mbps = state_.peak_mbps;
+                    }
+                }
+            } else if (state_.bytes_total > 0) {
+                state_.bytes_done = state_.bytes_total;
+                if (state_.demo_display_mib_s > 0.0) {
+                    state_.result_mbps = state_.demo_display_mib_s;
+                    state_.peak_mbps = state_.demo_display_mib_s;
+                } else if (state_.peak_mbps > 0.0) {
+                    state_.result_mbps = state_.peak_mbps;
+                }
+            }
+
+            if (done_kind == TransferDoneKind::Sent
+                || done_kind == TransferDoneKind::Received) {
+                const std::string done_msg = transfer_done_message(
+                    done_kind == TransferDoneKind::Sent, state_.result_mbps);
+                state_.status_message = done_msg;
+                state_.notification = done_msg;
+            }
+        } else {
+            state_.bytes_done = 0;
+            state_.bytes_total = 0;
+            state_.peak_mbps = 0.0;
+            state_.result_mbps = 0.0;
+            state_.transfer_label.clear();
+            last_announce_ms_ = 0;
+            state_.last_announce_ms = 0;
+        }
+        publish_state();
+    }
+    if (listener_) {
+        listener_->set_tight_poll(false);
+    }
+    ensure_listener_active();
+    if (schedule_dismiss) {
+        schedule_dismiss_transfer_display();
+    }
+}
+
+void TransferOrchestrator::invalidate_dismiss() {
+    dismiss_epoch_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void TransferOrchestrator::reset_connection() {
+    invalidate_dismiss();
+    booth_log(port_index_, "reset_connection", "user");
+
+    StagedPayload staged{};
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        staged = staged_payload_;
+        state_.waiting_for_partner = false;
+        state_.busy = false;
+        state_.error_message.clear();
+        state_.status_message.clear();
+        state_.notification.clear();
+        state_.bytes_done = 0;
+        state_.bytes_total = 0;
+        state_.transfer_label.clear();
+        state_.peak_mbps = 0.0;
+        state_.result_mbps = 0.0;
+        state_.live_mbps = 0.0;
+        state_.demo_display_mib_s = identity_.demo_display_mib_s;
+        state_.pending_offer.reset();
+    }
+
+    awaiting_ready_ = false;
+    clear_outbound_session();
+    staged_payload_ = {};
+
+    if (staged.is_temp && !staged.path.empty()) {
+        std::remove(staged.path.c_str());
+    }
+
+    if (listener_) {
+        listener_->resume();
+    }
+
+    if (payload_thread_.joinable()) {
+        std::atomic<bool> joined{false};
+        std::thread reaper([this, &joined] {
+            payload_thread_.join();
+            joined.store(true, std::memory_order_release);
+        });
+        for (int i = 0; i < 40 && !joined.load(std::memory_order_acquire); ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (joined.load(std::memory_order_acquire)) {
+            if (reaper.joinable()) {
+                reaper.join();
+            }
+        } else {
+            booth_log(port_index_, "reset_connection", "payload thread detach on timeout");
+            if (reaper.joinable()) {
+                reaper.detach();
+            }
+            payload_thread_.detach();
+        }
+    }
+
+    ensure_listener_active();
     publish_state();
+}
+
+void TransferOrchestrator::dismiss_transfer_display() {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (state_.busy) {
+            return;
+        }
+        if (!looks_like_done_display(state_.notification)
+            && !looks_like_done_display(state_.status_message)) {
+            return;
+        }
+        state_.notification.clear();
+        state_.status_message.clear();
+        state_.bytes_done = 0;
+        state_.bytes_total = 0;
+        state_.transfer_label.clear();
+        state_.peak_mbps = 0.0;
+        state_.result_mbps = 0.0;
+        state_.live_mbps = 0.0;
+    }
+    publish_state();
+}
+
+void TransferOrchestrator::schedule_dismiss_transfer_display() {
+    const uint64_t epoch = dismiss_epoch_.fetch_add(1, std::memory_order_relaxed) + 1;
+    std::thread([this, epoch]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(kTransferDoneDismissMs));
+        if (shutting_down_.load(std::memory_order_acquire)) {
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (epoch != dismiss_epoch_.load(std::memory_order_relaxed) || state_.busy) {
+                return;
+            }
+            if (!looks_like_done_display(state_.notification)
+                && !looks_like_done_display(state_.status_message)) {
+                return;
+            }
+            state_.notification.clear();
+            state_.status_message.clear();
+            state_.bytes_done = 0;
+            state_.bytes_total = 0;
+            state_.transfer_label.clear();
+            state_.peak_mbps = 0.0;
+            state_.result_mbps = 0.0;
+            state_.live_mbps = 0.0;
+        }
+        publish_state();
+    }).detach();
 }
 
 void TransferOrchestrator::run_loopback_test(const std::string& path) {
@@ -845,11 +1302,20 @@ void TransferOrchestrator::run_loopback_test(const std::string& path) {
         payload_thread_.join();
     }
     payload_thread_ = std::thread([this, path]() {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.transfer_label = basename_of(path);
+            state_.peak_mbps = 0.0;
+            state_.result_mbps = 0.0;
+            begin_demo_display_rate();
+        }
         listener_->pause();
-        TransferResult result = controller_->loopback_on_ports(path, 0, 1, nullptr);
+        TransferResult result =
+            controller_->loopback_on_ports(path, 0, 1, make_progress_callback());
         listener_->resume();
         finish_transfer(result.ok,
                         result.ok ? "Loopback verified" : "Loopback failed",
-                        result.error_message);
+                        result.error_message,
+                        &result);
     });
 }

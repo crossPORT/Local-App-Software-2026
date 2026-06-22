@@ -1,7 +1,5 @@
 #include "incoming_dialog.h"
 
-#include "usb_protocol.h"
-
 #include <iomanip>
 #include <sstream>
 #include <wx/sizer.h>
@@ -39,6 +37,7 @@ enum { ID_Accept = wxID_HIGHEST + 200, ID_Reject };
 
 IncomingDialog::IncomingDialog(wxWindow* parent,
                                const PendingOffer& offer,
+                               int accept_dialog_sec,
                                DecisionCallback on_decision)
     : wxDialog(parent,
                wxID_ANY,
@@ -75,11 +74,7 @@ IncomingDialog::IncomingDialog(wxWindow* parent,
         root->Add(note, 0, wxLEFT | wxRIGHT | wxTOP, 6);
     }
 
-    remaining_secs_ = static_cast<int>(usb_protocol::kAcceptTimeoutSec)
-        - static_cast<int>(usb_protocol::kAcceptReceiverMarginSec);
-    if (remaining_secs_ < 1) {
-        remaining_secs_ = 1;
-    }
+    remaining_secs_ = accept_dialog_sec > 0 ? accept_dialog_sec : 1;
     countdown_label_ = new wxStaticText(
         this, wxID_ANY,
         "Auto-declines in " + std::to_string(remaining_secs_) + "s");

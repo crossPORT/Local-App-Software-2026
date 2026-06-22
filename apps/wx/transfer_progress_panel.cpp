@@ -1,5 +1,7 @@
 #include "transfer_progress_panel.h"
 
+#include "link_status.h"
+
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
@@ -9,6 +11,8 @@
 namespace {
 
 const wxColour kPanel(0x1a, 0x23, 0x32);
+const wxColour kStatusBar(0x0f, 0x16, 0x20);
+const wxColour kStatusLabel(0x88, 0x99, 0xaa);
 const wxColour kText(0xf0, 0xf4, 0xf8);
 const wxColour kMuted(0x88, 0x99, 0xaa);
 const wxColour kAccent(0x00, 0xd4, 0xaa);
@@ -16,6 +20,7 @@ const wxColour kSuccess(0x3d, 0xdb, 0x8a);
 const wxColour kError(0xff, 0x6b, 0x6b);
 const wxColour kWarn(0xff, 0x9f, 0x43);
 const wxColour kTrack(0x24, 0x30, 0x42);
+const wxColour kCard(0x12, 0x18, 0x22);
 
 constexpr int kBarHeight = 18;
 
@@ -50,13 +55,85 @@ std::string format_mib(uint64_t bytes) {
     return out.str();
 }
 
+std::string format_bytes(uint64_t bytes) {
+    if (bytes < 1024ull) {
+        return std::to_string(bytes) + " B";
+    }
+    if (bytes >= 1024ull * 1024 * 1024) {
+        const double gib = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+        std::ostringstream out;
+        if (gib >= 100.0) {
+            out << std::fixed << std::setprecision(0) << gib;
+        } else if (gib >= 10.0) {
+            out << std::fixed << std::setprecision(1) << gib;
+        } else {
+            out << std::fixed << std::setprecision(2) << gib;
+        }
+        out << " GiB";
+        return out.str();
+    }
+    if (bytes < 1024ull * 10) {
+        std::ostringstream out;
+        out << std::fixed << std::setprecision(bytes >= 1024 ? 1 : 0)
+            << (static_cast<double>(bytes) / 1024.0) << " KiB";
+        return out.str();
+    }
+    return format_mib(bytes);
+}
+
+std::string format_mbps(double mbps) {
+    const std::string rate = format_mbps_rate(mbps);
+    if (!rate.empty()) {
+        return rate;
+    }
+    return "0 MiB/s";
+}
+
+wxString label_and_size(const std::string& label, uint64_t bytes) {
+    if (label.empty()) {
+        return wxString::FromUTF8(format_bytes(bytes).c_str());
+    }
+    return wxString::FromUTF8((label + " · " + format_bytes(bytes)).c_str());
+}
+
+std::string format_final_speed(double peak_mbps, double result_mbps, bool /*demo_display*/) {
+    const double speed = result_mbps > 0.0 ? result_mbps
+                                           : (peak_mbps > 0.0 ? peak_mbps : 0.0);
+    if (speed <= 0.0) {
+        return {};
+    }
+    std::string out = format_mbps(speed);
+    return out;
+}
+
+std::string format_speed_line(double live_mbps,
+                              double peak_mbps,
+                              double result_mbps,
+                              bool demo_display,
+                              bool transferring,
+                              bool sending) {
+    if (transferring) {
+        std::string line = transfer_live_message(sending, live_mbps);
+        return line;
+    }
+    return format_final_speed(peak_mbps, result_mbps, demo_display);
+}
+
+bool transfer_is_sending(const std::string& status) {
+    return status.rfind("Sending ", 0) == 0;
+}
+
+bool transfer_is_receiving(const std::string& status) {
+    return status.rfind("Receiving ", 0) == 0 || status.rfind("Waiting for ", 0) == 0;
+}
+
 bool looks_complete(const std::string& status, const std::string& notification) {
     auto has = [](const std::string& hay, const char* needle) {
         return hay.find(needle) != std::string::npos;
     };
-    return has(notification, "Received") || has(notification, "received")
-           || has(status, "complete") || has(status, "Complete")
-           || has(status, "finished");
+    return has(notification, "Sent at") || has(notification, "Received at")
+           || has(status, "Sent at") || has(status, "Received at")
+           || has(notification, "Sent") || has(notification, "Received");
 }
 
 Phase derive_phase(bool busy,
@@ -74,26 +151,32 @@ Phase derive_phase(bool busy,
     if (busy && bytes_total > 0) {
         return Phase::Transferring;
     }
+    if (busy && (transfer_is_sending(status) || transfer_is_receiving(status))) {
+        return Phase::Transferring;
+    }
     if (!busy && looks_complete(status, notification)) {
         return Phase::Complete;
     }
     return Phase::Idle;
 }
 
-wxString phase_title(Phase phase, bool fabric_connected) {
+wxString phase_title(Phase phase, bool fabric_connected, bool has_peers, const std::string& status) {
     switch (phase) {
         case Phase::Idle:
-            return fabric_connected ? "Ready to transfer" : "Fabric offline";
+            if (!fabric_connected) {
+                return "Not connected";
+            }
+            return has_peers ? "Ready" : "Waiting for peers…";
         case Phase::Waiting:
-            return "Connecting…";
+            return "Waiting for a file…";
         case Phase::Transferring:
-            return "Transferring";
+            return transfer_is_receiving(status) ? "Receiving file…" : "Sending file…";
         case Phase::Complete:
-            return "Transfer complete";
+            return "Done";
         case Phase::Failed:
             return "Transfer failed";
     }
-    return "Ready";
+    return has_peers ? "Ready" : "Waiting for peers…";
 }
 
 wxColour phase_colour(Phase phase) {
@@ -107,7 +190,7 @@ wxColour phase_colour(Phase phase) {
         case Phase::Complete:
             return kSuccess;
         case Phase::Failed:
-            return kError;
+            return kWarn;
     }
     return kMuted;
 }
@@ -184,88 +267,182 @@ private:
 
 TransferProgressPanel::TransferProgressPanel(wxWindow* parent)
     : wxPanel(parent, wxID_ANY) {
-    SetBackgroundColour(kPanel);
+    SetBackgroundColour(kStatusBar);
     auto* root = new wxBoxSizer(wxVERTICAL);
-    root->Add(MakeLabel(this, "TRANSFER", kAccent, 9, wxFONTWEIGHT_BOLD),
-              0, wxLEFT | wxRIGHT | wxTOP, 12);
 
-    phase_label_ = MakeLabel(this, "Ready to transfer", kMuted, 13, wxFONTWEIGHT_BOLD);
-    root->Add(phase_label_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    auto* head_row = new wxBoxSizer(wxHORIZONTAL);
+    head_row->Add(MakeLabel(this, "Status", kStatusLabel, 10, wxFONTWEIGHT_BOLD),
+                  0,
+                  wxALIGN_CENTER_VERTICAL);
+    head_row->AddStretchSpacer(1);
+    phase_label_ = MakeLabel(this, "Not connected", kMuted, 11, wxFONTWEIGHT_NORMAL);
+    head_row->Add(phase_label_, 0, wxALIGN_CENTER_VERTICAL);
+    root->Add(head_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 10);
 
     auto* bar_row = new wxBoxSizer(wxHORIZONTAL);
     bar_ = new ThemeProgressBar(this);
+    bar_->SetBackgroundColour(kStatusBar);
     bar_row->Add(bar_, 1, wxALIGN_CENTER_VERTICAL);
-    percent_label_ = MakeLabel(this, "", kText, 11, wxFONTWEIGHT_BOLD);
+    percent_label_ = MakeLabel(this, "", kText, 12, wxFONTWEIGHT_BOLD);
     percent_label_->SetMinSize(wxSize(48, -1));
     bar_row->Add(percent_label_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
-    root->Add(bar_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 10);
+    bar_row_item_ = root->Add(bar_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 6);
 
-    auto* info_row = new wxBoxSizer(wxHORIZONTAL);
-    bytes_label_ = MakeLabel(this, "", kMuted, 9);
-    info_row->Add(bytes_label_, 0, wxALIGN_CENTER_VERTICAL);
-    info_row->AddStretchSpacer();
-    speed_label_ = MakeLabel(this, "", kAccent, 10, wxFONTWEIGHT_BOLD);
-    info_row->Add(speed_label_, 0, wxALIGN_CENTER_VERTICAL);
-    root->Add(info_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    bytes_label_ = MakeLabel(this, "", kText, 11);
+    bytes_label_->Wrap(500);
+    bytes_item_ = root->Add(bytes_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
 
-    message_label_ = MakeLabel(this, "Drop onto a peer to send, or press Send…",
-                               kMuted, 9);
-    message_label_->Wrap(440);
-    root->Add(message_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 12);
+    speed_label_ = MakeLabel(this, "", kAccent, 12, wxFONTWEIGHT_BOLD);
+    speed_item_ = root->Add(speed_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
 
+    message_label_ = MakeLabel(this, "", kMuted, 11);
+    message_label_->Wrap(520);
+    message_item_ = root->Add(message_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 10);
+
+    reset_row_ = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE);
+    reset_row_->SetBackgroundColour(kCard);
+    reset_row_->SetMinSize(wxSize(148, 32));
+    reset_row_->SetCursor(wxCursor(wxCURSOR_HAND));
+    auto* reset_sizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* reset_label = MakeLabel(reset_row_, "Reset connection", kText, 11);
+    reset_sizer->AddStretchSpacer();
+    reset_sizer->Add(reset_label, 0, wxALIGN_CENTER_VERTICAL);
+    reset_sizer->AddStretchSpacer();
+    reset_row_->SetSizer(reset_sizer);
+    reset_row_->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& event) {
+        event.StopPropagation();
+        if (on_reset_) {
+            on_reset_();
+        }
+    });
+    reset_item_ = root->Add(reset_row_, 0, wxALIGN_LEFT | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+
+    {
+        wxFont idle = phase_label_->GetFont();
+        idle.SetPointSize(11);
+        idle.SetWeight(wxFONTWEIGHT_NORMAL);
+        phase_label_idle_font_ = idle;
+        wxFont active = phase_label_->GetFont();
+        active.SetPointSize(13);
+        active.SetWeight(wxFONTWEIGHT_BOLD);
+        phase_label_active_font_ = active;
+    }
+
+    root_sizer_ = root;
     SetSizer(root);
-    bar_->Hide();
-    percent_label_->Hide();
-    bytes_label_->Hide();
-    speed_label_->Hide();
+    bar_row_item_->Show(false);
+    bytes_item_->Show(false);
+    speed_item_->Show(false);
+    message_item_->Show(false);
+    reset_item_->Show(false);
+    SetMinSize(wxSize(-1, 36));
+}
+
+void TransferProgressPanel::SetResetHandler(std::function<void()> handler) {
+    on_reset_ = std::move(handler);
+}
+
+void TransferProgressPanel::RelayoutAncestors() {
+    Layout();
+    for (wxWindow* ancestor = GetParent(); ancestor != nullptr; ancestor = ancestor->GetParent()) {
+        ancestor->Layout();
+    }
 }
 
 void TransferProgressPanel::ApplyState(bool busy,
                                        bool waiting,
                                        bool fabric_connected,
+                                       bool has_peers,
                                        uint64_t bytes_done,
                                        uint64_t bytes_total,
                                        double live_mbps,
+                                       double peak_mbps,
+                                       double result_mbps,
+                                       double demo_display_mib_s,
+                                       const std::string& transfer_label,
                                        const std::string& status,
                                        const std::string& notification,
                                        const std::string& error) {
     const Phase phase = derive_phase(busy, waiting, bytes_total, status, notification, error);
-    phase_label_->SetLabel(phase_title(phase, fabric_connected));
+    const bool demo_display = demo_display_mib_s > 0.0;
+    const bool sending = transfer_is_sending(status);
+    const bool receiving = transfer_is_receiving(status);
+    const bool outbound = sending || !receiving;
+    phase_label_->SetLabel(phase_title(phase, fabric_connected, has_peers, status));
     phase_label_->SetForegroundColour(phase_colour(phase));
+    if (phase == Phase::Idle || phase == Phase::Failed) {
+        phase_label_->SetFont(phase_label_idle_font_);
+    } else {
+        phase_label_->SetFont(phase_label_active_font_);
+    }
+    if (phase == Phase::Failed) {
+        phase_label_->SetLabel("Transfer failed");
+        phase_label_->SetForegroundColour(kWarn);
+    }
 
     const bool show_progress = phase == Phase::Waiting
                                || phase == Phase::Transferring
                                || phase == Phase::Complete;
-    bar_->Show(show_progress);
-    percent_label_->Show(show_progress);
-    bytes_label_->Show(show_progress);
-    speed_label_->Show(show_progress);
+    const bool show_speed = phase == Phase::Transferring;
+    const bool show_reset = phase == Phase::Failed || phase == Phase::Waiting
+                            || phase == Phase::Complete
+                            || (phase == Phase::Idle && !error.empty());
+
+    if (root_sizer_) {
+        bar_row_item_->Show(show_progress);
+        bytes_item_->Show(show_progress);
+        speed_item_->Show(show_speed);
+        reset_item_->Show(show_reset);
+        SetMinSize(wxSize(-1, show_progress ? 96 : (show_reset ? 72 : 36)));
+        if (show_progress && show_reset) {
+            SetMinSize(wxSize(-1, 120));
+        }
+    }
 
     switch (phase) {
         case Phase::Waiting:
             bar_->SetActiveColour(kWarn);
             bar_->Pulse();
             percent_label_->SetLabel("");
-            bytes_label_->SetLabel("");
+            if (bytes_total > 0) {
+                bytes_label_->SetLabel(label_and_size(transfer_label, bytes_total));
+            } else {
+                bytes_label_->SetLabel("");
+            }
             speed_label_->SetLabel("");
-            message_label_->SetLabel(status.empty() ? "Waiting for the other side to respond…"
+            message_label_->SetLabel(status.empty() ? "Waiting for the other side to respond..."
                                                     : status);
             message_label_->SetForegroundColour(kMuted);
             break;
 
         case Phase::Transferring: {
-            const int pct = static_cast<int>((bytes_done * 100) / bytes_total);
+            const int pct = bytes_total > 0
+                                ? static_cast<int>((bytes_done * 100) / bytes_total)
+                                : 0;
             bar_->SetActiveColour(kAccent);
-            bar_->SetFraction(static_cast<double>(bytes_done) / static_cast<double>(bytes_total));
+            bar_->SetFraction(bytes_total > 0
+                                  ? static_cast<double>(bytes_done) / static_cast<double>(bytes_total)
+                                  : 0.0);
             percent_label_->SetLabel(wxString::Format("%d%%", pct));
             percent_label_->SetForegroundColour(kAccent);
-            bytes_label_->SetLabel(format_mib(bytes_done) + " of " + format_mib(bytes_total));
-            std::ostringstream speed;
-            speed << std::fixed << std::setprecision(1) << live_mbps << " MiB/s";
-            speed_label_->SetLabel(speed.str());
-            message_label_->SetLabel(status.empty() ? "Keep both apps open until finished."
-                                                    : status);
-            message_label_->SetForegroundColour(kMuted);
+            if (!transfer_label.empty() && bytes_total > 0) {
+                bytes_label_->SetLabel(
+                    wxString::FromUTF8((transfer_label + " · " + format_bytes(bytes_done)
+                                        + " of " + format_bytes(bytes_total))
+                                           .c_str()));
+            } else if (bytes_total > 0) {
+                bytes_label_->SetLabel(format_bytes(bytes_done) + " of "
+                                     + format_bytes(bytes_total));
+            } else {
+                bytes_label_->SetLabel(wxString::FromUTF8(transfer_label.c_str()));
+            }
+            {
+                const std::string speed = format_speed_line(
+                    live_mbps, peak_mbps, result_mbps, demo_display, true, outbound);
+                speed_label_->SetLabel(wxString::FromUTF8(speed.c_str()));
+            }
+            speed_label_->SetForegroundColour(kAccent);
+            message_label_->SetLabel("");
             break;
         }
 
@@ -275,38 +452,48 @@ void TransferProgressPanel::ApplyState(bool busy,
             percent_label_->SetLabel("100%");
             percent_label_->SetForegroundColour(kSuccess);
             if (bytes_total > 0) {
-                bytes_label_->SetLabel(format_mib(bytes_total) + " transferred");
+                if (!transfer_label.empty()) {
+                    bytes_label_->SetLabel(
+                        wxString::FromUTF8((transfer_label + " · " + format_bytes(bytes_total))
+                                               .c_str()));
+                } else {
+                    bytes_label_->SetLabel(format_bytes(bytes_total) + " transferred");
+                }
+            } else if (!transfer_label.empty()) {
+                bytes_label_->SetLabel(wxString::FromUTF8(transfer_label.c_str()));
             } else {
                 bytes_label_->SetLabel("");
             }
-            speed_label_->SetLabel("");
             if (!notification.empty()) {
-                message_label_->SetLabel(notification);
+                message_label_->SetLabel(wxString::FromUTF8(notification.c_str()));
             } else if (!status.empty()) {
-                message_label_->SetLabel(status);
+                message_label_->SetLabel(wxString::FromUTF8(status.c_str()));
             } else {
                 message_label_->SetLabel("File delivered successfully.");
             }
             message_label_->SetForegroundColour(kSuccess);
             break;
 
-        case Phase::Failed:
+        case Phase::Failed: {
             percent_label_->SetLabel("");
             bytes_label_->SetLabel("");
             speed_label_->SetLabel("");
-            message_label_->SetLabel(error.empty() ? "Something went wrong." : error);
-            message_label_->SetForegroundColour(kError);
+            const std::string detail = !error.empty() ? error : status;
+            if (!detail.empty()) {
+                message_label_->SetLabel(wxString::FromUTF8(detail.c_str()));
+                message_label_->SetForegroundColour(kWarn);
+            } else {
+                message_label_->SetLabel("");
+            }
             break;
+        }
 
         case Phase::Idle:
         default:
             percent_label_->SetLabel("");
             bytes_label_->SetLabel("");
             speed_label_->SetLabel("");
-            if (!error.empty()) {
-                message_label_->SetLabel(error);
-                message_label_->SetForegroundColour(kError);
-            } else if (!notification.empty()) {
+            if (!notification.empty()) {
                 message_label_->SetLabel(notification);
                 message_label_->SetForegroundColour(kAccent);
             } else {
@@ -314,5 +501,15 @@ void TransferProgressPanel::ApplyState(bool busy,
             }
             break;
     }
-    Layout();
+
+    if (root_sizer_) {
+        const wxString message_text = message_label_->GetLabel();
+        const bool message_visible =
+            !message_text.IsEmpty()
+            && (phase == Phase::Waiting || phase == Phase::Failed || phase == Phase::Complete
+                || phase == Phase::Idle);
+        message_item_->Show(message_visible);
+    }
+
+    RelayoutAncestors();
 }
