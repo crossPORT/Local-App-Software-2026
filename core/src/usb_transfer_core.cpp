@@ -62,7 +62,8 @@ unsigned effective_queue_depth() {
 struct FileHeader {
     uint8_t  magic[8];
     uint64_t file_size;
-    uint8_t  reserved[16];
+    uint8_t  frame_kind;
+    uint8_t  filename[15];
 };
 #pragma pack(pop)
 
@@ -325,6 +326,34 @@ bool bulk_read_all(libusb_device_handle* handle,
     return true;
 }
 
+bool discard_incoming_bytes(libusb_device_handle* handle,
+                            uint64_t byte_count,
+                            int timeout_ms) {
+    constexpr uint64_t kMaxStraySessionBytes = 256 * 1024;
+    if (byte_count > kMaxStraySessionBytes) {
+        return false;
+    }
+    std::vector<uint8_t> scratch(
+        static_cast<std::size_t>(std::min(byte_count, static_cast<uint64_t>(usb_protocol::kChunkSize))),
+        0);
+    uint64_t remaining = byte_count;
+    while (remaining > 0) {
+        const std::size_t chunk =
+            static_cast<std::size_t>(std::min(remaining, static_cast<uint64_t>(scratch.size())));
+        if (!bulk_read_all(handle, scratch.data(), chunk, timeout_ms)) {
+            return false;
+        }
+        remaining -= chunk;
+    }
+    return true;
+}
+
+int remaining_timeout_ms(const Clock::time_point& deadline) {
+    const auto remaining =
+        std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now());
+    return std::max(1, static_cast<int>(remaining.count()));
+}
+
 bool usb_transfer_chunk(libusb_context* ctx,
                         libusb_device_handle* tx_dev,
                         libusb_device_handle* rx_dev,
@@ -377,10 +406,19 @@ bool usb_transfer_chunk(libusb_context* ctx,
         && ctx_rx.status == LIBUSB_TRANSFER_COMPLETED;
 }
 
-void fill_file_header(FileHeader* header, uint64_t file_size) {
+void fill_file_header(FileHeader* header,
+                      uint64_t file_size,
+                      uint8_t frame_kind = usb_protocol::kFrameKindPayload,
+                      const char* filename = nullptr) {
     std::memcpy(header->magic, usb_protocol::kHeaderMagic, 8);
     header->file_size = file_size;
-    std::memset(header->reserved, 0, sizeof(header->reserved));
+    header->frame_kind = frame_kind;
+    std::memset(header->filename, 0, sizeof(header->filename));
+    if (filename) {
+        const std::size_t len = std::strlen(filename);
+        const std::size_t copy = std::min(len, static_cast<std::size_t>(usb_protocol::kFrameFilenameMax));
+        std::memcpy(header->filename, filename, copy);
+    }
 }
 
 bool files_equal(const std::string& a, const std::string& b) {
@@ -682,7 +720,9 @@ TransferResult send_file_core(libusb_context* ctx,
                               const std::string& path,
                               int port_index,
                               ProgressCallback progress_cb,
-                              unsigned timeout_ms) {
+                              unsigned timeout_ms,
+                              uint8_t frame_kind,
+                              const std::string& header_filename) {
     TransferResult result{};
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -706,7 +746,10 @@ TransferResult send_file_core(libusb_context* ctx,
     }
 
     FileHeader hdr{};
-    fill_file_header(&hdr, file_size);
+    fill_file_header(&hdr,
+                     file_size,
+                     frame_kind,
+                     header_filename.empty() ? nullptr : header_filename.c_str());
     std::string hdr_write_err;
     if (!bulk_write_all(handle,
                         reinterpret_cast<uint8_t*>(&hdr),
@@ -865,7 +908,8 @@ TransferResult receive_file_core(libusb_context* ctx,
                                  const std::string& out_path,
                                  int port_index,
                                  ProgressCallback progress_cb,
-                                 unsigned header_timeout_ms) {
+                                 unsigned header_timeout_ms,
+                                 uint8_t expected_frame_kind) {
     TransferResult result{};
 
     libusb_device_handle* handle = open_device_by_index(ctx, port_index, &result.error_message);
@@ -885,17 +929,52 @@ TransferResult receive_file_core(libusb_context* ctx,
     }
 
     FileHeader hdr{};
-    if (!bulk_read_all(handle,
-                       reinterpret_cast<uint8_t*>(&hdr),
-                       sizeof(hdr),
-                       static_cast<int>(header_timeout_ms))) {
-        result.error_message = "Header read failed";
-        out_file.close();
-        close_device(handle);
-        return result;
+    const auto header_deadline =
+        Clock::now() + std::chrono::milliseconds(header_timeout_ms);
+    bool got_payload_header = false;
+
+    while (Clock::now() < header_deadline) {
+        const int remaining_ms = remaining_timeout_ms(header_deadline);
+        if (!bulk_read_all(handle,
+                           reinterpret_cast<uint8_t*>(&hdr),
+                           sizeof(hdr),
+                           remaining_ms)) {
+            break;
+        }
+        if (std::memcmp(hdr.magic, usb_protocol::kHeaderMagic, 8) != 0) {
+            result.error_message = "Bad magic bytes in header";
+            out_file.close();
+            close_device(handle);
+            return result;
+        }
+
+        if (expected_frame_kind == usb_protocol::kFrameKindPayload
+            && hdr.frame_kind == usb_protocol::kFrameKindSession) {
+            fprintf(stderr,
+                    "[USB-DIAG] stray session frame during payload wait (%llu B), skipping\n",
+                    static_cast<unsigned long long>(hdr.file_size));
+            if (!discard_incoming_bytes(handle, hdr.file_size, remaining_timeout_ms(header_deadline))) {
+                result.error_message = "Stray session frame read failed";
+                out_file.close();
+                close_device(handle);
+                return result;
+            }
+            continue;
+        }
+
+        if (expected_frame_kind != 0 && hdr.frame_kind != expected_frame_kind) {
+            result.error_message = "Unexpected frame kind in header";
+            out_file.close();
+            close_device(handle);
+            return result;
+        }
+
+        got_payload_header = true;
+        break;
     }
-    if (std::memcmp(hdr.magic, usb_protocol::kHeaderMagic, 8) != 0) {
-        result.error_message = "Bad magic bytes in header";
+
+    if (!got_payload_header) {
+        result.error_message = "Header read failed";
         out_file.close();
         close_device(handle);
         return result;
@@ -1218,6 +1297,60 @@ bool fabric_device_bus_addr(libusb_context* ctx,
 
     libusb_free_device_list(list, 1);
     return ok;
+}
+
+std::string fabric_device_serial(libusb_context* ctx, int port_index) {
+    if (!ctx || port_index < 0) {
+        return {};
+    }
+
+    libusb_device** list = nullptr;
+    const ssize_t count = libusb_get_device_list(ctx, &list);
+    if (count < 0) {
+        return {};
+    }
+
+    int found = 0;
+    libusb_device* target_dev = nullptr;
+    for (ssize_t i = 0; i < count; ++i) {
+        libusb_device_descriptor desc{};
+        if (libusb_get_device_descriptor(list[i], &desc) != 0) {
+            continue;
+        }
+        if (desc.idVendor != usb_protocol::kVendorId
+            || desc.idProduct != usb_protocol::kProductId) {
+            continue;
+        }
+        if (found == port_index) {
+            target_dev = list[i];
+            break;
+        }
+        ++found;
+    }
+
+    if (!target_dev) {
+        libusb_free_device_list(list, 1);
+        return {};
+    }
+
+    libusb_device_handle* handle = nullptr;
+    std::string serial;
+    if (libusb_open(target_dev, &handle) == LIBUSB_SUCCESS) {
+        libusb_device_descriptor desc{};
+        if (libusb_get_device_descriptor(target_dev, &desc) == 0 && desc.iSerialNumber != 0) {
+            unsigned char buffer[256] = {};
+            const int len = libusb_get_string_descriptor_ascii(
+                handle, desc.iSerialNumber, buffer, sizeof(buffer));
+            if (len > 0) {
+                serial.assign(reinterpret_cast<char*>(buffer),
+                              reinterpret_cast<char*>(buffer + len));
+            }
+        }
+        libusb_close(handle);
+    }
+
+    libusb_free_device_list(list, 1);
+    return serial;
 }
 
 TransferResult loopback_transfer_core(libusb_context* ctx,

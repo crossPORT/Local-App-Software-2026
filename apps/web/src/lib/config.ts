@@ -216,6 +216,17 @@ function identityStorageKey(portIndex: number): string {
   return `rocketbox-identity-v1-port${portIndex}`;
 }
 
+const GLOBAL_IDENTITY_KEY = 'rocketbox-identity-v1';
+
+function readStoredIdentityJson(portIndex: number): string | null {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+  return (
+    localStorage.getItem(identityStorageKey(portIndex)) ?? localStorage.getItem(GLOBAL_IDENTITY_KEY)
+  );
+}
+
 export function defaultIdentityProfile(portIndex: number): IdentityProfile {
   return {
     display_name: '',
@@ -274,7 +285,7 @@ function normalizeIdentity(raw: Partial<IdentityProfile>, portIndex: number): Id
 
 export function loadIdentityProfile(portIndex: number): IdentityProfile {
   try {
-    const raw = localStorage.getItem(identityStorageKey(portIndex));
+    const raw = readStoredIdentityJson(portIndex);
     if (!raw) {
       return defaultIdentityProfile(portIndex);
     }
@@ -337,7 +348,9 @@ export function saveIdentityProfile(portIndex: number, identity: IdentityProfile
     },
     portIndex,
   );
-  localStorage.setItem(identityStorageKey(portIndex), JSON.stringify(normalized));
+  const json = JSON.stringify(normalized);
+  localStorage.setItem(identityStorageKey(portIndex), json);
+  localStorage.setItem(GLOBAL_IDENTITY_KEY, json);
 }
 
 export function receiveStatusToString(status: ReceiveStatus): string {

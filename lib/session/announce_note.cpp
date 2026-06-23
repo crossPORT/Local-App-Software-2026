@@ -5,6 +5,8 @@
 
 namespace {
 
+constexpr int kFabricLegCount = 4;
+
 std::string trim_copy(std::string value) {
     while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
         value.pop_back();
@@ -25,6 +27,16 @@ bool parse_key_value(const std::string& token, const std::string& key, std::stri
     return true;
 }
 
+int leg_from_wire_port(int wire_port) {
+    if (wire_port >= 1 && wire_port <= kFabricLegCount) {
+        return wire_port - 1;
+    }
+    if (wire_port >= 0 && wire_port < kFabricLegCount) {
+        return wire_port;
+    }
+    return -1;
+}
+
 }  // namespace
 
 std::string make_instance_id() {
@@ -43,7 +55,8 @@ std::string make_instance_id() {
 std::string build_announce_note(int port_index,
                                 ReceiveStatus receive_status,
                                 const std::string& instance_id) {
-    std::string note = "port=" + std::to_string(port_index)
+    const int wire_port = port_index + 1;
+    std::string note = "port=" + std::to_string(wire_port)
                        + ";receive=" + receive_status_to_string(receive_status);
     if (!instance_id.empty()) {
         note += ";instance=" + instance_id;
@@ -71,7 +84,10 @@ bool parse_announce_note(const std::string& note,
             std::string value;
             if (parse_key_value(current, "port", &value)) {
                 try {
-                    *port_index_out = std::stoi(value);
+                    const int leg = leg_from_wire_port(std::stoi(value));
+                    if (leg >= 0) {
+                        *port_index_out = leg;
+                    }
                 } catch (...) {
                     /* keep default */
                 }
@@ -89,7 +105,10 @@ bool parse_announce_note(const std::string& note,
         std::string value;
         if (parse_key_value(current, "port", &value)) {
             try {
-                *port_index_out = std::stoi(value);
+                const int leg = leg_from_wire_port(std::stoi(value));
+                if (leg >= 0) {
+                    *port_index_out = leg;
+                }
             } catch (...) {
                 /* keep default */
             }
@@ -103,6 +122,11 @@ bool parse_announce_note(const std::string& note,
 }
 
 int resolve_remote_fabric_port(int my_port, int announced_port) {
-    const int other_port = my_port == 0 ? 1 : 0;
-    return announced_port == my_port ? other_port : announced_port;
+    if (announced_port == my_port) {
+        return -1;
+    }
+    if (announced_port < 0 || announced_port >= kFabricLegCount) {
+        return -1;
+    }
+    return announced_port;
 }

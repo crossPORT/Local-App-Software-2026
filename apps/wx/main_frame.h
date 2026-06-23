@@ -45,6 +45,9 @@ private:
     void OnEventLog(wxWindow* parent = nullptr);
     void OnEventLogMenu(wxCommandEvent& event);
     void OnResetConnection();
+    void OnConnectUsb();
+    void OnDisconnectUsb();
+    int CountFabricDevices() const;
     void BuildMenuBar();
     void OnFirstShow(wxShowEvent& event);
     void OnClose(wxCloseEvent& event);
@@ -55,6 +58,7 @@ private:
     int port_index_ = -1;
     int content_width_ = 560;
     bool fabric_connected_ = false;
+    int last_fabric_devices_seen_ = 0;
     std::string config_path_;
     IdentityProfile identity_;
 

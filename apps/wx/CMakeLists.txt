@@ -49,11 +49,50 @@ if(APPLE)
     install(TARGETS rocketbox BUNDLE DESTINATION .)
     install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/macos_fixup_bundle.cmake")
 elseif(WIN32)
-    install(TARGETS rocketbox
-        RUNTIME DESTINATION bin
-    )
+    include(${CMAKE_SOURCE_DIR}/cmake/rocketbox_windows_vcpkg.cmake)
+    rocketbox_resolve_vcpkg_bin(_rb_vcpkg_bin)
 
-    install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/windows_fixup_install.cmake")
+    if(_rb_vcpkg_bin)
+        file(GLOB _rb_primary_dlls
+            "${_rb_vcpkg_bin}/wx*.dll"
+            "${_rb_vcpkg_bin}/libusb-1.0.dll"
+        )
+        if(_rb_primary_dlls)
+            install(FILES ${_rb_primary_dlls} DESTINATION bin)
+            list(LENGTH _rb_primary_dlls _rb_primary_count)
+            message(STATUS "Windows: install ${_rb_primary_count} primary DLL(s) from ${_rb_vcpkg_bin}")
+        else()
+            message(WARNING "Windows: no wx/libusb DLLs found in ${_rb_vcpkg_bin}")
+        endif()
+
+        install(RUNTIME_DEPENDENCY_SET rocketbox_runtime_deps
+            DIRECTORIES "${_rb_vcpkg_bin}"
+            POST_EXCLUDE_REGEXES
+                ".*[\\\\]Windows[\\\\]System32[\\\\].*"
+                ".*[\\\\]Windows[\\\\]SysWOW64[\\\\].*"
+                ".*[\\\\]WinSxS[\\\\].*"
+                ".*[\\\\]api-ms-win.*"
+                ".*[\\\\]ext-ms-win.*"
+        )
+        install(TARGETS rocketbox
+            RUNTIME DESTINATION bin
+            RUNTIME_DEPENDENCY_SET rocketbox_runtime_deps
+        )
+    else()
+        message(WARNING "Windows: vcpkg bin directory not found; DLL bundling may fail at install")
+        install(TARGETS rocketbox
+            RUNTIME DESTINATION bin
+        )
+    endif()
+
+    set(ROCKETBOX_VCPKG_BIN "${_rb_vcpkg_bin}")
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/windows_fixup_install.cmake.in"
+        "${CMAKE_BINARY_DIR}/generated/windows_fixup_install.cmake"
+        @ONLY
+    )
+    install(SCRIPT "${CMAKE_BINARY_DIR}/generated/windows_fixup_install.cmake")
 
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules

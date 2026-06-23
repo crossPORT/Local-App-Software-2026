@@ -1,28 +1,14 @@
-# Run during `cmake --install` on Windows to copy vcpkg/wx/libusb DLLs next to RocketBox.exe.
+# Generated at configure time — do not edit. Source: cmake/windows_fixup_install.cmake.in
 if(NOT WIN32)
     return()
 endif()
 
 set(_exe "${CMAKE_INSTALL_PREFIX}/bin/RocketBox.exe")
 set(_bindir "${CMAKE_INSTALL_PREFIX}/bin")
+set(_vcpkg_bin "@ROCKETBOX_VCPKG_BIN@")
 
 if(NOT EXISTS "${_exe}")
     message(FATAL_ERROR "Windows fixup: missing ${_exe}")
-endif()
-
-if(NOT DEFINED VCPKG_INSTALLED_DIR)
-    get_property(VCPKG_INSTALLED_DIR CACHE VCPKG_INSTALLED_DIR PROPERTY VALUE)
-endif()
-if(NOT DEFINED VCPKG_TARGET_TRIPLET)
-    get_property(VCPKG_TARGET_TRIPLET CACHE VCPKG_TARGET_TRIPLET PROPERTY VALUE)
-endif()
-if(NOT VCPKG_TARGET_TRIPLET)
-    set(VCPKG_TARGET_TRIPLET "x64-windows")
-endif()
-
-set(_vcpkg_bin "")
-if(VCPKG_INSTALLED_DIR)
-    set(_vcpkg_bin "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
 endif()
 
 message(STATUS "Windows fixup: ${_exe}")
@@ -32,6 +18,8 @@ set(_exclude
     ".*[\\\\]Windows[\\\\]System32[\\\\].*"
     ".*[\\\\]Windows[\\\\]SysWOW64[\\\\].*"
     ".*[\\\\]WinSxS[\\\\].*"
+    ".*[\\\\]api-ms-win.*"
+    ".*[\\\\]ext-ms-win.*"
 )
 
 function(_rocketbox_copy_runtime_deps)
@@ -68,7 +56,7 @@ function(_rocketbox_copy_runtime_deps)
     endif()
 
     if(_unresolved)
-        message(STATUS "Windows fixup unresolved (may be optional): ${_unresolved}")
+        message(STATUS "Windows fixup unresolved (optional): ${_unresolved}")
     endif()
 
     foreach(_dll IN LISTS _resolved)
@@ -81,10 +69,10 @@ function(_rocketbox_copy_runtime_deps)
     endforeach()
 endfunction()
 
-# Pass 1: dependencies of RocketBox.exe
+# Pass 1: anything GET_RUNTIME_DEPENDENCIES can trace from RocketBox.exe
 _rocketbox_copy_runtime_deps(FILES "${_exe}")
 
-# Pass 2: explicit vcpkg wx/libusb (covers cases GET_RUNTIME_DEPENDENCIES misses)
+# Pass 2: explicit copy from vcpkg (libusb via pkg-config is often invisible to pass 1)
 if(_vcpkg_bin AND IS_DIRECTORY "${_vcpkg_bin}")
     file(GLOB _vcpkg_dlls
         "${_vcpkg_bin}/wx*.dll"

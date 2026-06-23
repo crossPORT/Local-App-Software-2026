@@ -201,6 +201,10 @@ jobs:
 
           .\vcpkg\vcpkg install --triplet x64-windows
 
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "3.31.6"
+
       - name: Configure
         shell: pwsh
         env:

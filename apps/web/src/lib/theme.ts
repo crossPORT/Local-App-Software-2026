@@ -13,6 +13,9 @@ export const theme = {
   muted: '#8899aa',
   accent: '#00d4aa',
   ok: '#3ddb8a',
+  offlineDot: '#5a6a7a',
+  offlineRow: '#10141c',
+  offlineDropZone: '#0c1016',
   warn: '#ff9f43',
   error: '#ff6b6b',
   /** Session/handshake activity (announces, offers) — chart + legend */

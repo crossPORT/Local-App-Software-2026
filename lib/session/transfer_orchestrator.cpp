@@ -7,6 +7,7 @@
 #include "booth_display.h"
 #include "fabric_link_policy.h"
 #include "fabric_meta_file.h"
+#include "fabric_port.h"
 #include "fabric_tar_pack.h"
 #include "link_status.h"
 #include "receive_payload.h"
@@ -210,10 +211,20 @@ void TransferOrchestrator::ensure_listener_started() {
     }
     listener_->start();
     listener_started_ = true;
-    booth_log(port_index_,
-              "listener_started",
-              "working_send=" + std::to_string(working_send_port_)
-                  + " working_recv=" + std::to_string(working_recv_port_));
+    if (controller_) {
+        const int leg = controller_->fabric_leg();
+        const std::string serial = controller_->fabric_device_serial();
+        booth_log(leg, "cable_serial", serial.empty() ? "(none)" : serial);
+        booth_log(leg,
+                  "listener_started",
+                  "working_send=" + std::to_string(working_send_port_)
+                      + " working_recv=" + std::to_string(working_recv_port_));
+    } else {
+        booth_log(port_index_,
+                  "listener_started",
+                  "working_send=" + std::to_string(working_send_port_)
+                      + " working_recv=" + std::to_string(working_recv_port_));
+    }
 }
 
 void TransferOrchestrator::stop() {
@@ -256,7 +267,7 @@ void TransferOrchestrator::stop() {
 
 bool TransferOrchestrator::is_busy() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    return state_.busy;
+    return state_.busy || accepting_inbound_session_id_.has_value();
 }
 
 IdentityProfile TransferOrchestrator::identity() const {
@@ -658,7 +669,7 @@ void TransferOrchestrator::tick_presence() {
         state_.fabric_connected = fabric_connected;
         state_.fabric_devices_seen = devices_seen;
         state_.fabric_port_open = port_ok;
-        state_.fabric_port_index = port_index_;
+        state_.fabric_port_index = controller_ ? controller_->fabric_leg() : port_index_;
         if (!fabric_connected) {
             state_.fabric_device_label.clear();
         } else {
@@ -679,21 +690,34 @@ void TransferOrchestrator::handle_announce(const FabricSessionMessage& message) 
         return;
     }
 
-    int announced_port = port_index_ == 0 ? 1 : 0;
+    const int my_leg = controller_ ? controller_->fabric_leg() : port_index_;
+    int announced_port = default_remote_guess_leg(my_leg);
     ReceiveStatus peer_status = ReceiveStatus::AskFirst;
     std::string instance_id;
     parse_announce_note(message.note, announced_port, &announced_port, &peer_status, &instance_id);
 
     if (!instance_id.empty() && instance_id == instance_id_) {
+        booth_log(my_leg, "announce_echo_reject", "instance=" + instance_id);
         return;
     }
     if (instance_id.empty() && message.from_name == identity_.display_name
-        && announced_port == port_index_) {
+        && announced_port == my_leg) {
+        booth_log(my_leg, "announce_echo_reject", "legacy name=" + message.from_name);
         return;
     }
 
-    const int peer_port = resolve_remote_fabric_port(port_index_, announced_port);
+    const int peer_port = resolve_remote_fabric_port(my_leg, announced_port);
+    if (peer_port < 0) {
+        booth_log(my_leg,
+                  "announce_echo_reject",
+                  message.from_name + " port=" + std::to_string(display_port_from_leg(announced_port)));
+        return;
+    }
     roster_.touch_peer(message.from_name, message.team, peer_status, peer_port, instance_id);
+    booth_log(my_leg,
+              "announce_received",
+              message.from_name + " port=" + std::to_string(display_port_from_leg(peer_port))
+                  + " note=" + message.note);
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -752,7 +776,8 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
     message.from_name = identity_.display_name;
     message.team = identity_.team;
     message.session_id = make_session_id();
-    message.note = build_announce_note(port_index_, identity_.receive_status, instance_id_);
+    const int my_leg = controller_ ? controller_->fabric_leg() : port_index_;
+    message.note = build_announce_note(my_leg, identity_.receive_status, instance_id_);
 
     std::string error;
     if (send_session_with_routing(message, false, &error)) {
@@ -772,6 +797,25 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
                   "to=" + message.to_name + " local=" + identity_.display_name + " from="
                       + message.from_name);
         return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (accepting_inbound_session_id_
+            && *accepting_inbound_session_id_ == message.session_id) {
+            booth_log(port_index_, "offer_dup_ignore", "accepting session=" + message.session_id);
+            return;
+        }
+        if (last_completed_inbound_session_id_
+            && *last_completed_inbound_session_id_ == message.session_id) {
+            booth_log(port_index_, "offer_completed_ignore", "session=" + message.session_id);
+            return;
+        }
+        if (state_.pending_offer
+            && state_.pending_offer->message.session_id == message.session_id) {
+            booth_log(port_index_, "offer_dup_pending", "session=" + message.session_id);
+            return;
+        }
     }
 
     {
@@ -814,7 +858,23 @@ void TransferOrchestrator::accept_pending_offer() {
             return;
         }
         offer_copy = *state_.pending_offer;
+        if (accepting_inbound_session_id_
+            && *accepting_inbound_session_id_ == offer_copy.message.session_id) {
+            booth_log(port_index_,
+                      "accept_inflight_ignore",
+                      "session=" + offer_copy.message.session_id);
+            return;
+        }
+        if (last_completed_inbound_session_id_
+            && *last_completed_inbound_session_id_ == offer_copy.message.session_id) {
+            booth_log(port_index_,
+                      "accept_completed_ignore",
+                      "session=" + offer_copy.message.session_id);
+            state_.pending_offer.reset();
+            return;
+        }
         state_.pending_offer.reset();
+        accepting_inbound_session_id_ = offer_copy.message.session_id;
     }
 
     if (payload_thread_.joinable()) {
@@ -822,15 +882,36 @@ void TransferOrchestrator::accept_pending_offer() {
     }
 
     payload_thread_ = std::thread([this, offer_copy]() {
+        if (last_completed_inbound_session_id_
+            && *last_completed_inbound_session_id_ == offer_copy.message.session_id) {
+            booth_log(port_index_,
+                      "inbound_dup_skip",
+                      "session=" + offer_copy.message.session_id);
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                accepting_inbound_session_id_.reset();
+            }
+            return;
+        }
+
+        ListenerPauseGuard listener_guard(listener_.get());
         std::this_thread::sleep_for(
             std::chrono::milliseconds(handshake_.accept_reply_delay_ms));
         if (!send_session_reply(offer_copy.message, SessionMessageKind::Accept)) {
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                accepting_inbound_session_id_.reset();
+            }
             finish_transfer(false, "Accept failed", state_.error_message);
             return;
         }
         std::this_thread::sleep_for(
             std::chrono::milliseconds(handshake_.accept_ready_gap_ms));
         run_inbound_payload(offer_copy.message);
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            accepting_inbound_session_id_.reset();
+        }
     });
 }
 
@@ -1168,6 +1249,9 @@ void TransferOrchestrator::finish_transfer(bool ok,
                 state_.status_message = done_msg;
                 state_.notification = done_msg;
             }
+            if (done_kind == TransferDoneKind::Received && accepting_inbound_session_id_) {
+                last_completed_inbound_session_id_ = *accepting_inbound_session_id_;
+            }
         } else {
             state_.bytes_done = 0;
             state_.bytes_total = 0;
@@ -1215,6 +1299,8 @@ void TransferOrchestrator::reset_connection() {
         state_.pending_offer.reset();
     }
 
+    accepting_inbound_session_id_.reset();
+    last_completed_inbound_session_id_.reset();
     awaiting_ready_ = false;
     clear_outbound_session();
     staged_payload_ = {};

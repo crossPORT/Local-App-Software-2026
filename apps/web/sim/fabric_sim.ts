@@ -1,5 +1,7 @@
 /** Enable with ?simulate=1 on the PWA URL (mirrors native ROCKETBOX_SIM=1). */
 
+import { SIM_CABLE_SERIALS } from './fabric_hub';
+
 export function fabricSimEnabled(): boolean {
   if (typeof window === 'undefined') {
     return false;
@@ -9,5 +11,5 @@ export function fabricSimEnabled(): boolean {
 }
 
 export function fabricSimDeviceCount(): number {
-  return 2;
+  return SIM_CABLE_SERIALS.length;
 }

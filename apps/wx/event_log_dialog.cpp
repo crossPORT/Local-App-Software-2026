@@ -1,6 +1,7 @@
 #include "event_log_dialog.h"
 
 #include "booth_log.h"
+#include "fabric_port.h"
 
 #include <sstream>
 #include <wx/clipbrd.h>
@@ -23,7 +24,8 @@ enum {
 };
 
 std::string filter_log_for_port(const std::string& text, int port_index) {
-    const std::string needle = "[port=" + std::to_string(port_index) + "]";
+    const std::string needle =
+        "[port=" + std::to_string(display_port_from_leg(port_index)) + "]";
     std::istringstream in(text);
     std::ostringstream out;
     std::string line;

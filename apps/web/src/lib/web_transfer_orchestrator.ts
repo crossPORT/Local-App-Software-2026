@@ -1,6 +1,8 @@
 import { rollBoothDisplayMibS } from './fabric_protocol';
 import { formatBytes, formatTransferDoneMessage, isTransferCompleteMessage } from './format';
-import { parseAnnounceNote, resolveRemoteFabricPort } from './announce_note';
+import { parseAnnounceNote, resolveRemoteFabricLeg } from './announce_note';
+import { boothLog } from './booth_log';
+import { displayPortFromLeg } from './fabric_port';
 import {
   buildAnnounceMessage,
   buildSessionReply,
@@ -8,6 +10,7 @@ import {
   type FabricSessionMessage,
   makeSessionId,
 } from './fabric_session';
+import { FABRIC_LEG_COUNT } from './fabric_port';
 import type { FabricTransport } from './fabric_transport';
 import { PeerRoster } from './peer_roster';
 import { readFilePayload } from './fabric_usb';
@@ -20,6 +23,8 @@ import { TRANSFER_DONE_DISMISS_MS } from './usb_constants';
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
+
+export type LinkActivity = 'idle' | 'handshake' | 'receiving' | 'sending';
 
 function effectiveReceiveStatus(status: ReceiveStatus): ReceiveStatus {
   return status === 'busy' ? 'open' : status;
@@ -51,17 +56,19 @@ export interface OrchestratorCallbacks {
 }
 
 export class WebTransferOrchestrator {
-  private listenerCancel = false;
-  private listenerPaused = false;
+  private sessionUnsubscribe: (() => void) | null = null;
   private lastAnnounceMs = 0;
+  private lastAnnounceAttemptMs = 0;
+  private lastAnnounceSkipReason = '';
+  private announceInFlight = false;
+  private presenceTickInFlight = false;
+  private linkActivity: LinkActivity = 'idle';
 
   private busy = false;
   private outboundOffer: FabricSessionMessage | null = null;
   private awaitingReady = false;
   /** Sender must not hold USB IN until the receiver has had time to read the offer. */
   private offerReceiveGraceUntil = 0;
-  /** After ready, stop session IN polls so payload OUT is not blocked on runUsb. */
-  private payloadSendPending = false;
 
   private pendingInbound: FabricSessionMessage | null = null;
   /** When the current pendingInbound dialog started — used to expire a wedged
@@ -70,13 +77,13 @@ export class WebTransferOrchestrator {
 
   private acceptWaiter: { resolve: () => void; reject: (err: Error) => void } | null = null;
   private readyWaiter: { resolve: () => void; reject: (err: Error) => void } | null = null;
-  private dismissTimer: ReturnType<typeof setTimeout> | null = null;
+  private dismissTimer: number | null = null;
   private dismissEpoch = 0;
   private lastOfferRetransmitMs = 0;
-  private presenceTimer: ReturnType<typeof setInterval> | null = null;
+  private presenceTimer: number | null = null;
+  private retransmitTimer: number | null = null;
   private fabricActivitySeq = 0;
   private readonly instanceId = makeInstanceId();
-  private listenerGeneration = 0;
 
   constructor(
     private readonly usb: FabricTransport,
@@ -92,19 +99,68 @@ export class WebTransferOrchestrator {
   }
 
   startListener(): void {
-    const generation = ++this.listenerGeneration;
-    this.listenerCancel = false;
-    this.listenerPaused = false;
     this.lastAnnounceMs = 0;
+    this.lastAnnounceSkipReason = '';
+    this.setLinkActivity('idle');
+    this.sessionUnsubscribe?.();
+    this.sessionUnsubscribe = this.usb.subscribeSession((message) => {
+      this.onSessionMessage(message);
+    });
+    const leg = this.callbacks.getPortIndex();
+    const name = this.callbacks.getIdentity().display_name.trim();
+    boothLog(leg, 'listener_started', name || 'display_name not set');
     this.startPresenceLoop();
-    void this.listenerLoop(generation);
+    this.startRetransmitLoop();
+    const staggerMs = leg * (ANNOUNCE_INTERVAL_MS / FABRIC_LEG_COUNT);
+    void (async () => {
+      await sleep(staggerMs + Math.floor(Math.random() * ANNOUNCE_JITTER_MS));
+      if (this.sessionUnsubscribe) {
+        await this.maybeSendAnnounce(true);
+      }
+    })();
   }
 
   stopListener(): void {
-    this.listenerCancel = true;
-    this.listenerGeneration += 1;
-    this.listenerPaused = false;
+    this.sessionUnsubscribe?.();
+    this.sessionUnsubscribe = null;
     this.stopPresenceLoop();
+    this.stopRetransmitLoop();
+    this.usb.setListenMode('off');
+  }
+
+  private startRetransmitLoop(): void {
+    this.stopRetransmitLoop();
+    this.retransmitTimer = window.setInterval(() => {
+      void this.maybeRetransmitOffer();
+    }, 100);
+  }
+
+  private stopRetransmitLoop(): void {
+    if (this.retransmitTimer !== null) {
+      window.clearInterval(this.retransmitTimer);
+      this.retransmitTimer = null;
+    }
+  }
+
+  private setLinkActivity(next: LinkActivity): void {
+    if (this.linkActivity === next) {
+      this.syncListenMode();
+      return;
+    }
+    const prev = this.linkActivity;
+    this.linkActivity = next;
+    boothLog(this.callbacks.getPortIndex(), 'link_activity', `${prev}→${next}`);
+    this.syncListenMode();
+  }
+
+  private syncListenMode(): void {
+    if (this.linkActivity === 'idle') {
+      this.usb.setListenMode('always');
+    } else if (this.linkActivity === 'handshake') {
+      this.usb.setListenMode('handshake');
+    } else {
+      this.usb.setListenMode('off');
+    }
   }
 
   private startPresenceLoop(): void {
@@ -122,16 +178,25 @@ export class WebTransferOrchestrator {
     }
   }
 
-  private async tickPresence(initial: boolean): Promise<void> {
-    if (this.listenerCancel || !this.usb.connected) {
+  private async tickPresence(_initial: boolean): Promise<void> {
+    if (this.presenceTickInFlight) {
       return;
     }
-    this.expireStalePendingOffer();
-    this.recoverStuckHandshakeState();
-    const overdue =
-      this.lastAnnounceMs > 0 &&
-      Date.now() - this.lastAnnounceMs >= ANNOUNCE_INTERVAL_MS;
-    await this.maybeSendAnnounce(initial || overdue);
+    this.presenceTickInFlight = true;
+    try {
+      if (!this.sessionUnsubscribe || !this.usb.connected) {
+        return;
+      }
+      this.expireStalePendingOffer();
+      this.recoverStuckHandshakeState();
+      this.usb.ensureListening();
+      const overdue =
+        this.lastAnnounceMs > 0 &&
+        Date.now() - this.lastAnnounceMs >= ANNOUNCE_INTERVAL_MS;
+      await this.maybeSendAnnounce(overdue);
+    } finally {
+      this.presenceTickInFlight = false;
+    }
   }
 
   /**
@@ -162,17 +227,16 @@ export class WebTransferOrchestrator {
   }
 
   /**
-   * `listenerPaused` and `payloadSendPending` are only valid while an outbound
-   * transfer is in flight. If we are idle (no offer, not busy, no inbound) but
-   * either is still set, an aborted handshake left them stuck — which silently
-   * suppresses announces forever. Force-clear them so presence resumes.
+   * `linkActivity` is only valid while a transfer is in flight. If we are idle
+   * (no offer, not busy, no inbound) but activity is still non-idle, an aborted
+   * handshake left it stuck — which silently suppresses announces forever.
    */
   private recoverStuckHandshakeState(): void {
     const idle = !this.busy && !this.outboundOffer && !this.pendingInbound;
-    if (idle && (this.listenerPaused || this.payloadSendPending)) {
-      console.warn('[RocketBox] clearing stuck handshake flags while idle');
-      this.payloadSendPending = false;
-      this.resumeListener();
+    if (idle && this.linkActivity !== 'idle') {
+      console.warn('[RocketBox] clearing stuck link activity while idle');
+      boothLog(this.callbacks.getPortIndex(), 'stuck_activity_reset', this.linkActivity);
+      this.setLinkActivity('idle');
     }
   }
 
@@ -194,9 +258,8 @@ export class WebTransferOrchestrator {
     this.outboundOffer = null;
     this.awaitingReady = false;
     this.offerReceiveGraceUntil = 0;
-    this.payloadSendPending = false;
+    this.setLinkActivity('idle');
     this.rejectWaiters(new Error('Transfer cleared'));
-    this.resumeListener();
   }
 
   private rejectWaiters(err: Error): void {
@@ -207,12 +270,12 @@ export class WebTransferOrchestrator {
   }
 
   private pauseListener(): void {
-    this.listenerPaused = true;
+    this.usb.setListenMode('off');
   }
 
   private resumeListener(): void {
-    this.listenerPaused = false;
     this.offerReceiveGraceUntil = 0;
+    this.syncListenMode();
   }
 
   private cancelDismissTimer(): void {
@@ -253,8 +316,7 @@ export class WebTransferOrchestrator {
     speeds?: { peak: number; result: number },
   ): void {
     this.busy = false;
-    this.payloadSendPending = false;
-    this.resumeListener();
+    this.setLinkActivity('idle');
     this.callbacks.patch({
       busy: false,
       waitingForPartner: false,
@@ -292,123 +354,67 @@ export class WebTransferOrchestrator {
     this.callbacks.patch(partial);
   }
 
-  private async maybeSendAnnounce(force: boolean): Promise<void> {
-    if (this.listenerCancel || !this.usb.connected) {
+  private logAnnounceSkip(reason: string): void {
+    if (this.lastAnnounceSkipReason === reason) {
       return;
     }
-    // Same wire format as offers — never announce during handshake (native parity).
-    if (this.outboundOffer || this.pendingInbound || this.busy || this.payloadSendPending) {
+    this.lastAnnounceSkipReason = reason;
+    boothLog(this.callbacks.getPortIndex(), 'announce_skip', reason);
+  }
+
+  private async maybeSendAnnounce(force: boolean): Promise<void> {
+    const leg = this.callbacks.getPortIndex();
+    if (!this.sessionUnsubscribe || !this.usb.connected) {
+      if (!this.usb.connected) {
+        this.logAnnounceSkip('usb disconnected');
+      }
+      return;
+    }
+    if (this.linkActivity !== 'idle') {
+      boothLog(leg, 'announce_suppressed', this.linkActivity);
+      return;
+    }
+    if (this.outboundOffer || this.pendingInbound || this.busy) {
+      this.logAnnounceSkip(
+        this.busy ? 'busy' : this.outboundOffer ? 'outbound_offer' : 'pending_inbound',
+      );
       return;
     }
     const identity = this.callbacks.getIdentity();
     if (!identity.display_name.trim()) {
+      this.logAnnounceSkip('display_name not set');
+      return;
+    }
+    if (this.announceInFlight) {
       return;
     }
     const now = Date.now();
-    if (!force && this.lastAnnounceMs > 0 && now - this.lastAnnounceMs < ANNOUNCE_INTERVAL_MS) {
+    if (!force && now - this.lastAnnounceAttemptMs < ANNOUNCE_INTERVAL_MS) {
       return;
     }
+    this.lastAnnounceAttemptMs = now;
+    this.announceInFlight = true;
+    boothLog(leg, 'announce_attempt', force ? 'forced' : 'scheduled');
     try {
-      const message = buildAnnounceMessage(identity, this.callbacks.getPortIndex(), this.instanceId);
+      const message = buildAnnounceMessage(identity, leg, this.instanceId);
       await this.usb.sendSessionMessage(message);
       this.lastAnnounceMs = now;
+      this.lastAnnounceSkipReason = '';
       this.bumpSessionActivity();
       this.callbacks.patch({ lastAnnounceMs: now });
+      boothLog(leg, 'announce_sent', identity.display_name);
       console.log(`[RocketBox] announce SENT as "${identity.display_name}"`);
     } catch (err) {
-      console.warn('[RocketBox] announce send failed:', (err as Error).message);
+      const message = (err as Error).message;
+      boothLog(leg, 'announce_fail', message);
+      console.warn('[RocketBox] announce send failed:', message);
+    } finally {
+      this.announceInFlight = false;
     }
   }
 
   private handshake(): HandshakeTiming {
     return handshakeTimingFromIdentity(this.callbacks.getIdentity());
-  }
-
-  private async listenerLoop(generation: number): Promise<void> {
-    console.log(`[RocketBox] listenerLoop: starting (gen ${generation})`);
-    await sleep(300 + Math.floor(Math.random() * ANNOUNCE_JITTER_MS));
-    if (!this.isListenerActive(generation)) {
-      console.log(`[RocketBox] listenerLoop: stopped before burst (gen ${generation})`);
-      return;
-    }
-
-    console.log('[RocketBox] listenerLoop: discovery listen');
-    for (let i = 0; i < 6 && this.isListenerActive(generation); i++) {
-      await this.pollSessionOnce(generation);
-      await sleep(50);
-    }
-    console.log('[RocketBox] listenerLoop: entering main loop');
-
-    while (this.isListenerActive(generation)) {
-      if (
-        this.listenerPaused ||
-        this.payloadSendPending ||
-        (this.busy && !this.outboundOffer) ||
-        this.callbacks.isDisconnecting()
-      ) {
-        await sleep(200);
-        continue;
-      }
-
-      if (
-        this.outboundOffer &&
-        !this.awaitingReady &&
-        Date.now() < this.offerReceiveGraceUntil
-      ) {
-        await sleep(10);
-        continue;
-      }
-
-      const handshakePoll =
-        this.outboundOffer != null || !this.callbacks.getRoster().hasOnlinePeers();
-      const headerTimeout = handshakePoll
-        ? this.handshake().handshake_poll_timeout_ms
-        : this.handshake().session_header_timeout_ms;
-
-      await this.pollSessionOnce(generation, headerTimeout);
-
-      if (
-        this.outboundOffer &&
-        !this.awaitingReady &&
-        this.acceptWaiter &&
-        this.isListenerActive(generation)
-      ) {
-        void this.maybeRetransmitOffer();
-      }
-
-      if (this.isListenerActive(generation) && !this.outboundOffer) {
-        await sleep(handshakePoll ? 10 : 50);
-      }
-    }
-  }
-
-  private isListenerActive(generation: number): boolean {
-    return !this.listenerCancel && generation === this.listenerGeneration && this.usb.connected;
-  }
-
-  private async pollSessionOnce(
-    generation: number,
-    headerTimeoutMs = this.handshake().handshake_poll_timeout_ms,
-  ): Promise<void> {
-    if (
-      this.listenerPaused ||
-      this.payloadSendPending ||
-      (this.busy && !this.outboundOffer) ||
-      this.callbacks.isDisconnecting()
-    ) {
-      return;
-    }
-    if (
-      this.outboundOffer &&
-      !this.awaitingReady &&
-      Date.now() < this.offerReceiveGraceUntil
-    ) {
-      return;
-    }
-    const message = await this.usb.tryReceiveSessionMessage(headerTimeoutMs);
-    if (message && this.isListenerActive(generation)) {
-      this.onSessionMessage(message);
-    }
   }
 
   /**
@@ -436,6 +442,11 @@ export class WebTransferOrchestrator {
   }
 
   private onSessionMessage(message: FabricSessionMessage): void {
+    boothLog(
+      this.callbacks.getPortIndex(),
+      'session_received',
+      `${message.kind} from=${message.from_name || '?'}`,
+    );
     console.log(`[RocketBox] session message received: kind=${message.kind} from="${message.from_name}"`);
     this.bumpSessionActivity();
     switch (message.kind) {
@@ -465,9 +476,9 @@ export class WebTransferOrchestrator {
       return;
     }
 
-    const myPort = this.callbacks.getPortIndex();
-    const defaultPort = myPort === 0 ? 1 : 0;
-    const parsed = parseAnnounceNote(message.note, defaultPort);
+    const myLeg = this.callbacks.getPortIndex();
+    const defaultLeg = (myLeg + 1) % FABRIC_LEG_COUNT;
+    const parsed = parseAnnounceNote(message.note, defaultLeg);
 
     if (parsed.instanceId && parsed.instanceId === this.instanceId) {
       console.debug('[RocketBox] announce ignored (own instance)');
@@ -476,17 +487,22 @@ export class WebTransferOrchestrator {
     if (
       !parsed.instanceId &&
       message.from_name === identity.display_name &&
-      parsed.portIndex === myPort
+      parsed.portIndex === myLeg
     ) {
       console.debug('[RocketBox] announce ignored (own station, legacy)');
       return;
     }
 
-    const peerPort = resolveRemoteFabricPort(myPort, parsed.portIndex);
-    console.log(`[RocketBox] announce RECEIVED from "${message.from_name}" (port ${peerPort})`);
+    const peerLeg = resolveRemoteFabricLeg(myLeg, parsed.portIndex);
+    if (peerLeg === null) {
+      boothLog(myLeg, 'announce_echo_reject', `port=${displayPortFromLeg(parsed.portIndex)}`);
+      return;
+    }
+    console.log(`[RocketBox] announce RECEIVED from "${message.from_name}" (leg ${peerLeg})`);
+    boothLog(myLeg, 'announce_received', `${message.from_name} port=${displayPortFromLeg(peerLeg)}`);
     this.callbacks
       .getRoster()
-      .touchPeer(message.from_name, message.team, parsed.receiveStatus, peerPort, parsed.instanceId);
+      .touchPeer(message.from_name, message.team, parsed.receiveStatus, peerLeg, parsed.instanceId);
     this.publishRoster();
   }
 
@@ -585,15 +601,15 @@ export class WebTransferOrchestrator {
     this.readyWaiter?.resolve();
     this.readyWaiter = null;
     if (this.outboundOffer) {
-      // Stop the listener from starting another session IN poll before sendBytes.
-      // runUsb serializes IN+OUT; a stray transferIn blocks payload OUT for seconds.
-      this.payloadSendPending = true;
-      this.listenerPaused = true;
+      this.setLinkActivity('sending');
     }
   }
 
   private async maybeRetransmitOffer(): Promise<void> {
     if (!this.outboundOffer || this.awaitingReady || !this.acceptWaiter) {
+      return;
+    }
+    if (Date.now() < this.offerReceiveGraceUntil) {
       return;
     }
     const intervalMs =
@@ -605,6 +621,7 @@ export class WebTransferOrchestrator {
     this.lastOfferRetransmitMs = now;
     try {
       console.log('[RocketBox] retransmitting offer (no accept yet)');
+      boothLog(this.callbacks.getPortIndex(), 'offer_retransmit', this.outboundOffer.session_id);
       this.pauseListener();
       await sleep(50);
       await this.usb.sendSessionMessage(this.outboundOffer);
@@ -658,6 +675,7 @@ export class WebTransferOrchestrator {
     this.cancelDismissTimer();
     this.busy = true;
     this.pendingInbound = offer;
+    this.setLinkActivity('receiving');
 
     this.callbacks.patch({
       busy: true,
@@ -727,8 +745,7 @@ export class WebTransferOrchestrator {
       this.pendingInbound = null;
       this.pendingInboundAt = 0;
       this.busy = false;
-      this.payloadSendPending = false;
-      this.resumeListener();
+      this.setLinkActivity('idle');
       try {
         const desc = await this.usb.resetConnection();
         this.callbacks.onUsbDescription(desc);
@@ -819,6 +836,7 @@ export class WebTransferOrchestrator {
 
     this.pauseListener();
     await sleep(50);
+    this.setLinkActivity('handshake');
 
     const offer: FabricSessionMessage = {
       kind: 'offer',
@@ -869,6 +887,7 @@ export class WebTransferOrchestrator {
     this.offerReceiveGraceUntil = Date.now() + this.handshake().accept_ready_gap_ms;
     this.lastOfferRetransmitMs = Date.now();
     await sleep(this.handshake().accept_ready_gap_ms);
+    this.setLinkActivity('handshake');
     this.resumeListener();
 
     const acceptTimeoutSec = this.handshake().accept_timeout_sec;
@@ -894,8 +913,7 @@ export class WebTransferOrchestrator {
       const msg = (err as Error).message;
       this.outboundOffer = null;
       this.busy = false;
-      this.payloadSendPending = false;
-      this.resumeListener();
+      this.setLinkActivity('idle');
       if (msg.includes('Declined')) {
         return;
       }
@@ -909,7 +927,7 @@ export class WebTransferOrchestrator {
       return;
     }
 
-    this.pauseListener();
+    this.setLinkActivity('sending');
     await this.usb.prepareForPayloadSend();
     await sleep(50);
 
@@ -952,8 +970,8 @@ export class WebTransferOrchestrator {
     } finally {
       this.outboundOffer = null;
       this.awaitingReady = false;
-      this.payloadSendPending = false;
       this.busy = false;
+      this.setLinkActivity('idle');
       try {
         const desc = await this.usb.resetConnection();
         this.callbacks.onUsbDescription(desc);

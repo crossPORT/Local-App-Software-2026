@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { boothDisplayPresetLabel, receiveStatusToString } from '../lib/config';
+import { getBoothLogLevel, setBoothLogLevel, type BoothLogLevel } from '../lib/booth_log';
+import { FABRIC_LEG_COUNT, displayPortFromLeg } from '../lib/fabric_port';
 import { theme } from '../lib/theme';
 import type { IdentityProfile, PeerConfig, ReceiveStatus } from '../lib/types';
 
@@ -8,6 +10,7 @@ interface SettingsDialogProps {
   portIndex: number;
   onClose: () => void;
   onSave: (identity: IdentityProfile) => void;
+  onOpenEventLog?: () => void;
 }
 
 function emptyPeer(portIndex: number): PeerConfig {
@@ -20,11 +23,12 @@ function emptyPeer(portIndex: number): PeerConfig {
   };
 }
 
-export function SettingsDialog({ identity, portIndex, onClose, onSave }: SettingsDialogProps) {
+export function SettingsDialog({ identity, portIndex, onClose, onSave, onOpenEventLog }: SettingsDialogProps) {
   const [peers, setPeers] = useState<PeerConfig[]>(
     identity.peers.length > 0 ? identity.peers.map((peer) => ({ ...peer })) : [],
   );
   const [boothDisplayEnabled, setBoothDisplayEnabled] = useState(identity.booth_display_enabled);
+  const [debugLogLevel, setDebugLogLevel] = useState<BoothLogLevel>(() => getBoothLogLevel());
   const [error, setError] = useState('');
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -125,6 +129,29 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave }: Setting
             </p>
           </div>
 
+          <div className="settings-toggle-row">
+            <label className="settings-toggle-label">
+              <span>Diagnostic log</span>
+              <select
+                value={debugLogLevel}
+                onChange={(e) => {
+                  const next = e.target.value as BoothLogLevel;
+                  setDebugLogLevel(next);
+                  setBoothLogLevel(next);
+                }}
+              >
+                <option value="off">Off</option>
+                <option value="normal">Normal</option>
+                <option value="verbose">Verbose</option>
+              </select>
+            </label>
+            {onOpenEventLog && (
+              <button type="button" className="settings-inline-btn" onClick={onOpenEventLog}>
+                Open event log
+              </button>
+            )}
+          </div>
+
           <div className="settings-section">
             <div className="settings-section-head">
               <h3>Peer bookmarks (optional)</h3>
@@ -153,10 +180,13 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave }: Setting
                   />
                 </label>
                 <label>
-                  USB port
+                  Fabric port
                   <select name={`peer_${index}_port`} defaultValue={String(peer.port_index)}>
-                    <option value="0">Port 0</option>
-                    <option value="1">Port 1</option>
+                    {Array.from({ length: FABRIC_LEG_COUNT }, (_, leg) => (
+                      <option key={leg} value={String(leg)}>
+                        Port {displayPortFromLeg(leg)}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 {peers.length > 1 && (

@@ -7,12 +7,24 @@ import { PeerRoster } from './peer_roster';
 import { defaultIdentityProfile } from './config';
 import type { AppUiState } from './types';
 
-function makeTransport(): FabricTransport & { sent: FabricSessionMessage[] } {
+function makeTransport(): FabricTransport & {
+  sent: FabricSessionMessage[];
+  sessionHandler: ((message: FabricSessionMessage) => void) | null;
+} {
   const sent: FabricSessionMessage[] = [];
+  let sessionHandler: ((message: FabricSessionMessage) => void) | null = null;
   return {
     sent,
+    get sessionHandler() {
+      return sessionHandler;
+    },
+    set sessionHandler(v) {
+      sessionHandler = v;
+    },
     connected: true,
     getFabricPortIndex: () => 0,
+    getFabricLeg: () => 0,
+    getSerialNumber: () => '0000000000000001',
     connect: async () => '',
     reconnectKnown: async () => '',
     describeDevice: () => '',
@@ -21,8 +33,17 @@ function makeTransport(): FabricTransport & { sent: FabricSessionMessage[] } {
     resetConnection: async () => '',
     ownsDevice: () => false,
     markDisconnected: () => {},
+    setListenMode: () => {},
+    ensureListening: () => {},
+    subscribeSession: (handler) => {
+      sessionHandler = handler;
+      return () => {
+        sessionHandler = null;
+      };
+    },
+    waitForIdle: async () => {},
     sendBytes: async () => {},
-    receiveHeader: async () => ({ fileSize: 0, filename: '' }),
+    receiveHeader: async () => ({ fileSize: 0, filename: '', frameKind: 'payload' as const }),
     receivePayload: async () => new Uint8Array(),
     discardPayload: async () => {},
     receiveBytes: async () => new Uint8Array(),
@@ -69,43 +90,70 @@ function makeOrchestrator(receiveStatus: 'open' | 'ask_first' = 'ask_first') {
 }
 
 describe('WebTransferOrchestrator presence recovery', () => {
-  it('resumes announcing after a stuck payloadSendPending flag while idle', async () => {
+  it('does not stack announces while lastAnnounceMs is still zero', async () => {
+    const { orchestrator, transport } = makeOrchestrator();
+    const orch = orchestrator as unknown as {
+      lastAnnounceMs: number;
+      sessionUnsubscribe: (() => void) | null;
+      tickPresence: (initial: boolean) => Promise<void>;
+    };
+    orch.sessionUnsubscribe = () => {};
+    orch.lastAnnounceMs = 0;
+
+    let releaseSend: (() => void) | null = null;
+    const sendGate = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    transport.sendSessionMessage = async (message: FabricSessionMessage) => {
+      transport.sent.push(message);
+      await sendGate;
+    };
+
+    const first = orch.tickPresence(false);
+    const second = orch.tickPresence(false);
+    await Promise.resolve();
+    expect(transport.sent.filter((m) => m.kind === 'announce')).toHaveLength(1);
+
+    releaseSend?.();
+    await first;
+    await second;
+    expect(transport.sent.filter((m) => m.kind === 'announce')).toHaveLength(1);
+  });
+
+  it('resumes announcing after a stuck link activity while idle', async () => {
     const { orchestrator, transport, patch } = makeOrchestrator();
     const orch = orchestrator as unknown as {
-      payloadSendPending: boolean;
-      listenerPaused: boolean;
+      linkActivity: string;
       lastAnnounceMs: number;
+      sessionUnsubscribe: (() => void) | null;
       tickPresence: (initial: boolean) => Promise<void>;
     };
 
-    // Simulate a transfer that aborted without clearing its in-flight flags
-    // while the station is otherwise idle (no offer/inbound/busy).
-    orch.payloadSendPending = true;
-    orch.listenerPaused = true;
+    orch.linkActivity = 'sending';
     orch.lastAnnounceMs = Date.now() - ANNOUNCE_INTERVAL_MS * 3;
+    orch.sessionUnsubscribe = () => {};
 
     await orch.tickPresence(false);
 
-    expect(orch.payloadSendPending).toBe(false);
-    expect(orch.listenerPaused).toBe(false);
+    expect(orch.linkActivity).toBe('idle');
     expect(transport.sent.some((m) => m.kind === 'announce')).toBe(true);
     expect(patch).toHaveBeenCalledWith(expect.objectContaining({ lastAnnounceMs: expect.any(Number) }));
   });
 
-  it('does not clear handshake flags during an active outbound transfer', async () => {
+  it('does not clear activity during an active outbound transfer', async () => {
     const { orchestrator, transport } = makeOrchestrator();
     const orch = orchestrator as unknown as {
-      payloadSendPending: boolean;
+      linkActivity: string;
       busy: boolean;
       tickPresence: (initial: boolean) => Promise<void>;
     };
 
     orch.busy = true;
-    orch.payloadSendPending = true;
+    orch.linkActivity = 'sending';
 
     await orch.tickPresence(false);
 
-    expect(orch.payloadSendPending).toBe(true);
+    expect(orch.linkActivity).toBe('sending');
     expect(transport.sent.some((m) => m.kind === 'announce')).toBe(false);
   });
 });
@@ -119,7 +167,6 @@ describe('WebTransferOrchestrator incoming offer handling', () => {
       handleOffer: (message: FabricSessionMessage) => Promise<void>;
     };
 
-    // A previous offer left pendingInbound wedged (e.g. mobile froze the dialog timer).
     orch.pendingInbound = makeOffer('old-session');
     orch.pendingInboundAt = Date.now() - 1000;
 
@@ -151,7 +198,6 @@ describe('WebTransferOrchestrator incoming offer handling', () => {
 
   it('still shows the receive dialog when Notification throws (Android Chrome)', async () => {
     const original = (globalThis as { Notification?: unknown }).Notification;
-    // Android Chrome: the Notification constructor throws "Illegal constructor".
     class ThrowingNotification {
       static permission = 'granted';
       constructor() {
@@ -183,17 +229,34 @@ describe('WebTransferOrchestrator incoming offer handling', () => {
       pendingInbound: FabricSessionMessage | null;
       pendingInboundAt: number;
       lastAnnounceMs: number;
+      sessionUnsubscribe: (() => void) | null;
       tickPresence: (initial: boolean) => Promise<void>;
     };
 
     orch.pendingInbound = makeOffer('wedged-session');
     orch.pendingInboundAt = Date.now() - 70_000;
     orch.lastAnnounceMs = Date.now() - ANNOUNCE_INTERVAL_MS * 2;
+    orch.sessionUnsubscribe = () => {};
 
     await orch.tickPresence(false);
 
     expect(orch.pendingInbound).toBeNull();
     expect(patch).toHaveBeenCalledWith(expect.objectContaining({ pendingOffer: null }));
     expect(transport.sent.some((m) => m.kind === 'announce')).toBe(true);
+  });
+});
+
+describe('WebTransferOrchestrator activity gate', () => {
+  it('suppresses announces while link activity is not idle', async () => {
+    const { orchestrator, transport } = makeOrchestrator();
+    const orch = orchestrator as unknown as {
+      linkActivity: string;
+      sessionUnsubscribe: (() => void) | null;
+      maybeSendAnnounce: (force: boolean) => Promise<void>;
+    };
+    orch.sessionUnsubscribe = () => {};
+    orch.linkActivity = 'handshake';
+    await orch.maybeSendAnnounce(true);
+    expect(transport.sent.some((m) => m.kind === 'announce')).toBe(false);
   });
 });

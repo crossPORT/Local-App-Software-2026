@@ -2,6 +2,7 @@
 
 #include "booth_log.h"
 #include "fabric_link_policy.h"
+#include "fabric_port.h"
 #include "fabric_sim.h"
 #include "usb_protocol.h"
 
@@ -109,7 +110,8 @@ void TransferController::loopback_test(const std::string& path) {
 TransferResult TransferController::send_on_port(int port_index,
                                                 const std::string& path,
                                                 ProgressCallback progress_cb,
-                                                unsigned timeout_ms) {
+                                                unsigned timeout_ms,
+                                                uint8_t frame_kind) {
     if (!usb_ctx_) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "libusb not initialized"};
     }
@@ -122,7 +124,7 @@ TransferResult TransferController::send_on_port(int port_index,
     }
     TransferResult result = fabric_sim_enabled()
         ? fabric_sim_send_file(path, port_index, std::move(progress_cb), timeout_ms)
-        : send_file_core(usb_ctx_, path, port_index, std::move(progress_cb), timeout_ms);
+        : send_file_core(usb_ctx_, path, port_index, std::move(progress_cb), timeout_ms, frame_kind);
     booth_log(port_index_,
               result.ok ? "usb_send_ok" : "usb_send_fail",
               path + " bytes=" + std::to_string(result.bytes_transferred)
@@ -133,7 +135,8 @@ TransferResult TransferController::send_on_port(int port_index,
 TransferResult TransferController::receive_on_port(int port_index,
                                                    const std::string& path,
                                                    ProgressCallback progress_cb,
-                                                   unsigned header_timeout_ms) {
+                                                   unsigned header_timeout_ms,
+                                                   uint8_t expected_frame_kind) {
     if (!usb_ctx_) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "libusb not initialized"};
     }
@@ -147,7 +150,7 @@ TransferResult TransferController::receive_on_port(int port_index,
     TransferResult result = fabric_sim_enabled()
         ? fabric_sim_receive_file(path, port_index, std::move(progress_cb), header_timeout_ms)
         : receive_file_core(usb_ctx_, path, port_index, std::move(progress_cb),
-                            header_timeout_ms);
+                            header_timeout_ms, expected_frame_kind);
     if (!result.ok && header_timeout_ms <= usb_protocol::kSessionHeaderTimeoutMs + 1) {
         // Session listener polls frequently; only log non-timeout failures.
         if (result.error_message != "Header read failed") {
@@ -231,20 +234,41 @@ bool TransferController::fabric_port_available() const {
 }
 
 std::string TransferController::fabric_device_label() const {
-    if (!usb_ctx_ || port_index_ < 0) {
-        return cached_device_label_;
-    }
-    uint8_t bus = 0;
-    uint8_t addr = 0;
-    if (!fabric_device_bus_addr(port_index_, &bus, &addr)) {
-        return cached_device_label_;
-    }
-    std::ostringstream out;
-    out << "USB cable · bus " << static_cast<int>(bus)
-        << " · addr " << static_cast<int>(addr)
-        << " · port " << port_index_;
-    cached_device_label_ = out.str();
+    (void)fabric_leg();
     return cached_device_label_;
+}
+
+std::string TransferController::fabric_device_serial() const {
+    if (!cached_device_serial_.empty() || port_index_ < 0) {
+        return cached_device_serial_;
+    }
+    if (!usb_ctx_) {
+        return {};
+    }
+    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
+    if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
+        return {};
+    }
+    cached_device_serial_ = fabric_sim_enabled()
+        ? std::string()
+        : ::fabric_device_serial(usb_ctx_, port_index_);
+    return cached_device_serial_;
+}
+
+int TransferController::fabric_leg() const {
+    if (cached_fabric_leg_ >= 0) {
+        return cached_fabric_leg_;
+    }
+    if (port_index_ < 0) {
+        return 0;
+    }
+    const std::string serial = fabric_device_serial();
+    cached_fabric_leg_ = fabric_leg_from_serial(serial);
+    if (cached_fabric_leg_ < 0) {
+        cached_fabric_leg_ = port_index_;
+    }
+    cached_device_label_ = format_fabric_port_label(cached_fabric_leg_);
+    return cached_fabric_leg_;
 }
 
 bool TransferController::fabric_device_bus_addr(int port_index,

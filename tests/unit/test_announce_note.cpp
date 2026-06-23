@@ -4,7 +4,7 @@
 
 FABRIC_TEST(announce_note_round_trip) {
     const std::string note = build_announce_note(1, ReceiveStatus::Open);
-    CHECK_STREQ(note, "port=1;receive=open");
+    CHECK_STREQ(note, "port=2;receive=open");
 
     int port = -1;
     ReceiveStatus status = ReceiveStatus::Busy;
@@ -26,8 +26,8 @@ FABRIC_TEST(announce_note_parses_instance) {
 }
 
 FABRIC_TEST(announce_note_resolve_remote_port) {
-    CHECK_EQ(resolve_remote_fabric_port(0, 0), 1);
-    CHECK_EQ(resolve_remote_fabric_port(1, 1), 0);
+    CHECK_EQ(resolve_remote_fabric_port(0, 0), -1);
+    CHECK_EQ(resolve_remote_fabric_port(1, 1), -1);
     CHECK_EQ(resolve_remote_fabric_port(0, 1), 1);
 }
 
@@ -45,4 +45,12 @@ FABRIC_TEST(announce_note_parses_receive_only) {
     CHECK(parse_announce_note("receive=busy", 2, &port, &status, nullptr));
     CHECK_EQ(port, 2);
     CHECK(status == ReceiveStatus::Busy);
+}
+
+FABRIC_TEST(announce_note_parses_legacy_zero_based_wire_port) {
+    int port = -1;
+    ReceiveStatus status = ReceiveStatus::AskFirst;
+    CHECK(parse_announce_note("port=0;receive=open", 1, &port, &status, nullptr));
+    CHECK_EQ(port, 0);
+    CHECK(status == ReceiveStatus::Open);
 }

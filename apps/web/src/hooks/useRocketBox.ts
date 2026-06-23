@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadIdentityProfileAsync, saveIdentityProfile, applyBoothDisplaySettings } from '../lib/config';
+import { applyBoothDisplaySettings, loadIdentityProfileAsync, saveIdentityProfile } from '../lib/config';
 import { PeerRoster } from '../lib/peer_roster';
 import { formatUsbConnectError } from '../lib/user_errors';
 import type { AppUiState, IdentityProfile } from '../lib/types';
@@ -8,8 +8,10 @@ import { WebTransferOrchestrator } from '../lib/web_transfer_orchestrator';
 import {
   countTransportDevices,
   createTransportSession,
+  clearTransportSavedPairing,
   transportHasSavedSerial,
 } from '../transport_factory';
+import { webUsbBlockedReason } from '../lib/webusb_env';
 
 export function identityNeedsSetup(identity: IdentityProfile): boolean {
   return !identity.display_name.trim();
@@ -23,6 +25,8 @@ function readIdentityPortHint(): number {
 }
 
 const MANUAL_DISCONNECT_KEY = 'rocketbox-manual-disconnect';
+/** Ignore the sub-second disconnect blip from a transfer's resetConnection. */
+const AUTO_RECOVER_MIN_DOWN_MS = 3_000;
 
 function pickSelectedPeer(roster: PeerRoster, portIndex: number, current: string): string {
   if (current && roster.findById(current)) {
@@ -44,7 +48,7 @@ function syncFabricPortIndex(
 export function useRocketBox() {
   const identityPortHint = readIdentityPortHint();
   const portIndexRef = useRef(0);
-  const sessionRef = useRef(createTransportSession(identityPortHint));
+  const sessionRef = useRef(createTransportSession());
   const rosterRef = useRef(new PeerRoster());
   const orchestratorRef = useRef<WebTransferOrchestrator | null>(null);
   const disconnectingRef = useRef(false);
@@ -169,7 +173,16 @@ export function useRocketBox() {
       if (sessionRef.current.ownsDevice(event.device)) {
         sessionRef.current.markDisconnected();
         orchestratorRef.current?.stopListener();
-        rosterRef.current.setAllPeersOffline();
+        // A user-initiated disconnect should drop everyone. A transient/auto
+        // disconnect (cable blip the recover loop will heal) should only age out
+        // stale peers — recently-seen peers stay "online" in the roster map so
+        // they reappear immediately on reconnect instead of waiting ~10s for the
+        // remote to re-announce.
+        if (sessionStorage.getItem(MANUAL_DISCONNECT_KEY) === '1') {
+          rosterRef.current.setAllPeersOffline();
+        } else {
+          rosterRef.current.markStalePeersOffline();
+        }
         patch({
           usbConnected: false,
           fabricConnected: false,
@@ -204,15 +217,26 @@ export function useRocketBox() {
   const applyUsbConnected = useCallback(
     async (desc: string) => {
       const fabricPort = syncFabricPortIndex(sessionRef.current, portIndexRef);
+      const legIdentity = await loadIdentityProfileAsync(fabricPort);
       setUsbDescription(desc);
       const count = await countTransportDevices();
-      patch({
-        portIndex: fabricPort,
-        usbConnected: true,
-        fabricDevicesSeen: count,
-        fabricConnected: true,
-        roster: rosterRef.current.visiblePeers(true),
-        errorMessage: '',
+      patch((prev) => {
+        const mergedIdentity = {
+          ...prev.identity,
+          display_name: prev.identity.display_name.trim() || legIdentity.display_name,
+          team: prev.identity.team.trim() || legIdentity.team,
+          receive_status: prev.identity.receive_status || legIdentity.receive_status,
+        };
+        identityRef.current = mergedIdentity;
+        return {
+          portIndex: fabricPort,
+          identity: mergedIdentity,
+          usbConnected: true,
+          fabricDevicesSeen: count,
+          fabricConnected: true,
+          roster: rosterRef.current.visiblePeers(true),
+          errorMessage: '',
+        };
       });
       if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
         void Notification.requestPermission();
@@ -224,6 +248,11 @@ export function useRocketBox() {
 
   const connectUsb = useCallback(async () => {
     try {
+      const blocked = webUsbBlockedReason();
+      if (blocked) {
+        patchError(blocked);
+        return;
+      }
       patch({ errorMessage: '' });
       sessionStorage.removeItem(MANUAL_DISCONNECT_KEY);
       clearTransferState();
@@ -232,6 +261,7 @@ export function useRocketBox() {
         try {
           desc = await sessionRef.current.reconnectKnown();
         } catch {
+          clearTransportSavedPairing();
           desc = await sessionRef.current.connect();
         }
       } else {
@@ -246,31 +276,44 @@ export function useRocketBox() {
     }
   }, [applyUsbConnected, clearTransferState, patch, patchError]);
 
-  const reconnectUsb = useCallback(async () => {
-    try {
-      orchestratorRef.current?.stopListener();
-      clearTransferState();
-      const desc = await sessionRef.current.reconnectKnown();
-      await applyUsbConnected(desc);
-    } catch (err) {
-      const message = formatUsbConnectError(err);
-      if (message) {
-        patchError(message);
+  const reconnectUsb = useCallback(
+    async (pickerFallback = false) => {
+      try {
+        const blocked = webUsbBlockedReason();
+        if (blocked) {
+          patchError(blocked);
+          return;
+        }
+        orchestratorRef.current?.stopListener();
+        clearTransferState();
+        let desc: string;
+        try {
+          desc = await sessionRef.current.reconnectKnown();
+        } catch (err) {
+          if (!pickerFallback) {
+            throw err;
+          }
+          clearTransportSavedPairing();
+          desc = await sessionRef.current.connect();
+        }
+        await applyUsbConnected(desc);
+      } catch (err) {
+        const message = formatUsbConnectError(err);
+        if (message) {
+          patchError(message);
+        }
       }
-    }
-  }, [applyUsbConnected, clearTransferState, patchError]);
+    },
+    [applyUsbConnected, clearTransferState, patchError],
+  );
 
   const recoverUsb = useCallback(async () => {
-    sessionStorage.removeItem(MANUAL_DISCONNECT_KEY);
-    if (transportHasSavedSerial()) {
-      await reconnectUsb();
-      return;
-    }
     await connectUsb();
-  }, [connectUsb, reconnectUsb]);
+  }, [connectUsb]);
 
   useEffect(() => {
     let staleTick = 0;
+    let disconnectedSinceMs = 0;
     const tick = async () => {
       if (!hasStateRef.current) {
         return;
@@ -279,19 +322,30 @@ export function useRocketBox() {
       const usbConnected = sessionRef.current.connected;
       const portIndex = portIndexRef.current;
       if (usbConnected) {
+        disconnectedSinceMs = 0;
         staleTick += 1;
         if (staleTick >= 15) {
           rosterRef.current.markStalePeersOffline();
           staleTick = 0;
         }
-      } else if (
-        count > 0 &&
-        transportHasSavedSerial() &&
-        sessionStorage.getItem(MANUAL_DISCONNECT_KEY) !== '1' &&
-        Date.now() - lastAutoRecoverMsRef.current >= 12_000
-      ) {
-        lastAutoRecoverMsRef.current = Date.now();
-        void reconnectUsb();
+      } else {
+        // A transfer ends with a deliberate disconnect→reconnect (resetConnection)
+        // that briefly reports `connected === false`. Do NOT auto-recover on that
+        // transient blip — a competing reconnect causes interface-claim contention.
+        // Only recover once the link has stayed down for a sustained window.
+        if (disconnectedSinceMs === 0) {
+          disconnectedSinceMs = Date.now();
+        }
+        if (
+          Date.now() - disconnectedSinceMs >= AUTO_RECOVER_MIN_DOWN_MS &&
+          count > 0 &&
+          transportHasSavedSerial() &&
+          sessionStorage.getItem(MANUAL_DISCONNECT_KEY) !== '1' &&
+          Date.now() - lastAutoRecoverMsRef.current >= 12_000
+        ) {
+          lastAutoRecoverMsRef.current = Date.now();
+          void reconnectUsb();
+        }
       }
       patch((prev) => ({
         usbConnected,
@@ -367,8 +421,10 @@ export function useRocketBox() {
 
   const saveIdentity = useCallback(
     (identity: IdentityProfile) => {
-      saveIdentityProfile(identityPortHint, identity);
-      const applied = applyBoothDisplaySettings(identity, identityPortHint);
+      const storagePort = portIndexRef.current;
+      saveIdentityProfile(storagePort, identity);
+      const applied = applyBoothDisplaySettings(identity, storagePort);
+      identityRef.current = applied;
       rosterRef.current.seedFromConfig(applied.peers);
       const portIndex = portIndexRef.current;
       patch({
@@ -381,7 +437,7 @@ export function useRocketBox() {
         ensureOrchestrator().sendAnnounceNow();
       }
     },
-    [ensureOrchestrator, identityPortHint, patch, state?.selectedPeer, state?.usbConnected],
+    [ensureOrchestrator, patch, state?.selectedPeer, state?.usbConnected],
   );
 
   const sendToPeer = useCallback(

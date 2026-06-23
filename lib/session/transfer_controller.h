@@ -62,11 +62,13 @@ public:
     TransferResult send_on_port(int port_index,
                                 const std::string& path,
                                 ProgressCallback progress_cb = nullptr,
-                                unsigned timeout_ms = usb_protocol::kFileTimeoutMs);
+                                unsigned timeout_ms = usb_protocol::kFileTimeoutMs,
+                                uint8_t frame_kind = usb_protocol::kFrameKindPayload);
     TransferResult receive_on_port(int port_index,
                                    const std::string& path,
                                    ProgressCallback progress_cb = nullptr,
-                                   unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs);
+                                   unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
+                                   uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
     TransferResult loopback_on_ports(const std::string& path,
                                      int send_port_index,
                                      int recv_port_index,
@@ -77,6 +79,8 @@ public:
     int fabric_device_count() const;
     bool fabric_port_available() const;
     std::string fabric_device_label() const;
+    std::string fabric_device_serial() const;
+    int fabric_leg() const;
     void request_shutdown();
     bool is_shutting_down() const;
     bool fabric_device_bus_addr(int port_index, uint8_t* bus, uint8_t* addr) const;
@@ -106,5 +110,7 @@ private:
     mutable std::atomic<bool> last_port_present_{false};
     mutable std::atomic<int> last_device_count_{0};
     mutable std::string cached_device_label_;
+    mutable int cached_fabric_leg_ = -1;
+    mutable std::string cached_device_serial_;
     std::string transfer_detail_;
 };

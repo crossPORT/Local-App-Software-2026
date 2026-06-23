@@ -41,13 +41,16 @@ TransferResult send_file_core(libusb_context* ctx,
                               const std::string& path,
                               int port_index,
                               ProgressCallback progress_cb = nullptr,
-                              unsigned timeout_ms = usb_protocol::kFileTimeoutMs);
+                              unsigned timeout_ms = usb_protocol::kFileTimeoutMs,
+                              uint8_t frame_kind = usb_protocol::kFrameKindPayload,
+                              const std::string& header_filename = {});
 
 TransferResult receive_file_core(libusb_context* ctx,
                                  const std::string& out_path,
                                  int port_index,
                                  ProgressCallback progress_cb = nullptr,
-                                 unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs);
+                                 unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
+                                 uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
 
 struct FabricUsbDevice {
     uint8_t bus = 0;
@@ -72,6 +75,9 @@ bool fabric_device_bus_addr(libusb_context* ctx,
                             int port_index,
                             uint8_t* bus_out,
                             uint8_t* addr_out);
+
+// USB serial string for the Nth matching fabric device (empty if unavailable).
+std::string fabric_device_serial(libusb_context* ctx, int port_index);
 
 // Send on send_port_index, receive on recv_port_index in parallel (same-PC loopback).
 TransferResult loopback_transfer_core(libusb_context* ctx,

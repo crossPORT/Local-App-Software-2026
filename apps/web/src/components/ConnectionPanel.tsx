@@ -3,14 +3,14 @@ import type { AppUiState } from '../lib/types';
 import { effectiveDisplayMbps, isOutboundHandshakeWait } from '../lib/format';
 import { ActivityMonitor } from './ActivityMonitor';
 
-function deviceMetaLine(portIndex: number, devicesSeen: number): string {
+function deviceMetaLine(devicesSeen: number): string {
   if (devicesSeen === 0) {
-    return `Port ${portIndex} · no devices detected`;
+    return 'No devices detected';
   }
   if (devicesSeen === 1) {
-    return `Port ${portIndex} · 1 device connected`;
+    return 'Connected';
   }
-  return `Port ${portIndex} · ${devicesSeen} devices connected`;
+  return `${devicesSeen} devices — pick your cable in the USB dialog`;
 }
 
 interface ConnectionPanelProps {
@@ -55,15 +55,18 @@ export function ConnectionPanel({
           <div className="connection-device" style={{ color: theme.text }}>
             {usbDescription || 'USB cable connected'}
           </div>
-          <div className="connection-meta" style={{ color: theme.muted }}>
-            {deviceMetaLine(state.portIndex, state.fabricDevicesSeen)}
-          </div>
+          {state.fabricDevicesSeen > 1 && (
+            <div className="connection-meta" style={{ color: theme.muted }}>
+              {deviceMetaLine(state.fabricDevicesSeen)}
+            </div>
+          )}
           <ActivityMonitor
             visible
             compact
             persistHistory
             sessionPulse={state.fabricActivitySeq}
             transferMbps={chartMbps}
+            resultMbps={state.resultMbps}
             scaleFloorMbps={scaleFloorMbps}
           />
         </>

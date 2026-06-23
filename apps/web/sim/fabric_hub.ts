@@ -1,16 +1,20 @@
-import { FabricUsbError } from '../src/lib/fabric_usb';
+import { FabricUsbError } from '../src/lib/fabric_errors';
 
-const CHANNEL_NAME = 'rocketbox-fabric-sim-v1';
+const CHANNEL_NAME = 'rocketbox-fabric-sim-v2';
+
+/** Simulated cable serials — leg = (parseInt(serial,16)-1) % 4 */
+export const SIM_CABLE_SERIALS = [
+  '0000000000000001',
+  '0000000000000002',
+  '0000000000000003',
+  '0000000000000004',
+] as const;
 
 type HubMessage = {
   type: 'transmit';
-  fromPort: number;
+  fromSerial: string;
   data: ArrayBuffer;
 };
-
-function peerPort(fromPort: number): number {
-  return fromPort === 0 ? 1 : 0;
-}
 
 class SimReceiveBuffer {
   private chunks: Uint8Array[] = [];
@@ -79,7 +83,6 @@ class SimReceiveBuffer {
     return this.drain(count);
   }
 
-  /** One logical USB transferIn — up to maxBytes from the wire stream. */
   async readUpTo(maxBytes: number, timeoutMs: number): Promise<Uint8Array> {
     const deadlineMs = Date.now() + timeoutMs;
     await this.waitForData(deadlineMs);
@@ -88,13 +91,13 @@ class SimReceiveBuffer {
   }
 }
 
-const rxByPort = new Map<number, SimReceiveBuffer>();
+const rxBySerial = new Map<string, SimReceiveBuffer>();
 
-function rxForPort(portIndex: number): SimReceiveBuffer {
-  let buffer = rxByPort.get(portIndex);
+function rxForSerial(serial: string): SimReceiveBuffer {
+  let buffer = rxBySerial.get(serial);
   if (!buffer) {
     buffer = new SimReceiveBuffer();
-    rxByPort.set(portIndex, buffer);
+    rxBySerial.set(serial, buffer);
   }
   return buffer;
 }
@@ -113,31 +116,35 @@ function ensureChannel(): BroadcastChannel | null {
     channelReady = true;
     channel.addEventListener('message', (event: MessageEvent<HubMessage>) => {
       const msg = event.data;
-      if (msg?.type !== 'transmit') {
+      if (msg?.type !== 'transmit' || !msg.fromSerial) {
         return;
       }
-      rxForPort(peerPort(msg.fromPort)).append(new Uint8Array(msg.data));
+      for (const serial of SIM_CABLE_SERIALS) {
+        if (serial !== msg.fromSerial) {
+          rxForSerial(serial).append(new Uint8Array(msg.data));
+        }
+      }
     });
   }
   return channel;
 }
 
 export function fabricHubReset(): void {
-  for (const buffer of rxByPort.values()) {
+  for (const buffer of rxBySerial.values()) {
     buffer.clear();
   }
 }
 
-export function fabricHubTransmit(fromPort: number, data: Uint8Array): void {
+export function fabricHubTransmit(fromSerial: string, data: Uint8Array): void {
   const bus = ensureChannel();
   if (!bus) {
     throw new FabricUsbError('Sim fabric requires BroadcastChannel (use two browser tabs)');
   }
   const copy = data.slice();
-  bus.postMessage({ type: 'transmit', fromPort, data: copy.buffer });
+  bus.postMessage({ type: 'transmit', fromSerial, data: copy.buffer });
 }
 
-export function fabricHubReceiveBuffer(portIndex: number): SimReceiveBuffer {
+export function fabricHubReceiveBuffer(serial: string): SimReceiveBuffer {
   ensureChannel();
-  return rxForPort(portIndex);
+  return rxForSerial(serial);
 }

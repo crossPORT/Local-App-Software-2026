@@ -1,4 +1,6 @@
 add_library(rocketbox_session STATIC
+    fabric_port.cpp
+    session_rate_stats.cpp
     platform_util.cpp
     transfer_controller.cpp
     session_config.cpp

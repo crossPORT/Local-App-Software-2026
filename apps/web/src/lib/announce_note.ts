@@ -1,3 +1,4 @@
+import { FABRIC_LEG_COUNT, legFromWirePort, wirePortFromLeg } from './fabric_port';
 import type { ReceiveStatus } from './types';
 
 export interface ParsedAnnounceNote {
@@ -11,7 +12,7 @@ export function buildAnnounceNote(
   receiveStatus: ReceiveStatus,
   instanceId = '',
 ): string {
-  let note = `port=${portIndex};receive=${receiveStatus}`;
+  let note = `port=${wirePortFromLeg(portIndex)};receive=${receiveStatus}`;
   if (instanceId) {
     note += `;instance=${instanceId}`;
   }
@@ -27,8 +28,9 @@ export function parseAnnounceNote(note: string, defaultPort: number): ParsedAnno
     const trimmed = token.trim();
     if (trimmed.startsWith('port=')) {
       const parsed = Number.parseInt(trimmed.slice('port='.length), 10);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        portIndex = parsed;
+      const leg = legFromWirePort(parsed);
+      if (leg !== null) {
+        portIndex = leg;
       }
       continue;
     }
@@ -51,8 +53,18 @@ export function parseAnnounceNote(note: string, defaultPort: number): ParsedAnno
   return { portIndex, receiveStatus, instanceId };
 }
 
-/** Map an announced port to a remote fabric port (never our own slot). */
+/** Remote leg from peer announce; null if echo or invalid. */
+export function resolveRemoteFabricLeg(myLeg: number, announcedLeg: number): number | null {
+  if (announcedLeg === myLeg) {
+    return null;
+  }
+  if (announcedLeg < 0 || announcedLeg >= FABRIC_LEG_COUNT) {
+    return null;
+  }
+  return announcedLeg;
+}
+
+/** @deprecated use resolveRemoteFabricLeg */
 export function resolveRemoteFabricPort(myPort: number, announcedPort: number): number {
-  const otherPort = myPort === 0 ? 1 : 0;
-  return announcedPort === myPort ? otherPort : announcedPort;
+  return resolveRemoteFabricLeg(myPort, announcedPort) ?? announcedPort;
 }

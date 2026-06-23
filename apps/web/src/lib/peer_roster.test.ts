@@ -64,6 +64,21 @@ describe('PeerRoster', () => {
     vi.useRealTimers();
   });
 
+  it('keeps a freshly-seen peer online across a transient disconnect (markStale)', () => {
+    // A brief auto-recover reconnect must not wipe presence: only setAllPeersOffline
+    // (manual disconnect) should drop a fresh peer; markStalePeersOffline keeps it
+    // so it reappears instantly on reconnect instead of waiting for a re-announce.
+    const fresh = new PeerRoster();
+    fresh.touchPeer('Alice', 'CAD', 'open', 0);
+    fresh.markStalePeersOffline();
+    expect(fresh.visiblePeers(true)).toHaveLength(1);
+
+    const manual = new PeerRoster();
+    manual.touchPeer('Alice', 'CAD', 'open', 0);
+    manual.setAllPeersOffline();
+    expect(manual.visiblePeers(true)).toHaveLength(0);
+  });
+
   it('hides roster when fabric is disconnected', () => {
     const roster = new PeerRoster();
     roster.touchPeer('Alice', 'CAD', 'open', 0);
@@ -75,5 +90,15 @@ describe('PeerRoster', () => {
     roster.touchPeer('Zed', 'T', 'open', 2);
     roster.touchPeer('Amy', 'T', 'open', 1);
     expect(roster.visiblePeers(true).map((peer) => peer.display_name)).toEqual(['Amy', 'Zed']);
+  });
+
+  it('tracks three online remotes on legs 1–3', () => {
+    const roster = new PeerRoster();
+    roster.touchPeer('Booth-A', 'T', 'open', 1);
+    roster.touchPeer('Booth-B', 'T', 'ask_first', 2);
+    roster.touchPeer('Booth-C', 'T', 'open', 3);
+    const visible = roster.visiblePeers(true);
+    expect(visible).toHaveLength(3);
+    expect(visible.map((peer) => peer.port_index).sort()).toEqual([1, 2, 3]);
   });
 });

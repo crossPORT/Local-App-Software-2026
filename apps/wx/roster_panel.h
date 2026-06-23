@@ -35,7 +35,10 @@ public:
 
 private:
     struct PeerRowWidgets {
+        int leg = -1;
+        bool offline = false;
         std::string display_name;
+        wxStaticText* name_label = nullptr;
         wxStaticText* sublabel = nullptr;
         PeerEntry peer;
     };
@@ -49,13 +52,14 @@ private:
     std::string PeerSublineText(const PeerEntry& peer) const;
     std::string AnnounceLabelText() const;
     void UpdateEmptyState();
-    std::vector<std::string> VisiblePeerNames() const;
-    bool LayoutNeedsRebuild(const std::vector<std::string>& visible_names) const;
+    void SyncPeersContainerHeight();
+    std::vector<std::string> SlotSignature() const;
+    bool LayoutNeedsRebuild(const std::vector<std::string>& slot_signature) const;
 
     struct RosterLayoutKey {
         bool fabric_connected = false;
-        int fabric_devices_seen = 0;
-        std::vector<std::string> visible_names;
+        int local_leg = -1;
+        std::vector<std::string> slot_signature;
     };
 
     RosterLayoutKey layout_key_{};

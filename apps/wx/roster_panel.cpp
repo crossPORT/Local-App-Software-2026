@@ -1,10 +1,12 @@
 #include "roster_panel.h"
 
+#include "fabric_port.h"
 #include "link_status.h"
 
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <optional>
 #include <sstream>
 #include <vector>
 #include <wx/button.h>
@@ -12,6 +14,7 @@
 #include <wx/dnd.h>
 #include <wx/filedlg.h>
 #include <wx/sizer.h>
+#include <wx/display.h>
 
 const wxColour kPanel(0x1a, 0x23, 0x32);
 const wxColour kRow(0x12, 0x18, 0x22);
@@ -23,10 +26,17 @@ const wxColour kMuted(0x88, 0x99, 0xaa);
 const wxColour kSubText(0xa8, 0xb8, 0xc8);
 const wxColour kAccent(0x00, 0xd4, 0xaa);
 const wxColour kOnlineDot(0x3d, 0xdb, 0x8a);
+const wxColour kOfflineDot(0x5a, 0x6a, 0x7a);
+const wxColour kOfflineRow(0x10, 0x14, 0x1c);
 const wxColour kBorder(0x24, 0x30, 0x42);
 const wxColour kChooseBorder(0x5a, 0x7a, 0x8a);
 
 enum { ID_CountdownTimer = wxID_HIGHEST + 400 };
+
+constexpr int kOnlineDropZoneHeight = 64;
+constexpr int kOfflineDropZoneHeight = 30;
+constexpr int kDropHintFontPt = 9;
+constexpr int kChooseFontPt = 9;
 
 wxStaticText* MakeLabel(wxWindow* parent,
                         const wxString& text,
@@ -52,8 +62,8 @@ int64_t steady_now_ms() {
 std::vector<PeerEntry> visible_peers(const std::vector<PeerEntry>& peers,
                                      bool fabric_connected,
                                      const IdentityProfile& self,
-                                     int /*local_port_index*/) {
-    if (!fabric_connected) {
+                                     int local_leg) {
+    if (!fabric_connected || local_leg < 0) {
         return {};
     }
     std::vector<PeerEntry> online;
@@ -69,6 +79,42 @@ std::vector<PeerEntry> visible_peers(const std::vector<PeerEntry>& peers,
     return online;
 }
 
+struct RosterSlot {
+    int leg = 0;
+    std::optional<PeerEntry> peer;
+};
+
+std::vector<RosterSlot> roster_slots(const std::vector<PeerEntry>& peers,
+                                     bool fabric_connected,
+                                     const IdentityProfile& self,
+                                     int local_leg) {
+    std::vector<RosterSlot> slots;
+    if (!fabric_connected || local_leg < 0) {
+        return slots;
+    }
+    for (int leg : remote_fabric_legs(local_leg)) {
+        RosterSlot slot{leg, std::nullopt};
+        for (const PeerEntry& peer : peers) {
+            if (peer.online && peer.port_index == leg && peer.display_name != self.display_name) {
+                slot.peer = peer;
+                break;
+            }
+        }
+        slots.push_back(slot);
+    }
+    return slots;
+}
+
+std::vector<std::string> roster_slot_signature(const std::vector<RosterSlot>& slots) {
+    std::vector<std::string> sig;
+    sig.reserve(slots.size());
+    for (const RosterSlot& slot : slots) {
+        sig.push_back(std::to_string(slot.leg) + ":"
+                      + (slot.peer ? slot.peer->display_name : std::string{}));
+    }
+    return sig;
+}
+
 class PeerDropZonePanel;
 
 class PeerDropZonePanel : public wxPanel {
@@ -76,12 +122,16 @@ public:
     PeerDropZonePanel(RosterPanel* roster, wxWindow* parent, std::string peer_name);
 
     void SetTransferState(bool active, const wxString& status_hint = wxEmptyString);
+    void SetOffline(bool offline);
     void SetPeerName(const std::string& peer_name);
     void SetDragActive(bool active);
     void AttachDropTarget();
 
 private:
     wxString DropHintText() const {
+        if (offline_) {
+            return "Not connected";
+        }
         if (busy_) {
             return "Transfer in progress…";
         }
@@ -117,6 +167,7 @@ private:
     void OnChooseRowPaint(wxPaintEvent&);
     void UpdateDropZoneFill();
 
+    bool offline_ = false;
     RosterPanel* roster_ = nullptr;
     std::string peer_name_;
     bool busy_ = false;
@@ -176,39 +227,37 @@ PeerDropZonePanel::PeerDropZonePanel(RosterPanel* roster,
     , roster_(roster)
     , peer_name_(std::move(peer_name)) {
     SetBackgroundStyle(wxBG_STYLE_PAINT);
-    SetMinSize(wxSize(-1, 108));
+    SetMinSize(wxSize(-1, kOnlineDropZoneHeight));
+    SetMaxSize(wxSize(-1, kOnlineDropZoneHeight));
     SetBackgroundColour(kRow);
 
     auto* outer = new wxBoxSizer(wxVERTICAL);
     body_ = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
     body_->SetBackgroundColour(kDropZone);
-    body_->SetMinSize(wxSize(-1, 104));
+    body_->SetMinSize(wxSize(-1, kOnlineDropZoneHeight - 4));
+    body_->SetMaxSize(wxSize(-1, kOnlineDropZoneHeight - 4));
 
     auto* root = new wxBoxSizer(wxVERTICAL);
 
-    // Plain panel (no border) — bare wxStaticText on dark GTK panels is invisible.
     hint_row_ = new wxPanel(body_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
     hint_row_->SetBackgroundColour(kDropZone);
     auto* hint_sizer = new wxBoxSizer(wxHORIZONTAL);
     hint_sizer->AddStretchSpacer();
-    hint_label_ = MakeLabel(hint_row_, DropHintText(), kAccent, 11);
-    hint_label_->Wrap(460);
+    hint_label_ = MakeLabel(hint_row_, DropHintText(), kAccent, kDropHintFontPt);
+    hint_label_->Wrap(440);
     hint_sizer->Add(hint_label_, 0, wxALIGN_CENTER_VERTICAL);
     hint_sizer->AddStretchSpacer();
     hint_row_->SetSizer(hint_sizer);
 
-    root->AddStretchSpacer(1);
-    root->Add(hint_row_, 0, wxEXPAND | wxLEFT | wxRIGHT, 14);
-    root->AddSpacer(12);
-
     choose_row_ = new wxPanel(body_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
     choose_row_->SetBackgroundStyle(wxBG_STYLE_PAINT);
     choose_row_->SetBackgroundColour(kRow);
-    choose_row_->SetMinSize(wxSize(148, 36));
+    choose_row_->SetMinSize(wxSize(132, 28));
+    choose_row_->SetMaxSize(wxSize(-1, 28));
     choose_row_->SetCursor(wxCursor(wxCURSOR_HAND));
     choose_row_->Bind(wxEVT_PAINT, &PeerDropZonePanel::OnChooseRowPaint, this);
     auto* choose_sizer = new wxBoxSizer(wxHORIZONTAL);
-    choose_label_ = MakeLabel(choose_row_, "Choose file...", kText, 11);
+    choose_label_ = MakeLabel(choose_row_, "Choose file...", kText, kChooseFontPt);
     choose_sizer->AddStretchSpacer();
     choose_sizer->Add(choose_label_, 0, wxALIGN_CENTER_VERTICAL);
     choose_sizer->AddStretchSpacer();
@@ -217,12 +266,14 @@ PeerDropZonePanel::PeerDropZonePanel(RosterPanel* roster,
         event.StopPropagation();
         OnChooseFile();
     });
-    root->Add(choose_row_, 0, wxALIGN_CENTER_HORIZONTAL | wxLEFT | wxRIGHT, 14);
-    root->AddSpacer(12);
+
+    root->AddStretchSpacer(1);
+    root->Add(hint_row_, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+    root->Add(choose_row_, 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 4);
     root->AddStretchSpacer(1);
     body_->SetSizer(root);
 
-    outer->Add(body_, 1, wxEXPAND | wxALL, 2);
+    outer->Add(body_, 0, wxEXPAND | wxALL, 2);
     SetSizer(outer);
 
     Bind(wxEVT_PAINT, &PeerDropZonePanel::OnPaint, this);
@@ -264,11 +315,61 @@ void PeerDropZonePanel::OnChooseRowPaint(wxPaintEvent& event) {
     event.Skip();
 }
 
+void PeerDropZonePanel::SetOffline(bool offline) {
+    if (offline_ == offline) {
+        return;
+    }
+    offline_ = offline;
+    const int zone_h = offline ? kOfflineDropZoneHeight : kOnlineDropZoneHeight;
+    SetMinSize(wxSize(-1, zone_h));
+    SetMaxSize(wxSize(-1, zone_h));
+    if (body_) {
+        body_->SetMinSize(wxSize(-1, zone_h - 4));
+        body_->SetMaxSize(wxSize(-1, zone_h - 4));
+    }
+    if (offline) {
+        busy_ = false;
+        drag_active_ = false;
+        SetDropTarget(nullptr);
+        if (choose_row_) {
+            choose_row_->Enable(false);
+            choose_row_->Hide();
+        }
+        if (hint_label_) {
+            hint_label_->SetLabel("Not connected");
+            wxFont font = hint_label_->GetFont();
+            font.SetPointSize(kDropHintFontPt);
+            font.SetWeight(wxFONTWEIGHT_NORMAL);
+            hint_label_->SetFont(font);
+            hint_label_->SetForegroundColour(kMuted);
+        }
+    } else {
+        if (choose_row_) {
+            choose_row_->Enable(true);
+            choose_row_->Show();
+        }
+        AttachDropTarget();
+        if (hint_label_) {
+            hint_label_->SetLabel(DropHintText());
+            hint_label_->SetForegroundColour(kAccent);
+        }
+    }
+    UpdateDropZoneFill();
+    Layout();
+}
+
 void PeerDropZonePanel::AttachDropTarget() {
+    if (offline_) {
+        SetDropTarget(nullptr);
+        return;
+    }
     SetDropTarget(new RosterPanel::PeerDropZoneTarget(roster_, this, peer_name_));
 }
 
 void PeerDropZonePanel::SetTransferState(bool active, const wxString& status_hint) {
+    if (offline_) {
+        return;
+    }
     wxString new_text;
     if (active) {
         new_text = status_hint.empty() ? "Transfer in progress…" : status_hint;
@@ -286,13 +387,13 @@ void PeerDropZonePanel::SetTransferState(bool active, const wxString& status_hin
     hint_label_->SetLabel(new_text);
     if (active) {
         wxFont font = hint_label_->GetFont();
-        font.SetPointSize(12);
+        font.SetPointSize(kDropHintFontPt);
         font.SetWeight(wxFONTWEIGHT_BOLD);
         hint_label_->SetFont(font);
         hint_label_->SetForegroundColour(kText);
     } else {
         wxFont font = hint_label_->GetFont();
-        font.SetPointSize(11);
+        font.SetPointSize(kDropHintFontPt);
         font.SetWeight(wxFONTWEIGHT_NORMAL);
         hint_label_->SetFont(font);
         hint_label_->SetForegroundColour(drag_active_ ? kAccent : kAccent);
@@ -433,7 +534,8 @@ RosterPanel::RosterPanel(wxWindow* parent,
     container_sizer->Add(settings_inline_btn_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
 
     peers_sizer_ = new wxBoxSizer(wxVERTICAL);
-    container_sizer->Add(peers_sizer_, 0, wxEXPAND);
+    container_sizer->Add(peers_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 0);
+    container_sizer->AddSpacer(10);
     peers_container_->SetSizer(container_sizer);
     root->Add(peers_container_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 12);
     root->AddSpacer(8);
@@ -441,6 +543,25 @@ RosterPanel::RosterPanel(wxWindow* parent,
 
     countdown_timer_ = new wxTimer(this, ID_CountdownTimer);
     Bind(wxEVT_TIMER, &RosterPanel::OnCountdownTimer, this, ID_CountdownTimer);
+}
+
+void RosterPanel::SyncPeersContainerHeight() {
+    if (!peers_container_ || !peers_sizer_) {
+        return;
+    }
+
+    peers_container_->Layout();
+    peers_sizer_->Layout();
+
+    if (peer_rows_.empty()) {
+        peers_container_->SetMinSize(wxDefaultSize);
+        peers_container_->SetMaxSize(wxDefaultSize);
+        return;
+    }
+
+    const int content_h = std::max(peers_container_->GetSizer()->GetMinSize().GetHeight(), 1);
+    peers_container_->SetMinSize(wxSize(-1, content_h));
+    peers_container_->SetMaxSize(wxSize(-1, content_h));
 }
 
 void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
@@ -460,41 +581,35 @@ void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
     transfer_status_ = transfer_status;
     last_announce_ms_ = last_announce_ms;
 
-    const std::vector<std::string> visible_names = VisiblePeerNames();
-    if (LayoutNeedsRebuild(visible_names)) {
+    const std::vector<std::string> slot_signature = SlotSignature();
+    if (LayoutNeedsRebuild(slot_signature)) {
         layout_key_.fabric_connected = fabric_connected_;
-        layout_key_.fabric_devices_seen = fabric_devices_seen_;
-        layout_key_.visible_names = visible_names;
+        layout_key_.local_leg = port_index_;
+        layout_key_.slot_signature = slot_signature;
         RebuildList();
         return;
     }
 
-    if (visible_names.empty()) {
+    if (!fabric_connected_) {
         UpdateEmptyState();
     }
     RefreshCountdowns();
 }
 
-std::vector<std::string> RosterPanel::VisiblePeerNames() const {
-    const std::vector<PeerEntry> visible =
-        visible_peers(peers_, fabric_connected_, self_, port_index_);
-    std::vector<std::string> names;
-    names.reserve(visible.size());
-    for (const PeerEntry& peer : visible) {
-        names.push_back(peer.display_name);
-    }
-    return names;
+std::vector<std::string> RosterPanel::SlotSignature() const {
+    return roster_slot_signature(roster_slots(peers_, fabric_connected_, self_, port_index_));
 }
 
-bool RosterPanel::LayoutNeedsRebuild(const std::vector<std::string>& visible_names) const {
+bool RosterPanel::LayoutNeedsRebuild(const std::vector<std::string>& slot_signature) const {
     return layout_key_.fabric_connected != fabric_connected_
-        || layout_key_.fabric_devices_seen != fabric_devices_seen_
-        || layout_key_.visible_names != visible_names;
+        || layout_key_.local_leg != port_index_
+        || layout_key_.slot_signature != slot_signature;
 }
 
 std::string RosterPanel::PeerSublineText(const PeerEntry& peer) const {
     std::ostringstream sub;
-    sub << receive_status_label(peer.receive_status) << " · Port " << peer.port_index;
+    sub << receive_status_label(peer.receive_status) << " · port "
+        << display_port_from_leg(peer.port_index);
     const std::string expires = peer_expires_label(peer.last_seen, std::chrono::steady_clock::now());
     if (!expires.empty()) {
         sub << " · " << expires;
@@ -521,9 +636,6 @@ void RosterPanel::UpdateEmptyState() {
         peers_empty_label_->SetLabel(identity_configured
                                          ? "Connect USB to discover other stations"
                                          : "Set your name in Settings, then connect USB");
-    } else {
-        peers_empty_label_->SetLabel(
-            "Listening for other stations — make sure the other app is connected too");
     }
 
     if (show_settings_action) {
@@ -548,44 +660,60 @@ void RosterPanel::RebuildList() {
         }
     }
 
-    const std::vector<PeerEntry> visible =
-        visible_peers(peers_, fabric_connected_, self_, port_index_);
+    const std::vector<RosterSlot> slots =
+        roster_slots(peers_, fabric_connected_, self_, port_index_);
 
-    if (visible.empty()) {
+    if (slots.empty()) {
         selected_peer_.clear();
         if (on_peer_selected_) {
             on_peer_selected_(selected_peer_);
         }
         UpdateEmptyState();
         peers_empty_label_->Show();
-        peers_sizer_->Show(false);
+        peers_sizer_->Clear(false);
         countdown_timer_->Stop();
+        SyncPeersContainerHeight();
+        peers_container_->Layout();
         Layout();
         return;
     }
 
     peers_empty_label_->Hide();
     settings_inline_btn_->Hide();
-    peers_sizer_->Show(true);
+
+    std::vector<PeerEntry> online;
+    online.reserve(slots.size());
+    for (const RosterSlot& slot : slots) {
+        if (slot.peer) {
+            online.push_back(*slot.peer);
+        }
+    }
 
     bool selected_still_valid = false;
-    for (const PeerEntry& peer : visible) {
+    for (const PeerEntry& peer : online) {
         if (peer.display_name == selected_peer_) {
             selected_still_valid = true;
             break;
         }
     }
     if (!selected_still_valid) {
-        selected_peer_ = visible.front().display_name;
+        selected_peer_ = online.empty() ? std::string{} : online.front().display_name;
     }
 
-    for (const PeerEntry& peer : visible) {
-        const bool selected = (peer.display_name == selected_peer_);
+    for (const RosterSlot& slot : slots) {
+        const bool offline = !slot.peer.has_value();
+        PeerEntry peer{};
+        if (offline) {
+            peer.port_index = slot.leg;
+            peer.online = false;
+        } else {
+            peer = *slot.peer;
+        }
+        const bool selected = !offline && peer.display_name == selected_peer_;
+        const wxColour row_fill = offline ? kOfflineRow : (selected ? kRowSelected : kRow);
+        const wxColour row_border = offline ? kBorder : (selected ? kAccent : kBorder);
 
-        auto* row = new PeerRowPanel(peers_container_,
-                                     selected ? kRowSelected : kRow,
-                                     selected ? kAccent : kBorder,
-                                     selected);
+        auto* row = new PeerRowPanel(peers_container_, row_fill, row_border, selected && !offline);
         auto* row_sizer = new wxBoxSizer(wxVERTICAL);
 
         auto* meta_row = new wxBoxSizer(wxHORIZONTAL);
@@ -594,48 +722,59 @@ void RosterPanel::RebuildList() {
                                          wxDefaultPosition,
                                          wxSize(8, 8),
                                          wxBORDER_NONE);
-        presence_dot->SetBackgroundColour(kOnlineDot);
+        presence_dot->SetBackgroundColour(offline ? kOfflineDot : kOnlineDot);
         presence_dot->SetMinSize(wxSize(8, 8));
         presence_dot->SetMaxSize(wxSize(8, 8));
-        meta_row->Add(presence_dot, 0, wxALIGN_TOP | wxLEFT | wxTOP, 14);
-        meta_row->AddSpacer(12);
+        meta_row->Add(presence_dot, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
+        meta_row->AddSpacer(10);
 
         auto* name_col = new wxBoxSizer(wxVERTICAL);
-        auto* name_label = MakeLabel(row,
-                                     peer.display_name,
-                                     kText,
-                                     14,
-                                     wxFONTWEIGHT_BOLD);
+        wxString title;
+        wxString subtitle;
+        wxStaticText* sub_label = nullptr;
+        if (offline) {
+            title = wxString::Format("Port %d", display_port_from_leg(slot.leg));
+        } else {
+            title = wxString::FromUTF8(peer.display_name.c_str());
+            subtitle = wxString::FromUTF8(PeerSublineText(peer).c_str());
+        }
+        auto* name_label = MakeLabel(row, title, offline ? kMuted : kText, 12, wxFONTWEIGHT_BOLD);
         name_col->Add(name_label, 0);
-        auto* sub_label = MakeLabel(row,
-                                    wxString::FromUTF8(PeerSublineText(peer).c_str()),
-                                    kSubText,
-                                    11);
-        name_col->Add(sub_label, 0, wxTOP, 4);
-        meta_row->Add(name_col, 1, wxEXPAND | wxTOP | wxRIGHT, 14);
+        if (!offline) {
+            sub_label = MakeLabel(row, subtitle, kSubText, 10);
+            name_col->Add(sub_label, 0, wxTOP, 2);
+        }
+        meta_row->Add(name_col, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
 
-        row_sizer->Add(meta_row, 0, wxEXPAND);
+        row_sizer->Add(meta_row, 0, wxEXPAND | wxTOP, 8);
 
-        auto* drop_zone = new PeerDropZonePanel(this, row, peer.display_name);
-        drop_zone->SetTransferState(
-            transfer_busy_,
-            transfer_busy_ ? wxString::FromUTF8(transfer_status_.c_str()) : wxString());
-        row_sizer->Add(drop_zone, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 12);
+        const std::string drop_peer_name = offline ? std::string{} : peer.display_name;
+        auto* drop_zone = new PeerDropZonePanel(this, row, drop_peer_name);
+        drop_zone->SetOffline(offline);
+        if (!offline) {
+            drop_zone->SetTransferState(
+                transfer_busy_,
+                transfer_busy_ ? wxString::FromUTF8(transfer_status_.c_str()) : wxString());
+        }
+        row_sizer->Add(drop_zone, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+        row_sizer->AddSpacer(10);
 
         row->SetSizer(row_sizer);
 
-        peer_rows_.push_back({peer.display_name, sub_label, peer});
+        peer_rows_.push_back({slot.leg, offline, drop_peer_name, name_label, sub_label, peer});
         drop_zones_.push_back(drop_zone);
 
-        const std::string peer_name = peer.display_name;
-        auto select_peer = [this, peer_name](wxMouseEvent& event) {
-            event.Skip();
-            OnPeerRowClicked(peer_name);
-        };
-        row->Bind(wxEVT_LEFT_UP, select_peer);
-        name_label->Bind(wxEVT_LEFT_UP, select_peer);
-        sub_label->Bind(wxEVT_LEFT_UP, select_peer);
-        presence_dot->Bind(wxEVT_LEFT_UP, select_peer);
+        if (!offline) {
+            const std::string peer_name = peer.display_name;
+            auto select_peer = [this, peer_name](wxMouseEvent& event) {
+                event.Skip();
+                OnPeerRowClicked(peer_name);
+            };
+            row->Bind(wxEVT_LEFT_UP, select_peer);
+            name_label->Bind(wxEVT_LEFT_UP, select_peer);
+            sub_label->Bind(wxEVT_LEFT_UP, select_peer);
+            presence_dot->Bind(wxEVT_LEFT_UP, select_peer);
+        }
 
         peers_sizer_->Add(row, 0, wxEXPAND | wxBOTTOM, 10);
     }
@@ -648,6 +787,7 @@ void RosterPanel::RebuildList() {
         countdown_timer_->Start(1000);
     }
 
+    SyncPeersContainerHeight();
     peers_container_->Layout();
     Layout();
 }
@@ -664,21 +804,22 @@ void RosterPanel::RefreshCountdowns() {
     }
 
     for (PeerDropZonePanel* zone : drop_zones_) {
-        if (zone) {
-            zone->SetTransferState(
-                transfer_busy_,
-                transfer_busy_ ? wxString::FromUTF8(transfer_status_.c_str()) : wxString());
+        if (!zone) {
+            continue;
         }
+        zone->SetTransferState(
+            transfer_busy_,
+            transfer_busy_ ? wxString::FromUTF8(transfer_status_.c_str()) : wxString());
     }
 
-    const auto now = std::chrono::steady_clock::now();
     for (PeerRowWidgets& row : peer_rows_) {
-        if (!row.sublabel) {
+        if (row.offline || !row.sublabel) {
             continue;
         }
         for (const PeerEntry& peer : peers_) {
-            if (peer.display_name == row.display_name) {
+            if (peer.online && peer.port_index == row.leg) {
                 row.peer = peer;
+                row.display_name = peer.display_name;
                 break;
             }
         }

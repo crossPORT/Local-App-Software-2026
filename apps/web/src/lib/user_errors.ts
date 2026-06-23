@@ -1,4 +1,4 @@
-import { FabricUsbError } from './fabric_usb';
+import { FabricUsbError } from './fabric_errors';
 
 /** User closed the browser USB picker without choosing a device. */
 export function isUsbPickerCancel(err: unknown): boolean {
@@ -31,7 +31,10 @@ export function formatUsbConnectError(err: unknown): string | null {
     return 'USB device disconnected — plug in the cable and try Connect USB again.';
   }
   if (message.includes('No saved cable') || message.includes('No USB device')) {
-    return 'Cable not found — plug it in, then click Connect USB.';
+    return 'Cable not found — plug it in, then tap Connect USB and pick it in the browser dialog.';
+  }
+  if (message.includes('Previously paired device not found')) {
+    return 'Saved cable not found — tap Connect USB and pick your cable in the browser dialog.';
   }
   return 'Could not connect — check the cable and try Connect USB again.';
 }

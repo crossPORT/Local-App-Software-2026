@@ -20,7 +20,8 @@ using Clock = std::chrono::steady_clock;
 struct FileHeader {
     uint8_t  magic[8];
     uint64_t file_size;
-    uint8_t  reserved[16];
+    uint8_t  frame_kind;
+    uint8_t  filename[15];
 };
 
 static_assert(sizeof(FileHeader) == usb_protocol::kHeaderSize);
@@ -157,10 +158,13 @@ bool valid_port(int port_index, std::string* error_out) {
     return true;
 }
 
-void fill_header(FileHeader* hdr, uint64_t file_size) {
+void fill_header(FileHeader* hdr,
+               uint64_t file_size,
+               uint8_t frame_kind = usb_protocol::kFrameKindPayload) {
     std::memcpy(hdr->magic, usb_protocol::kHeaderMagic, 8);
     hdr->file_size = file_size;
-    std::memset(hdr->reserved, 0, sizeof(hdr->reserved));
+    hdr->frame_kind = frame_kind;
+    std::memset(hdr->filename, 0, sizeof(hdr->filename));
 }
 
 }  // namespace

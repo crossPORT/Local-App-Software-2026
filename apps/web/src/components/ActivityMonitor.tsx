@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react';
 import { ActivityHistory } from '../lib/activity_history';
 import { formatMbps } from '../lib/format';
 import { theme } from '../lib/theme';
+import { useSessionRates } from '../hooks/useSessionRates';
 
 interface ActivityMonitorProps {
   visible: boolean;
   sessionPulse: number;
   transferMbps: number;
+  /** Latest completed-transfer rate; used to accumulate session median/max/avg. */
+  resultMbps?: number;
   scaleFloorMbps?: number;
   compact?: boolean;
   persistHistory?: boolean;
@@ -94,14 +97,53 @@ function drawActivityMonitor(
   ctx.fillText('transfer', transferX + swatch + 6, legendY);
 }
 
+function SessionRateRow({
+  median,
+  max,
+  average,
+  count,
+  compact,
+}: {
+  median: number;
+  max: number;
+  average: number;
+  count: number;
+  compact: boolean;
+}) {
+  const cells = [
+    { label: 'median', value: median },
+    { label: 'max', value: max },
+    { label: 'avg', value: average },
+  ];
+  return (
+    <div
+      className={`activity-rate-stats${compact ? ' activity-rate-stats--compact' : ''}`}
+      aria-label={`Session transfer rates, ${count} transfers`}
+    >
+      {cells.map((cell) => (
+        <div key={cell.label} className="activity-rate-cell">
+          <span className="activity-rate-value" style={{ color: theme.text }}>
+            {formatMbps(cell.value)}
+          </span>
+          <span className="activity-rate-label" style={{ color: theme.muted }}>
+            {cell.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ActivityMonitor({
   visible,
   sessionPulse,
   transferMbps,
+  resultMbps = 0,
   scaleFloorMbps = 0,
   compact = false,
   persistHistory = false,
 }: ActivityMonitorProps) {
+  const { stats } = useSessionRates(resultMbps);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const historyRef = useRef(new ActivityHistory());
   const lastSessionPulseRef = useRef(0);
@@ -166,26 +208,38 @@ export function ActivityMonitor({
     return null;
   }
 
-  const showSpeed = transferMbps > 0;
+  const showLive = transferMbps > 0;
+  const showSessionStats = stats.count > 0;
 
   return (
     <div className={`activity-monitor${compact ? ' activity-monitor--compact' : ''}`}>
-      <div className="activity-monitor-head">
-        {showSpeed ? (
-          <>
-            <span className="activity-speed-value" style={{ color: theme.accent }}>
-              {formatMbps(transferMbps)}
+      {(showLive || showSessionStats) && (
+        <div className={`activity-monitor-head${showLive ? ' activity-monitor-head--live' : ''}`}>
+          {showLive ? (
+            <div className="activity-monitor-live">
+              <span className="activity-speed-value" style={{ color: theme.accent }}>
+                {formatMbps(transferMbps)}
+              </span>
+              <span className="activity-speed-label" style={{ color: theme.muted }}>
+                live
+              </span>
+            </div>
+          ) : (
+            <span className="activity-session-count" style={{ color: theme.muted }}>
+              {stats.count} {stats.count === 1 ? 'transfer' : 'transfers'}
             </span>
-            <span className="activity-speed-label" style={{ color: theme.muted }}>
-              throughput
-            </span>
-          </>
-        ) : (
-          <span className="activity-speed-idle" style={{ color: theme.muted }}>
-            Device active
-          </span>
-        )}
-      </div>
+          )}
+          {showSessionStats && (
+            <SessionRateRow
+              median={stats.median}
+              max={stats.max}
+              average={stats.average}
+              count={stats.count}
+              compact={compact}
+            />
+          )}
+        </div>
+      )}
       <canvas ref={canvasRef} className="activity-monitor-canvas" />
     </div>
   );

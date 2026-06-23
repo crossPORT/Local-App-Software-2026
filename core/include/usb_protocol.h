@@ -21,6 +21,15 @@ constexpr std::size_t kChunkSize = 4 * 1024 * 1024;
 constexpr std::size_t kQueueDepth = 32;
 constexpr std::size_t kPoolSize = kQueueDepth + 2;
 
+// ROCKETBX header byte 16 — required on every frame (no legacy kind).
+constexpr int kFrameKindOffset = 16;
+constexpr int kFrameFilenameOffset = 17;
+constexpr int kFrameFilenameMax = 15;
+constexpr uint8_t kFrameKindSession = 1;
+constexpr uint8_t kFrameKindPayload = 2;
+
+constexpr int kFabricLegCount = 4;
+
 // Default per-chunk payload timeout (backstop for a stream that stalls while the
 // device stays enumerated). This is per 4 MB chunk / per 32-byte header send, so
 // 8s is a generous backstop (>=0.5 MB/s) while still surfacing a wedged routing

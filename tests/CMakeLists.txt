@@ -28,6 +28,8 @@ add_executable(unit-tests
     unit/test_fabric_link_policy.cpp
     unit/test_fabric_sim.cpp
     unit/test_fabric_tar_pack.cpp
+    unit/test_session_rate_stats.cpp
+    unit/test_fabric_port.cpp
 )
 target_include_directories(unit-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(unit-tests PRIVATE

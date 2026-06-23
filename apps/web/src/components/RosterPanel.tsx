@@ -1,7 +1,9 @@
+import { displayPortFromLeg } from '../lib/fabric_port';
 import { useEffect, useRef, useState } from 'react';
 import { collectDropFiles } from '../lib/collect_drop_files';
 import { isOutboundHandshakeWait, peerRosterLabel, receiveStatusLabel } from '../lib/format';
 import { DEFAULT_STALE_MS } from '../lib/peer_roster';
+import { rosterSlots } from '../lib/roster_slots';
 import { theme } from '../lib/theme';
 import type { PeerEntry } from '../lib/types';
 import { ANNOUNCE_INTERVAL_MS } from '../lib/web_transfer_orchestrator';
@@ -10,6 +12,8 @@ interface RosterPanelProps {
   peers: PeerEntry[];
   fabricConnected: boolean;
   identityConfigured: boolean;
+  identityDisplayName: string;
+  localLeg: number;
   busy: boolean;
   statusMessage: string;
   selectedPeer: string;
@@ -29,7 +33,7 @@ function rosterEmptyMessage(
       ? 'Connect USB to discover other stations'
       : 'Set your name in Settings, then connect USB';
   }
-  return 'Listening for other stations — make sure the other app is connected too';
+  return '';
 }
 
 function useTickSeconds(): number {
@@ -50,6 +54,8 @@ export function RosterPanel({
   peers,
   fabricConnected,
   identityConfigured,
+  identityDisplayName,
+  localLeg,
   busy,
   statusMessage,
   selectedPeer,
@@ -60,7 +66,13 @@ export function RosterPanel({
   onDropError,
 }: RosterPanelProps) {
   const now = useTickSeconds();
-  const visible = fabricConnected ? peers.filter((p) => p.online) : [];
+  const slots = rosterSlots(
+    peers,
+    fabricConnected,
+    { display_name: identityDisplayName },
+    localLeg,
+  );
+  const onlinePeers = slots.flatMap((slot) => (slot.peer ? [slot.peer] : []));
   const empty = rosterEmptyMessage(fabricConnected, identityConfigured);
   const showSettingsAction = !identityConfigured && onOpenSettings;
 
@@ -89,7 +101,7 @@ export function RosterPanel({
         )}
       </div>
       <div className="peers-container">
-        {visible.length === 0 ? (
+        {slots.length === 0 ? (
           <div className="roster-empty">
             <p className="empty-hint" style={{ color: theme.muted }}>
               {empty}
@@ -101,21 +113,39 @@ export function RosterPanel({
             )}
           </div>
         ) : (
-          visible.map((peer) => {
-            const label = peerRosterLabel(peer, visible);
+          slots.map((slot) => {
+            if (slot.peer) {
+              const label = peerRosterLabel(slot.peer, onlinePeers);
+              return (
+                <PeerRow
+                  key={`leg-${slot.leg}`}
+                  peer={slot.peer}
+                  label={label}
+                  offline={false}
+                  selected={selectedPeer === slot.peer.id}
+                  busy={busy && selectedPeer === slot.peer.id}
+                  statusMessage={statusMessage}
+                  now={now}
+                  onSelect={() => onSelectPeer(slot.peer!.id)}
+                  onFiles={(files) => onDropFiles(slot.peer!.id, files)}
+                  onDropError={onDropError}
+                />
+              );
+            }
             return (
-            <PeerRow
-              key={peer.id}
-              peer={peer}
-              label={label}
-              selected={selectedPeer === peer.id}
-              busy={busy && selectedPeer === peer.id}
-              statusMessage={statusMessage}
-              now={now}
-              onSelect={() => onSelectPeer(peer.id)}
-              onFiles={(files) => onDropFiles(peer.id, files)}
-              onDropError={onDropError}
-            />
+              <PeerRow
+                key={`leg-${slot.leg}`}
+                peer={null}
+                label={`Port ${displayPortFromLeg(slot.leg)}`}
+                offline
+                leg={slot.leg}
+                selected={false}
+                busy={false}
+                statusMessage=""
+                now={now}
+                onSelect={() => {}}
+                onFiles={() => {}}
+              />
             );
           })
         )}
@@ -135,6 +165,8 @@ function peerTimerLabel(lastSeenMs: number, now: number): string {
 function PeerRow({
   peer,
   label,
+  offline,
+  leg = -1,
   selected,
   busy,
   statusMessage,
@@ -143,8 +175,10 @@ function PeerRow({
   onFiles,
   onDropError,
 }: {
-  peer: PeerEntry;
+  peer: PeerEntry | null;
   label: string;
+  offline: boolean;
+  leg?: number;
   selected: boolean;
   busy: boolean;
   statusMessage: string;
@@ -157,7 +191,7 @@ function PeerRow({
   const [dragActive, setDragActive] = useState(false);
   const dragDepthRef = useRef(0);
 
-  const allowDrop = !busy;
+  const allowDrop = !busy && !offline;
 
   const onDragEnter = (e: React.DragEvent) => {
     if (!allowDrop) {
@@ -212,16 +246,20 @@ function PeerRow({
 
   return (
     <div
-      className={`peer-row${selected ? ' selected' : ''}${dragActive ? ' drag-active' : ''}${busy ? ' busy' : ''}`}
-      style={{ background: selected ? theme.rowSelected : theme.row }}
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          onSelect();
-        }
-      }}
+      className={`peer-row${selected ? ' selected' : ''}${dragActive ? ' drag-active' : ''}${busy ? ' busy' : ''}${offline ? ' offline' : ''}`}
+      style={{ background: offline ? theme.offlineRow : selected ? theme.rowSelected : theme.row }}
+      onClick={offline ? undefined : onSelect}
+      role={offline ? undefined : 'button'}
+      tabIndex={offline ? -1 : 0}
+      onKeyDown={
+        offline
+          ? undefined
+          : (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                onSelect();
+              }
+            }
+      }
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
@@ -229,19 +267,36 @@ function PeerRow({
         void handleDrop(e);
       }}
     >
-      <span className="presence-dot" style={{ background: theme.ok }} aria-hidden />
+      <span
+        className="presence-dot"
+        style={{ background: offline ? theme.offlineDot : theme.ok }}
+        aria-hidden
+      />
       <div className="peer-meta">
-        <div className="peer-name">{label}</div>
+        <div className="peer-name" style={{ color: offline ? theme.muted : theme.text }}>
+          {label}
+        </div>
         <div className="peer-sub" style={{ color: theme.muted }}>
-          {receiveStatusLabel(peer.receive_status)} · Port {peer.port_index}
-          {peer.lastSeenMs > 0 && <> · {peerTimerLabel(peer.lastSeenMs, now)}</>}
+          {offline ? (
+            <>Not connected — waiting for announce · port {displayPortFromLeg(leg)}</>
+          ) : (
+            <>
+              {receiveStatusLabel(peer!.receive_status)} · port {displayPortFromLeg(peer!.port_index)}
+              {peer!.lastSeenMs > 0 && <> · {peerTimerLabel(peer!.lastSeenMs, now)}</>}
+            </>
+          )}
         </div>
       </div>
       <div
-        className={`drop-zone${busy ? ' disabled' : ''}${dragActive ? ' drag-active' : ''}`}
-        style={{ background: theme.dropZone, borderColor: dragActive ? theme.accent : theme.accent + '66' }}
+        className={`drop-zone${busy || offline ? ' disabled' : ''}${dragActive ? ' drag-active' : ''}`}
+        style={{
+          background: offline ? theme.offlineDropZone : theme.dropZone,
+          borderColor: dragActive ? theme.accent : theme.accent + '66',
+        }}
       >
-        {busy ? (
+        {offline ? (
+          <span style={{ color: theme.muted }}>Not connected</span>
+        ) : busy ? (
           <span style={{ color: theme.muted }}>
             {isOutboundHandshakeWait(statusMessage)
               ? statusMessage.replace(/\s*\(\d+s\)\s*$/, '…')

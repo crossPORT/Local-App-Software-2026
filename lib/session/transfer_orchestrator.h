@@ -160,6 +160,12 @@ private:
 
     std::string instance_id_;
 
+    /** Set while accept→ready→receive runs; suppresses duplicate offer retransmits. */
+    std::optional<std::string> accepting_inbound_session_id_;
+
+    /** Last inbound session that finished successfully; suppresses duplicate accept. */
+    std::optional<std::string> last_completed_inbound_session_id_;
+
     std::atomic<uint64_t> dismiss_epoch_{0};
 
     // Presence-probe throttle (presence thread only).

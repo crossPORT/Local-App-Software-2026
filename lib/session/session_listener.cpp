@@ -54,7 +54,7 @@ bool send_session_message(TransferController& controller,
     const unsigned effective_timeout = timeout_ms > 0 ? timeout_ms : kSessionSendTimeoutMs;
     TransferResult send =
         controller.send_on_port(sender_port_index, session_path, nullptr,
-                              effective_timeout);
+                              effective_timeout, usb_protocol::kFrameKindSession);
     std::remove(session_path.c_str());
     if (!send.ok) {
         if (error_out) {
@@ -169,7 +169,7 @@ void SessionListener::listen_loop() {
 
         in_receive_.store(true, std::memory_order_release);
         TransferResult result = controller_->receive_on_port(
-            port_index_, recv_path, nullptr, header_timeout);
+            port_index_, recv_path, nullptr, header_timeout, /*expected_frame_kind=*/0);
         in_receive_.store(false, std::memory_order_release);
         last_receive_end_ms_.store(
             std::chrono::duration_cast<std::chrono::milliseconds>(

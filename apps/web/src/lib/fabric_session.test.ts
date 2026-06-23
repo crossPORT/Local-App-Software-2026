@@ -73,7 +73,7 @@ describe('session message builders', () => {
     const message = buildAnnounceMessage(sampleIdentity(), 1, 'abc123');
     expect(message.kind).toBe('announce');
     expect(message.from_name).toBe('Alice');
-    expect(message.note).toBe('port=1;receive=open;instance=abc123');
+    expect(message.note).toBe('port=2;receive=open;instance=abc123');
     expect(message.session_id).toHaveLength(16);
   });
 

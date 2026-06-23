@@ -10,15 +10,25 @@ import {
 
 describe('ROCKETBX header', () => {
   it('builds and parses a payload header', () => {
-    const header = buildHeader(4096, 'handshake.bin');
+    const header = buildHeader(4096, { frameKind: 'payload', filename: 'handshake.bin' });
     expect(header.byteLength).toBe(HEADER_SIZE);
     const parsed = parseHeader(header);
     expect(parsed.fileSize).toBe(4096);
     expect(parsed.filename).toBe('handshake.bin');
+    expect(parsed.frameKind).toBe('payload');
+  });
+
+  it('builds and parses a session header', () => {
+    const parsed = parseHeader(buildHeader(128, { frameKind: 'session' }));
+    expect(parsed.fileSize).toBe(128);
+    expect(parsed.frameKind).toBe('session');
+    expect(parsed.filename).toBe('');
   });
 
   it('truncates filename to 15 bytes', () => {
-    const parsed = parseHeader(buildHeader(1, 'very-long-filename.bin'));
+    const parsed = parseHeader(
+      buildHeader(1, { frameKind: 'payload', filename: 'very-long-filename.bin' }),
+    );
     expect(parsed.filename).toBe('very-long-filen');
   });
 
@@ -27,12 +37,19 @@ describe('ROCKETBX header', () => {
     expect(() => parseHeader(buf)).toThrow(/Bad header magic/);
   });
 
+  it('rejects invalid frame kind', () => {
+    const buf = buildHeader(1, { frameKind: 'payload' });
+    const view = new DataView(buf);
+    view.setUint8(16, 0);
+    expect(() => parseHeader(buf)).toThrow(/Invalid frame kind/);
+  });
+
   it('rejects short buffers', () => {
     expect(() => parseHeader(new Uint8Array(8))).toThrow(/Header too short/);
   });
 
   it('preserves magic bytes', () => {
-    const view = new Uint8Array(buildHeader(0));
+    const view = new Uint8Array(buildHeader(0, { frameKind: 'session' }));
     const magic = String.fromCharCode(...view.slice(0, HEADER_MAGIC.length));
     expect(magic).toBe(HEADER_MAGIC);
   });

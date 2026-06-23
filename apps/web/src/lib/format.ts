@@ -1,3 +1,5 @@
+import { displayPortFromLeg } from './fabric_port';
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -124,5 +126,5 @@ export function peerRosterLabel(peer: { display_name: string; port_index: number
   if (!duplicates) {
     return peer.display_name;
   }
-  return `${peer.display_name} · port ${peer.port_index}`;
+  return `${peer.display_name} · port ${displayPortFromLeg(peer.port_index)}`;
 }

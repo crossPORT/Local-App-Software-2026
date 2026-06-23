@@ -1,5 +1,6 @@
 #include "booth_log.h"
 
+#include "fabric_port.h"
 #include "platform_util.h"
 
 #include <cstdlib>
@@ -78,7 +79,8 @@ void booth_log(int port, const std::string& event, const std::string& detail) {
     }
 
     std::ostringstream line;
-    line << platform::format_timestamp_iso8601_ms() << " [port=" << port << "] " << event;
+    line << platform::format_timestamp_iso8601_ms() << " [port="
+         << display_port_from_leg(port) << "] " << event;
     if (!detail.empty()) {
         line << " | " << detail;
     }

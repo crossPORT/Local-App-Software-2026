@@ -279,10 +279,23 @@ void MainFrame::OnFirstShow(wxShowEvent& event) {
     SetFocus();
 
     if (!StartOrchestrator()) {
+        const int devices = CountFabricDevices();
+        last_fabric_devices_seen_ = devices;
         if (connection_panel_) {
             connection_panel_->ApplyState(
-                false, 0, 0, {}, false, 0.0, 0.0, 0, 0, {},
-                "No USB cable selected — plug in your device and restart, or choose a cable when prompted.");
+                false,
+                -1,
+                devices,
+                {},
+                false,
+                0.0,
+                0.0,
+                0.0,
+                0,
+                0,
+                {},
+                devices > 0 ? "USB cable detected — choose it when prompted."
+                            : "No USB cable selected — plug in your device and click Connect USB.");
         }
         FitToContent();
         return;
@@ -327,6 +340,16 @@ int MainFrame::ResolveFabricPortIndex() {
         return 0;
     }
     return pick_fabric_port_index(this, devices);
+}
+
+int MainFrame::CountFabricDevices() const {
+    libusb_context* ctx = nullptr;
+    if (libusb_init(&ctx) != 0) {
+        return 0;
+    }
+    const std::vector<FabricUsbDevice> devices = list_fabric_devices(ctx);
+    libusb_exit(ctx);
+    return static_cast<int>(devices.size());
 }
 
 bool MainFrame::StartOrchestrator() {
@@ -425,6 +448,9 @@ void MainFrame::BuildUi() {
     connection_card_ = new RoundedPanel(header, kCard, kBorder, 10);
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
     connection_panel_ = new ConnectionPanel(connection_card_);
+    connection_panel_->SetActionHandlers([this]() { OnConnectUsb(); },
+                                         [this]() { OnDisconnectUsb(); });
+    connection_panel_->SetLayoutChangedHandler([this]() { GrowToFitContent(); });
     card_sizer->Add(connection_panel_, 0, wxEXPAND | wxALL, 18);
     connection_card_->SetSizer(card_sizer);
     header_sizer->Add(connection_card_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 14);
@@ -444,13 +470,14 @@ void MainFrame::BuildUi() {
 
     progress_panel_ = new TransferProgressPanel(root_panel);
     progress_panel_->SetResetHandler([this]() { OnResetConnection(); });
+    root->AddStretchSpacer(1);
     root->Add(progress_panel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
     led_pulse_timer_ = new wxTimer(this, ID_LedPulseTimer);
 
     root_panel->SetSizer(root);
     auto* outer = new wxBoxSizer(wxVERTICAL);
-    outer->Add(root_panel, 0, wxEXPAND);
+    outer->Add(root_panel, 1, wxEXPAND);
     SetSizer(outer);
 }
 
@@ -552,6 +579,7 @@ void MainFrame::UpdateConnectionStatus(const OrchestratorUiState& state) {
                                       state.busy,
                                       state.live_mbps,
                                       state.booth_display_mib_s,
+                                      state.result_mbps,
                                       state.last_announce_ms,
                                       state.fabric_activity_seq,
                                       state.status_message,
@@ -562,6 +590,7 @@ void MainFrame::UpdateConnectionStatus(const OrchestratorUiState& state) {
 void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
     const bool was_connected = fabric_connected_;
     fabric_connected_ = state.fabric_connected;
+    last_fabric_devices_seen_ = state.fabric_devices_seen;
 
     identity_ = state.identity;
     if (state.fabric_port_index >= 0) {
@@ -601,12 +630,21 @@ void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
                                 state.notification,
                                 state.error_message);
     MaybeShowIncomingDialog(state);
+    if (!state.busy && !state.pending_offer && shown_offer_id_
+        && state.error_message.find("Accept failed") != std::string::npos) {
+        shown_offer_id_.reset();
+    }
     if (!fabric_connected_ && was_connected) {
         SetMinClientSize(wxSize(content_width_, 0));
         FitToContent();
         return;
     }
     GrowToFitContent();
+    CallAfter([this]() {
+        if (!IsBeingDeleted()) {
+            GrowToFitContent();
+        }
+    });
 }
 
 void MainFrame::GrowToFitContent() {
@@ -619,19 +657,12 @@ void MainFrame::GrowToFitContent() {
     Layout();
     fit = GetSizer()->ComputeFittingClientSize(this);
 
-    const wxSize current = GetClientSize();
     const int width = std::max(content_width_, fit.GetWidth());
-    int height = fit.GetHeight();
-    if (fabric_connected_) {
-        height = std::max(height, current.GetHeight());
-    }
+    const int height = fit.GetHeight();
     SetClientSize(wxSize(width, height));
 
-    if (fabric_connected_) {
-        const wxSize min = GetMinClientSize();
-        SetMinClientSize(wxSize(std::max(min.GetWidth(), width),
-                               std::max(min.GetHeight(), height)));
-    }
+    const wxSize min = GetMinClientSize();
+    SetMinClientSize(wxSize(std::max(min.GetWidth(), width), height));
 }
 
 void MainFrame::FitToContent() {
@@ -646,7 +677,6 @@ void MainFrame::FitToContent() {
 
 void MainFrame::MaybeShowIncomingDialog(const OrchestratorUiState& state) {
     if (!state.pending_offer) {
-        shown_offer_id_.reset();
         return;
     }
     const std::string& offer_id = state.pending_offer->message.session_id;
@@ -659,16 +689,16 @@ void MainFrame::MaybeShowIncomingDialog(const OrchestratorUiState& state) {
                        *state.pending_offer,
                        static_cast<int>(handshake_timing_from_identity(state.identity).accept_dialog_sec),
                        [this](bool accepted) {
-        wxTheApp->CallAfter([this, accepted]() {
-            if (!orchestrator_) {
-                return;
-            }
-            if (accepted) {
-                orchestrator_->accept_pending_offer();
-            } else {
-                orchestrator_->decline_pending_offer();
-            }
-        });
+        if (!orchestrator_) {
+            return;
+        }
+        if (accepted) {
+            orchestrator_->accept_pending_offer();
+            shown_offer_id_.reset();
+        } else {
+            shown_offer_id_.reset();
+            orchestrator_->decline_pending_offer();
+        }
     });
     dlg.ShowModal();
 }
@@ -895,6 +925,93 @@ void MainFrame::OnResetConnection() {
     std::thread([this]() {
         orchestrator_->reset_connection();
     }).detach();
+}
+
+void MainFrame::OnConnectUsb() {
+    if (orchestrator_) {
+        return;
+    }
+    if (!StartOrchestrator()) {
+        const int devices = CountFabricDevices();
+        last_fabric_devices_seen_ = devices;
+        status_message_label_->SetLabel(
+            devices > 0 ? "USB cable detected — choose it when prompted."
+                        : "Plug in your USB cable");
+        status_message_label_->SetForegroundColour(kWarn);
+        RenderConnectionIndicator();
+        if (connection_panel_) {
+            connection_panel_->ApplyState(false,
+                                          -1,
+                                          devices,
+                                          {},
+                                          false,
+                                          0.0,
+                                          0.0,
+                                          0.0,
+                                          0,
+                                          0,
+                                          {},
+                                          {});
+        }
+        GrowToFitContent();
+        return;
+    }
+}
+
+void MainFrame::OnDisconnectUsb() {
+    if (!orchestrator_) {
+        return;
+    }
+    if (orchestrator_->is_busy()) {
+        wxMessageBox("Finish the current transfer before disconnecting.",
+                     "RocketBox",
+                     wxOK | wxICON_INFORMATION,
+                     this);
+        return;
+    }
+    orchestrator_->stop();
+    orchestrator_.reset();
+    fabric_connected_ = false;
+    link_led_ = LinkLed::Offline;
+    status_message_label_->SetLabel("Disconnected");
+    status_message_label_->SetForegroundColour(kWarn);
+    RenderConnectionIndicator();
+    roster_panel_->UpdateRoster(peer_entries_from_config(identity_.peers),
+                                identity_,
+                                false,
+                                last_fabric_devices_seen_,
+                                -1,
+                                false,
+                                0);
+    if (connection_panel_) {
+        connection_panel_->ApplyState(false,
+                                      -1,
+                                      last_fabric_devices_seen_,
+                                      {},
+                                      false,
+                                      0.0,
+                                      0.0,
+                                      0.0,
+                                      0,
+                                      0,
+                                      {},
+                                      {});
+    }
+    progress_panel_->ApplyState(false,
+                                false,
+                                false,
+                                false,
+                                0,
+                                0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                {},
+                                {},
+                                {},
+                                {});
+    GrowToFitContent();
 }
 
 void MainFrame::OnEventLogMenu(wxCommandEvent&) {

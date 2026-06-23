@@ -1,3 +1,12 @@
+import {
+  FRAME_FILENAME_MAX,
+  FRAME_FILENAME_OFFSET,
+  FRAME_KIND_OFFSET,
+  type WireFrameKind,
+  frameKindToWire,
+  wireToFrameKind,
+} from './fabric_frame';
+
 export const VENDOR_ID = 0x1772;
 export const PRODUCT_ID = 0x0006;
 export const INTERFACE_NUMBER = 0;
@@ -7,21 +16,34 @@ export const HEADER_SIZE = 32;
 export const CHUNK_SIZE = 4 * 1024 * 1024;
 export const HEADER_MAGIC = 'ROCKETBX';
 
-export function buildHeader(fileSize: number, filename = ''): ArrayBuffer {
+export interface ParsedHeader {
+  fileSize: number;
+  filename: string;
+  frameKind: WireFrameKind;
+}
+
+export interface BuildHeaderOptions {
+  filename?: string;
+  frameKind: WireFrameKind;
+}
+
+export function buildHeader(fileSize: number, options: BuildHeaderOptions): ArrayBuffer {
+  const { frameKind, filename = '' } = options;
   const buf = new ArrayBuffer(HEADER_SIZE);
   const view = new DataView(buf);
   for (let i = 0; i < HEADER_MAGIC.length; i += 1) {
     view.setUint8(i, HEADER_MAGIC.charCodeAt(i));
   }
   view.setBigUint64(8, BigInt(fileSize), true);
-  const nameBytes = new TextEncoder().encode(filename.slice(0, 15));
+  view.setUint8(FRAME_KIND_OFFSET, frameKindToWire(frameKind));
+  const nameBytes = new TextEncoder().encode(filename.slice(0, FRAME_FILENAME_MAX));
   for (let i = 0; i < nameBytes.length; i += 1) {
-    view.setUint8(16 + i, nameBytes[i]!);
+    view.setUint8(FRAME_FILENAME_OFFSET + i, nameBytes[i]!);
   }
   return buf;
 }
 
-export function parseHeader(buffer: ArrayBuffer | Uint8Array): { fileSize: number; filename: string } {
+export function parseHeader(buffer: ArrayBuffer | Uint8Array): ParsedHeader {
   const view =
     buffer instanceof Uint8Array
       ? new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
@@ -36,15 +58,20 @@ export function parseHeader(buffer: ArrayBuffer | Uint8Array): { fileSize: numbe
   if (magic !== HEADER_MAGIC) {
     throw new Error(`Bad header magic "${magic}"`);
   }
+  const frameKind = wireToFrameKind(view.getUint8(FRAME_KIND_OFFSET));
   let filename = '';
-  for (let i = 16; i < HEADER_SIZE; i += 1) {
+  for (let i = FRAME_FILENAME_OFFSET; i < HEADER_SIZE; i += 1) {
     const code = view.getUint8(i);
     if (code === 0) {
       break;
     }
     filename += String.fromCharCode(code);
   }
-  return { fileSize: Number(view.getBigUint64(8, true)), filename };
+  return {
+    fileSize: Number(view.getBigUint64(8, true)),
+    filename,
+    frameKind,
+  };
 }
 
 export function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {

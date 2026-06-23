@@ -299,23 +299,35 @@ TransferProgressPanel::TransferProgressPanel(wxWindow* parent)
     message_label_->Wrap(520);
     message_item_ = root->Add(message_label_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 10);
 
-    reset_row_ = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE);
-    reset_row_->SetBackgroundColour(kCard);
-    reset_row_->SetMinSize(wxSize(148, 32));
+    reset_row_ = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
+    reset_row_->SetBackgroundStyle(wxBG_STYLE_PAINT);
+    reset_row_->SetBackgroundColour(kStatusBar);
+    reset_row_->SetMinSize(wxSize(-1, 36));
     reset_row_->SetCursor(wxCursor(wxCURSOR_HAND));
     auto* reset_sizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* reset_label = MakeLabel(reset_row_, "Reset connection", kText, 11);
+    auto* reset_label = MakeLabel(reset_row_, "Reset connection", kMuted, 11);
     reset_sizer->AddStretchSpacer();
     reset_sizer->Add(reset_label, 0, wxALIGN_CENTER_VERTICAL);
     reset_sizer->AddStretchSpacer();
     reset_row_->SetSizer(reset_sizer);
+    reset_row_->Bind(wxEVT_PAINT, [this](wxPaintEvent& event) {
+        wxPaintDC dc(reset_row_);
+        const wxSize sz = reset_row_->GetClientSize();
+        if (sz.x <= 0 || sz.y <= 0) {
+            return;
+        }
+        dc.SetPen(wxPen(kTrack));
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        dc.DrawRoundedRectangle(0, 0, sz.x - 1, sz.y - 1, 8);
+        event.Skip();
+    });
     reset_row_->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& event) {
         event.StopPropagation();
         if (on_reset_) {
             on_reset_();
         }
     });
-    reset_item_ = root->Add(reset_row_, 0, wxALIGN_LEFT | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    reset_item_ = root->Add(reset_row_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
     {
         wxFont idle = phase_label_->GetFont();
@@ -380,23 +392,24 @@ void TransferProgressPanel::ApplyState(bool busy,
         phase_label_->SetForegroundColour(kWarn);
     }
 
-    const bool show_progress = phase == Phase::Waiting
-                               || phase == Phase::Transferring
-                               || phase == Phase::Complete;
+    const bool show_progress = phase == Phase::Transferring || phase == Phase::Complete;
     const bool show_speed = phase == Phase::Transferring;
-    const bool show_reset = phase == Phase::Failed || phase == Phase::Waiting
-                            || phase == Phase::Complete
-                            || (phase == Phase::Idle && !error.empty());
+    const bool show_reset = phase == Phase::Failed;
 
     if (root_sizer_) {
         bar_row_item_->Show(show_progress);
         bytes_item_->Show(show_progress);
         speed_item_->Show(show_speed);
         reset_item_->Show(show_reset);
-        SetMinSize(wxSize(-1, show_progress ? 96 : (show_reset ? 72 : 36)));
-        if (show_progress && show_reset) {
-            SetMinSize(wxSize(-1, 120));
+        int min_h = 36;
+        if (show_progress) {
+            min_h = show_reset ? 120 : 96;
+        } else if (show_reset) {
+            min_h = 72;
+        } else if (phase == Phase::Waiting) {
+            min_h = 56;
         }
+        SetMinSize(wxSize(-1, min_h));
     }
 
     switch (phase) {

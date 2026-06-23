@@ -42,6 +42,7 @@ interface USBDevice {
   selectConfiguration(configurationValue: number): Promise<void>;
   claimInterface(interfaceNumber: number): Promise<void>;
   releaseInterface(interfaceNumber: number): Promise<void>;
+  clearHalt(direction: 'in' | 'out', endpointNumber: number): Promise<void>;
   transferIn(endpointNumber: number, length: number): Promise<USBInTransferResult>;
   transferOut(endpointNumber: number, data: BufferSource): Promise<USBOutTransferResult>;
   forget(): Promise<void>;

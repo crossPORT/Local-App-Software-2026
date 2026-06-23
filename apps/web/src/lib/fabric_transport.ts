@@ -1,11 +1,16 @@
 import type { FabricSessionMessage } from './fabric_session';
+import type { ParsedHeader } from './fabric_protocol';
+import type { ListenMode } from './fabric_link';
 
 /** App-layer transport contract — implemented by WebUSB and by apps/web/sim. */
 export interface FabricTransport {
   readonly connected: boolean;
 
-  /** Fabric sort index of the connected cable (from announce wire format). */
+  /** Fabric leg of the connected cable (from USB serial). */
   getFabricPortIndex(): number;
+
+  getFabricLeg(): number;
+  getSerialNumber(): string;
 
   connect(): Promise<string>;
   reconnectKnown(): Promise<string>;
@@ -16,12 +21,16 @@ export interface FabricTransport {
   ownsDevice(usbDevice: USBDevice): boolean;
   markDisconnected(): void;
 
+  setListenMode(mode: ListenMode): void;
+  ensureListening(): void;
+  subscribeSession(handler: (message: FabricSessionMessage) => void): () => void;
+
   sendBytes(
     payload: Uint8Array,
     onProgress?: (done: number, total: number) => void,
     filename?: string,
   ): Promise<void>;
-  receiveHeader(): Promise<{ fileSize: number; filename: string }>;
+  receiveHeader(): Promise<ParsedHeader>;
   receivePayload(
     fileSize: number,
     onProgress?: (done: number, total: number) => void,
@@ -35,6 +44,6 @@ export interface FabricTransport {
     expectedBytes?: number,
     onProgress?: (done: number, total: number) => void,
   ): Promise<{ data: Uint8Array; filename: string }>;
-  /** Abort a stuck session poll and drain the USB queue before payload OUT. */
   prepareForPayloadSend(): Promise<void>;
+  waitForIdle(): Promise<void>;
 }

@@ -1,39 +1,33 @@
+import { boothLog } from './booth_log';
+import { FabricUsbError } from './fabric_errors';
+import { FabricLink, clearEndpointHalts, type FabricLinkEvent, type ListenMode } from './fabric_link';
 import {
-  rememberFabricPortForSerial,
-  resolveFabricPortIndex,
+  formatFabricLegLabel,
+  formatFabricPortDisplay,
+  resolveFabricLegFromDevice,
   sortFabricDevicesBySerial,
 } from './fabric_port';
 import {
-  CHUNK_SIZE,
-  EP_IN,
-  EP_OUT,
-  HEADER_SIZE,
   INTERFACE_NUMBER,
   PRODUCT_ID,
   VENDOR_ID,
-  buildHeader,
-  concatChunks,
-  parseHeader,
+  type ParsedHeader,
 } from './fabric_protocol';
-import {
-  type FabricSessionMessage,
-  parseSessionPayload,
-  serializeSessionMessage,
-} from './fabric_session';
+import type { FabricSessionMessage } from './fabric_session';
 import type { FabricTransport } from './fabric_transport';
-import { MAX_SESSION_FILE_BYTES } from './usb_constants';
 import { webUsbBlockedReason } from './webusb_env';
 
+export { FabricUsbError } from './fabric_errors';
+
 const SELECTED_SERIAL_KEY = 'rocketbox_usb_serial';
-const SESSION_SEND_TIMEOUT_MS = 2500;
 const USB_OPEN_ATTEMPTS = 3;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function legacySerialKey(portIndex: number): string {
-  return `rocketbox_serial_port${portIndex}`;
+function legacySerialKey(leg: number): string {
+  return `rocketbox_serial_port${leg}`;
 }
 
 function getSavedSerial(): string | null {
@@ -41,8 +35,8 @@ function getSavedSerial(): string | null {
   if (primary) {
     return primary;
   }
-  for (let port = 0; port <= 1; port += 1) {
-    const legacy = sessionStorage.getItem(legacySerialKey(port));
+  for (let leg = 0; leg < 4; leg += 1) {
+    const legacy = sessionStorage.getItem(legacySerialKey(leg));
     if (legacy) {
       sessionStorage.setItem(SELECTED_SERIAL_KEY, legacy);
       return legacy;
@@ -53,85 +47,13 @@ function getSavedSerial(): string | null {
 
 function clearSavedSerial(): void {
   sessionStorage.removeItem(SELECTED_SERIAL_KEY);
-  for (let port = 0; port <= 1; port += 1) {
-    sessionStorage.removeItem(legacySerialKey(port));
+  for (let leg = 0; leg < 4; leg += 1) {
+    sessionStorage.removeItem(legacySerialKey(leg));
   }
-}
-
-export class FabricUsbError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FabricUsbError';
-  }
-}
-
-function mergeBuffers(parts: Uint8Array[], totalLength: number): Uint8Array {
-  const out = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
-  return out;
-}
-
-async function transferInExact(device: USBDevice, endpoint: number, byteCount: number): Promise<Uint8Array> {
-  const parts: Uint8Array[] = [];
-  let received = 0;
-  while (received < byteCount) {
-    const result = await device.transferIn(endpoint, byteCount - received);
-    if (result.status !== 'ok') {
-      throw new FabricUsbError(`transferIn failed: ${result.status}`);
-    }
-    const chunk = new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength);
-    if (chunk.length === 0) {
-      throw new FabricUsbError('transferIn returned no data');
-    }
-    parts.push(chunk);
-    received += chunk.length;
-  }
-  return mergeBuffers(parts, byteCount);
-}
-
-async function transferOutChecked(device: USBDevice, endpoint: number, data: BufferSource): Promise<void> {
-  const result = await device.transferOut(endpoint, data);
-  if (result.status !== 'ok') {
-    throw new FabricUsbError(`transferOut failed: ${result.status}`);
-  }
-}
-
-async function transferOutWithTimeout(
-  device: USBDevice,
-  endpoint: number,
-  data: BufferSource,
-  timeoutMs: number,
-): Promise<void> {
-  await Promise.race([
-    transferOutChecked(device, endpoint, data),
-    new Promise<never>((_, reject) => {
-      window.setTimeout(
-        () => reject(new FabricUsbError(`transferOut timed out after ${timeoutMs}ms`)),
-        timeoutMs,
-      );
-    }),
-  ]);
-}
-
-async function sendSessionMessageWithTimeout(
-  device: USBDevice,
-  bytes: Uint8Array,
-  timeoutMs: number,
-): Promise<void> {
-  await transferOutWithTimeout(device, EP_OUT, buildHeader(bytes.length, ''), timeoutMs);
-  await transferOutWithTimeout(device, EP_OUT, new Uint8Array(bytes) as unknown as BufferSource, timeoutMs);
 }
 
 function isFabricDevice(device: USBDevice): boolean {
   return device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID;
-}
-
-function sortFabricDevices(devices: USBDevice[]): USBDevice[] {
-  return sortFabricDevicesBySerial(devices);
 }
 
 async function resetDeviceHandle(device: USBDevice): Promise<void> {
@@ -141,12 +63,12 @@ async function resetDeviceHandle(device: USBDevice): Promise<void> {
   try {
     await device.releaseInterface(INTERFACE_NUMBER);
   } catch {
-    // Interface may already be released.
+    /* best effort */
   }
   try {
     await device.close();
   } catch {
-    // Best effort — continue and try open again.
+    /* best effort */
   }
 }
 
@@ -192,6 +114,9 @@ async function openFabricDevice(device: USBDevice): Promise<void> {
       throw new FabricUsbError(`Could not claim USB interface — ${message}`);
     }
   }
+  // Match the native libusb path: clear any stale endpoint halt so the first
+  // transferOut/transferIn after connect is not wedged by a halted endpoint.
+  await clearEndpointHalts(device);
 }
 
 async function openFabricDeviceWithRetry(device: USBDevice, attempts = USB_OPEN_ATTEMPTS): Promise<void> {
@@ -208,7 +133,7 @@ async function openFabricDeviceWithRetry(device: USBDevice, attempts = USB_OPEN_
       lastErr = err;
     }
   }
-  throw lastErr instanceof Error ? lastErr : mapUsbOpenError(lastErr);
+  throw lastErr instanceof FabricUsbError ? lastErr : mapUsbOpenError(lastErr);
 }
 
 function rememberSerial(device: USBDevice): void {
@@ -217,9 +142,8 @@ function rememberSerial(device: USBDevice): void {
   }
 }
 
-/** Match by saved serial from the native picker; never guess by sort index. */
 function findPairedDevice(devices: USBDevice[]): USBDevice | null {
-  const sorted = sortFabricDevices(devices);
+  const sorted = sortFabricDevicesBySerial(devices);
   if (sorted.length === 0) {
     return null;
   }
@@ -238,65 +162,71 @@ function findPairedDevice(devices: USBDevice[]): USBDevice | null {
 
 export class FabricUsbSession implements FabricTransport {
   device: USBDevice | null = null;
-  private usbTail: Promise<void> = Promise.resolve();
-  private resolvedFabricPortIndex = 0;
+  private resolvedFabricLeg = 0;
+  private readonly link: FabricLink;
+  private unsubscribeLink: (() => void) | null = null;
 
-  constructor(private readonly portHint = 0) {}
+  constructor() {
+    this.link = new FabricLink(() => this.device, 0);
+  }
 
   getFabricPortIndex(): number {
-    return this.resolvedFabricPortIndex;
+    return this.resolvedFabricLeg;
   }
 
-  private async refreshResolvedPortIndex(): Promise<void> {
-    if (!this.device || !navigator.usb) {
+  getFabricLeg(): number {
+    return this.resolvedFabricLeg;
+  }
+
+  getSerialNumber(): string {
+    return this.device?.serialNumber?.trim() ?? '';
+  }
+
+  private refreshResolvedLeg(): void {
+    if (!this.device) {
       return;
     }
-    const devices = (await navigator.usb.getDevices()).filter(isFabricDevice);
-    this.resolvedFabricPortIndex = resolveFabricPortIndex(this.device, devices, this.portHint);
-    rememberFabricPortForSerial(this.device.serialNumber, this.resolvedFabricPortIndex);
-    console.log(
-      `[RocketBox] fabric port ${this.resolvedFabricPortIndex} (serial ${this.device.serialNumber ?? 'unknown'})`,
+    this.resolvedFabricLeg = resolveFabricLegFromDevice(this.device);
+    this.link.setFabricLeg(this.resolvedFabricLeg);
+    boothLog(
+      this.resolvedFabricLeg,
+      'usb_connect',
+      formatFabricLegLabel(this.resolvedFabricLeg, this.device.serialNumber),
     );
+    // Surface the raw cable serial so two booth devices can be confirmed to be
+    // on DIFFERENT legs — identical serials share a leg and never see peers.
+    boothLog(this.resolvedFabricLeg, 'cable_serial', this.device.serialNumber || '(none)');
   }
 
-  /** Serialize all USB operations — this FPGA device requires exclusive access
-   *  (no concurrent IN+OUT), matching the native app's single usb_mutex. */
-  private runUsb<T>(label: string, fn: () => Promise<T>): Promise<T> {
-    console.debug(`[FabricUSB] runUsb queue: ${label}`);
-    const run = this.usbTail.then(() => {
-      console.debug(`[FabricUSB] runUsb start: ${label}`);
-      return fn();
+  setListenMode(mode: ListenMode): void {
+    this.link.setListenMode(mode);
+  }
+
+  ensureListening(): void {
+    this.link.ensureListening();
+  }
+
+  subscribeSession(handler: (message: FabricSessionMessage) => void): () => void {
+    if (this.unsubscribeLink) {
+      this.unsubscribeLink();
+    }
+    this.unsubscribeLink = this.link.subscribe((event: FabricLinkEvent) => {
+      if (event.type === 'session') {
+        handler(event.message);
+      }
     });
-    this.usbTail = run.then(
-      () => { console.debug(`[FabricUSB] runUsb done: ${label}`); },
-      () => { console.debug(`[FabricUSB] runUsb fail: ${label}`); },
-    );
-    return run;
+    return () => {
+      this.unsubscribeLink?.();
+      this.unsubscribeLink = null;
+    };
   }
 
-  /** Wait until all queued USB operations finish. */
   async waitForIdle(): Promise<void> {
-    await this.usbTail;
+    await this.link.waitForIdle();
   }
 
-  /** Stop a stuck session transferIn and drain the queue before sending payload OUT. */
   async prepareForPayloadSend(): Promise<void> {
-    await this.waitForIdle();
-    await this.abortStuckTransfer();
-  }
-
-  /** Release/reclaim aborts a stuck WebUSB transferIn (no native timeout). */
-  private async abortStuckTransfer(): Promise<void> {
-    const device = this.device;
-    if (!device?.opened) {
-      return;
-    }
-    try {
-      await device.releaseInterface(INTERFACE_NUMBER);
-      await device.claimInterface(INTERFACE_NUMBER);
-    } catch {
-      // best effort
-    }
+    await this.link.prepareForPayloadSend();
   }
 
   get connected(): boolean {
@@ -312,6 +242,10 @@ export class FabricUsbSession implements FabricTransport {
 
   static hasSavedSerial(): boolean {
     return getSavedSerial() != null;
+  }
+
+  static clearSavedUsbPairing(): void {
+    clearSavedSerial();
   }
 
   async connect(): Promise<string> {
@@ -335,7 +269,7 @@ export class FabricUsbSession implements FabricTransport {
     await openFabricDeviceWithRetry(device);
     this.device = device;
     rememberSerial(device);
-    await this.refreshResolvedPortIndex();
+    this.refreshResolvedLeg();
     return this.describeDevice();
   }
 
@@ -350,8 +284,9 @@ export class FabricUsbSession implements FabricTransport {
     const devices = (await navigator.usb.getDevices()).filter(isFabricDevice);
     const device = findPairedDevice(devices);
     if (!device) {
+      clearSavedSerial();
       throw new FabricUsbError(
-        'Previously paired device not found — click Connect USB and pick a cable',
+        'Previously paired device not found — tap Connect USB and pick your cable in the browser dialog',
       );
     }
     await resetDeviceHandle(device);
@@ -364,7 +299,7 @@ export class FabricUsbSession implements FabricTransport {
     }
     this.device = device;
     rememberSerial(device);
-    await this.refreshResolvedPortIndex();
+    this.refreshResolvedLeg();
     return this.describeDevice();
   }
 
@@ -372,13 +307,12 @@ export class FabricUsbSession implements FabricTransport {
     if (!this.device) {
       return '';
     }
-    return [
-      this.device.productName || 'SLS USB DEVICE',
-      this.device.serialNumber || '(no serial)',
-    ].join(' · ');
+    return formatFabricPortDisplay(this.resolvedFabricLeg, this.device.serialNumber);
   }
 
   async disconnect(): Promise<void> {
+    this.link.setListenMode('off');
+    this.link.stopListenLoop();
     if (!this.device?.opened) {
       this.device = null;
       return;
@@ -386,7 +320,7 @@ export class FabricUsbSession implements FabricTransport {
     try {
       await this.device.releaseInterface(INTERFACE_NUMBER);
     } catch {
-      // Interface may already be released after a failed transfer.
+      /* best effort */
     }
     try {
       await this.device.close();
@@ -395,7 +329,6 @@ export class FabricUsbSession implements FabricTransport {
     }
   }
 
-  /** Release this window's USB permission so Chrome shows the picker again. */
   async forgetThisDevice(): Promise<void> {
     const savedSerial = getSavedSerial();
     await this.disconnect();
@@ -418,13 +351,12 @@ export class FabricUsbSession implements FabricTransport {
         }
         await device.forget();
       } catch {
-        // Best effort — device may already be gone.
+        /* best effort */
       }
     }
     clearSavedSerial();
   }
 
-  /** Abort a blocked transferIn by closing and re-opening the device. */
   async resetConnection(): Promise<string> {
     if (this.device?.serialNumber) {
       rememberSerial(this.device);
@@ -440,6 +372,7 @@ export class FabricUsbSession implements FabricTransport {
   }
 
   markDisconnected(): void {
+    this.link.setListenMode('off');
     this.device = null;
   }
 
@@ -448,61 +381,23 @@ export class FabricUsbSession implements FabricTransport {
     onProgress?: (done: number, total: number) => void,
     filename = '',
   ): Promise<void> {
-    await this.runUsb('sendBytes', async () => {
-      if (!this.device) {
-        throw new FabricUsbError('USB not connected');
-      }
-      console.debug(`[FabricUSB] sendBytes: header (${payload.length} bytes payload)`);
-      await transferOutChecked(this.device, EP_OUT, buildHeader(payload.length, filename));
-      onProgress?.(0, payload.length);
-
-      let offset = 0;
-      while (offset < payload.length) {
-        const chunk = new Uint8Array(CHUNK_SIZE);
-        const n = Math.min(payload.length - offset, CHUNK_SIZE);
-        chunk.set(payload.subarray(offset, offset + n));
-        console.debug(`[FabricUSB] sendBytes: chunk ${offset}/${payload.length} (${CHUNK_SIZE} wire bytes)`);
-        await transferOutChecked(this.device, EP_OUT, chunk);
-        offset += n;
-        onProgress?.(offset, payload.length);
-      }
-      console.debug('[FabricUSB] sendBytes: complete');
-    });
+    await this.link.sendPayload(payload, onProgress, filename);
   }
 
-  async receiveHeader(): Promise<{ fileSize: number; filename: string }> {
-    return this.runUsb('receiveHeader', async () => {
-      if (!this.device) {
-        throw new FabricUsbError('USB not connected');
-      }
-      const headerBuf = await transferInExact(this.device, EP_IN, HEADER_SIZE);
-      return parseHeader(headerBuf);
-    });
+  async receiveHeader(): Promise<ParsedHeader> {
+    const message = await this.link.tryReceiveSessionMessage(2000);
+    if (message) {
+      throw new FabricUsbError('Expected payload header, got session message');
+    }
+    throw new FabricUsbError('receiveHeader not used — use receiveFileTransfer');
   }
 
   async receivePayload(
     fileSize: number,
     onProgress?: (done: number, total: number) => void,
   ): Promise<Uint8Array> {
-    return this.runUsb('receivePayload', async () => {
-      if (!this.device) {
-        throw new FabricUsbError('USB not connected');
-      }
-      const parts: Uint8Array[] = [];
-      let received = 0;
-      while (received < fileSize) {
-        const result = await this.device.transferIn(EP_IN, CHUNK_SIZE);
-        if (result.status !== 'ok') {
-          throw new FabricUsbError(`Payload transferIn failed: ${result.status}`);
-        }
-        const chunk = new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength);
-        const take = Math.min(chunk.length, fileSize - received);
-        parts.push(chunk.subarray(0, take));
-        received += take;
-        onProgress?.(received, fileSize);
-      }
-      return concatChunks(parts, fileSize);
-    });
+    const { data } = await this.link.receiveFileTransfer(15000, fileSize, onProgress);
+    return data;
   }
 
   async discardPayload(fileSize: number): Promise<void> {
@@ -510,98 +405,16 @@ export class FabricUsbSession implements FabricTransport {
   }
 
   async receiveBytes(onProgress?: (done: number, total: number) => void): Promise<Uint8Array> {
-    const { fileSize } = await this.receiveHeader();
-    return this.receivePayload(fileSize, onProgress);
+    const { data } = await this.link.receiveFileTransfer(15000, 0, onProgress);
+    return data;
   }
 
   async sendSessionMessage(message: FabricSessionMessage): Promise<void> {
-    const bytes = serializeSessionMessage(message);
-    await this.runUsb('sendSession', async () => {
-      if (!this.device) {
-        throw new FabricUsbError('USB not connected');
-      }
-      await sendSessionMessageWithTimeout(this.device, bytes, SESSION_SEND_TIMEOUT_MS);
-    });
+    await this.link.sendSessionMessage(message);
   }
 
-  /** Session listener poll — returns null on header timeout (matches wx SessionListener). */
   async tryReceiveSessionMessage(headerTimeoutMs: number): Promise<FabricSessionMessage | null> {
-    if (!this.device) {
-      return null;
-    }
-
-    return this.runUsb('tryReceiveSession', async () => {
-      if (!this.device) {
-        return null;
-      }
-
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      let timedOut = false;
-      try {
-        console.debug('[FabricUSB] tryReceiveSession: waiting for header…');
-        const headerBuf = await Promise.race([
-          transferInExact(this.device, EP_IN, HEADER_SIZE),
-          new Promise<never>((_, reject) => {
-            timeoutId = window.setTimeout(() => {
-              timedOut = true;
-              reject(new FabricUsbError('session header timeout'));
-            }, headerTimeoutMs);
-          }),
-        ]);
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
-        }
-
-        const { fileSize } = parseHeader(headerBuf);
-        console.log(`[RocketBox] header received, fileSize=${fileSize}`);
-        if (fileSize === 0 || fileSize > MAX_SESSION_FILE_BYTES) {
-          if (fileSize > MAX_SESSION_FILE_BYTES) {
-            await this.receivePayloadWithinLock(fileSize).catch(() => {});
-          }
-          return null;
-        }
-        const data = await this.receivePayloadWithinLock(fileSize);
-        const parsed = parseSessionPayload(data);
-        if (!parsed) {
-          console.warn('[RocketBox] parseSessionPayload returned null for', fileSize, 'bytes');
-        }
-        return parsed;
-      } catch (err) {
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
-        }
-        if (timedOut || (err as FabricUsbError).message === 'session header timeout') {
-          console.debug('[FabricUSB] tryReceiveSession: timeout (normal idle)');
-        } else {
-          console.debug('[FabricUSB] tryReceiveSession: no data:', (err as Error).message);
-        }
-        await this.abortStuckTransfer();
-        return null;
-      }
-    });
-  }
-
-  private async receivePayloadWithinLock(
-    fileSize: number,
-    onProgress?: (done: number, total: number) => void,
-  ): Promise<Uint8Array> {
-    if (!this.device) {
-      throw new FabricUsbError('USB not connected');
-    }
-    const parts: Uint8Array[] = [];
-    let received = 0;
-    while (received < fileSize) {
-      const result = await this.device.transferIn(EP_IN, CHUNK_SIZE);
-      if (result.status !== 'ok') {
-        throw new FabricUsbError(`Payload transferIn failed: ${result.status}`);
-      }
-      const chunk = new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength);
-      const take = Math.min(chunk.length, fileSize - received);
-      parts.push(chunk.subarray(0, take));
-      received += take;
-      onProgress?.(received, fileSize);
-    }
-    return concatChunks(parts, fileSize);
+    return this.link.tryReceiveSessionMessage(headerTimeoutMs);
   }
 
   async receiveFileTransfer(
@@ -609,93 +422,7 @@ export class FabricUsbSession implements FabricTransport {
     expectedBytes = 0,
     onProgress?: (done: number, total: number) => void,
   ): Promise<{ data: Uint8Array; filename: string }> {
-    if (!this.device) {
-      throw new FabricUsbError('USB not connected');
-    }
-
-    return this.runUsb('receiveFileTransfer', async () => {
-      if (!this.device) {
-        throw new FabricUsbError('USB not connected');
-      }
-
-      const deadline = Date.now() + headerTimeoutMs;
-      let skipped = 0;
-      const maxSkips = 16;
-
-      while (Date.now() < deadline && skipped < maxSkips) {
-        const remaining = Math.max(1, deadline - Date.now());
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        let timedOut = false;
-        try {
-          const headerBuf = await Promise.race([
-            transferInExact(this.device, EP_IN, HEADER_SIZE),
-            new Promise<never>((_, reject) => {
-              timeoutId = window.setTimeout(() => {
-                timedOut = true;
-                reject(new FabricUsbError('payload header timeout'));
-              }, remaining);
-            }),
-          ]);
-          if (timeoutId !== undefined) {
-            window.clearTimeout(timeoutId);
-          }
-
-          const header = parseHeader(headerBuf);
-          const { fileSize, filename } = header;
-          if (fileSize === 0) {
-            skipped += 1;
-            continue;
-          }
-
-          const trackProgress = expectedBytes > 0 && fileSize === expectedBytes;
-          const payload = await this.receivePayloadWithinLock(
-            fileSize,
-            trackProgress ? onProgress : undefined,
-          );
-
-          if (fileSize <= MAX_SESSION_FILE_BYTES) {
-            const parsed = parseSessionPayload(payload);
-            if (parsed) {
-              console.warn(
-                '[FabricUSB] skipping stray session frame while waiting for payload',
-                parsed.kind,
-                fileSize,
-              );
-              skipped += 1;
-              continue;
-            }
-            if (expectedBytes > 0 && fileSize !== expectedBytes) {
-              console.warn(
-                '[FabricUSB] skipping unexpected frame size',
-                fileSize,
-                `(expected ${expectedBytes})`,
-              );
-              skipped += 1;
-              continue;
-            }
-          } else if (expectedBytes > 0 && fileSize !== expectedBytes) {
-            throw new FabricUsbError(
-              `Expected ${expectedBytes} byte payload but header announced ${fileSize}`,
-            );
-          }
-
-          return {
-            data: payload,
-            filename: filename || 'download.bin',
-          };
-        } catch (err) {
-          if (timeoutId !== undefined) {
-            window.clearTimeout(timeoutId);
-          }
-          if (timedOut) {
-            await this.abortStuckTransfer();
-          }
-          throw err;
-        }
-      }
-
-      throw new FabricUsbError('payload header timeout');
-    });
+    return this.link.receiveFileTransfer(headerTimeoutMs, expectedBytes, onProgress);
   }
 }
 
