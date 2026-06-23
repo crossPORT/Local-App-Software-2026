@@ -1,5 +1,6 @@
 #include "main_frame.h"
 
+#include "app_icon.h"
 #include "booth_log.h"
 #include "connection_panel.h"
 #include "fabric_device_picker.h"
@@ -237,6 +238,7 @@ MainFrame::MainFrame(const std::string& config_path, int cli_port_index)
 
     UpdateWindowTitle();
     BuildUi();
+    ApplyRocketBoxFrameIcon(this);
     roster_panel_->UpdateRoster(peer_entries_from_config(identity_.peers),
                                 identity_,
                                 false,

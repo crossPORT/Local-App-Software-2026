@@ -4,6 +4,7 @@ include(${wxWidgets_USE_FILE})
 add_executable(rocketbox
     main.cpp
     main_frame.cpp
+    app_icon.cpp
     connection_panel.cpp
     fabric_device_picker.cpp
     roster_panel.cpp
@@ -46,6 +47,13 @@ target_link_libraries(rocketbox PRIVATE
 target_compile_features(rocketbox PRIVATE cxx_std_17)
 
 if(APPLE)
+    set(_rb_icns "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.icns")
+    if(EXISTS "${_rb_icns}")
+        set_source_files_properties("${_rb_icns}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+        target_sources(rocketbox PRIVATE "${_rb_icns}")
+    else()
+        message(WARNING "macOS: cmake/icons/rocketbox.icns missing; run scripts/generate-macos-icon.sh")
+    endif()
     install(TARGETS rocketbox BUNDLE DESTINATION .)
     install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/macos_fixup_bundle.cmake")
 elseif(WIN32)
@@ -64,6 +72,7 @@ elseif(WIN32)
 
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
     install(FILES ${_rb_runtime_dlls} DESTINATION bin)
+    install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico" DESTINATION bin)
 
     # Post-install sanity check only — no file(GET_RUNTIME_DEPENDENCIES).
     install(CODE [[
@@ -95,6 +104,16 @@ elseif(WIN32)
     )
 else()
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
+
+    install(FILES
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+        DESTINATION share/icons/hicolor/256x256/apps
+        RENAME rocketbox.png
+    )
+    install(FILES
+        "${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox.desktop"
+        DESTINATION share/applications
+    )
 
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules

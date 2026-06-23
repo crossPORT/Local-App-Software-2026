@@ -26,7 +26,7 @@ EOF
 chmod +x "$APPDIR/AppRun"
 
 mkdir -p "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/scalable/apps"
-cp "$ROOT/apps/web/public/favicon.svg" "$APPDIR/usr/share/icons/hicolor/scalable/apps/rocketbox.svg"
+cp "$ROOT/cmake/icons/rocketbox.svg" "$APPDIR/usr/share/icons/hicolor/scalable/apps/rocketbox.svg"
 cat > "$APPDIR/usr/share/applications/rocketbox.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application

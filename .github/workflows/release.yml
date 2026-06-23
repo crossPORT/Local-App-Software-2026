@@ -104,6 +104,11 @@ jobs:
       - name: Install dependencies
         run: brew install wxwidgets libusb pkg-config
 
+      - name: Generate macOS app icon
+        run: |
+          chmod +x scripts/generate-macos-icon.sh
+          scripts/generate-macos-icon.sh
+
       - name: Configure
         env:
           INSTALL_PREFIX: ${{ runner.temp }}/install
@@ -154,8 +159,6 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_windows == true || github.event.inputs.build_windows == 'true'
     runs-on: windows-2022
     timeout-minutes: 120
-    # Windows is best-effort. It must never fail the workflow or block other platforms.
-    continue-on-error: true
     env:
       VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite"
     steps:
@@ -229,6 +232,15 @@ jobs:
       - name: CPack (NSIS)
         working-directory: build
         run: cpack -G NSIS -C Release
+
+      - name: Verify NSIS installer
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem build -Filter '*setup.exe' | Select-Object -First 1
+          if (-not $setup) {
+            Write-Error "No NSIS setup.exe found in build/"
+          }
+          ./scripts/verify-windows-nsis.ps1 -SetupExe $setup.FullName
 
       - name: Collect packages
         shell: bash

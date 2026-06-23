@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RocketBox App
+Comment=File transfer for RocketBox hardware
+Exec=RocketBox
+Icon=rocketbox
+Categories=Utility;
+Terminal=false
