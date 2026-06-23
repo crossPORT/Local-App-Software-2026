@@ -43,4 +43,10 @@ if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi
 
-echo "macOS bundle looks self-contained: $APP"
+if ! codesign --verify --deep "$APP" 2>/dev/null; then
+  echo "macOS bundle failed codesign verification: $APP" >&2
+  codesign --verify --deep --verbose=2 "$APP" >&2 || true
+  exit 1
+fi
+
+echo "macOS bundle looks self-contained and signed: $APP"
