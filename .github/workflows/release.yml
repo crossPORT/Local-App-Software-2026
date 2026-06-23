@@ -157,7 +157,7 @@ jobs:
     # Windows is best-effort. It must never fail the workflow or block other platforms.
     continue-on-error: true
     env:
-      VCPKG_BINARY_SOURCES: "clear;nuget,${{ env.VCPKG_FEED_URL }},readwrite"
+      VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite"
     steps:
       - uses: actions/checkout@v4
         with:
