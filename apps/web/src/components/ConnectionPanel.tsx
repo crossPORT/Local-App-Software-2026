@@ -33,6 +33,7 @@ export function ConnectionPanel({
           Math.max(state.fabricActivityMbps, state.liveMbps),
           state.boothDisplayMibS,
           true,
+          state.bytesDone,
         )
       : 0;
   const scaleFloorMbps =

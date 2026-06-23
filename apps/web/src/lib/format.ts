@@ -73,16 +73,17 @@ export function isOutboundHandshakeWait(statusMessage: string): boolean {
   );
 }
 
-/** Live/chart speed: measured rate, or display rate while a transfer is active. */
+/** Live/chart speed: measured rate, or display rate once payload bytes are moving. */
 export function effectiveDisplayMbps(
   liveMbps: number,
   boothDisplayMibS: number,
   busy: boolean,
+  bytesDone = 0,
 ): number {
   if (liveMbps > 0) {
     return liveMbps;
   }
-  if (busy && boothDisplayMibS > 0) {
+  if (busy && boothDisplayMibS > 0 && bytesDone > 0) {
     return boothDisplayMibS;
   }
   return 0;
@@ -115,4 +116,13 @@ export function receiveStatusLabel(status: string): string {
     default:
       return 'Asks before saving';
   }
+}
+
+/** Disambiguate roster rows when multiple stations share a display name. */
+export function peerRosterLabel(peer: { display_name: string; port_index: number }, peers: { display_name: string }[]): string {
+  const duplicates = peers.filter((entry) => entry.display_name === peer.display_name).length > 1;
+  if (!duplicates) {
+    return peer.display_name;
+  }
+  return `${peer.display_name} · port ${peer.port_index}`;
 }

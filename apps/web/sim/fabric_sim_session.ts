@@ -193,6 +193,7 @@ export class FabricSimSession implements FabricTransport {
 
   async receiveFileTransfer(
     headerTimeoutMs: number,
+    expectedBytes = 0,
     onProgress?: (done: number, total: number) => void,
   ): Promise<{ data: Uint8Array; filename: string }> {
     if (!this.linked) {

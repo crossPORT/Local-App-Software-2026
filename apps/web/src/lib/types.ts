@@ -9,6 +9,8 @@ export interface PeerConfig {
 }
 
 export interface PeerEntry extends PeerConfig {
+  id: string;
+  instance_id: string;
   online: boolean;
   lastSeenMs: number;
 }

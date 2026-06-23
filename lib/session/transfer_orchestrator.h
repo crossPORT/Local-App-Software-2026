@@ -158,6 +158,8 @@ private:
     bool fabric_was_connected_ = false;
     int64_t last_announce_ms_ = 0;
 
+    std::string instance_id_;
+
     std::atomic<uint64_t> dismiss_epoch_{0};
 
     // Presence-probe throttle (presence thread only).

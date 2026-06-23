@@ -165,6 +165,15 @@ FABRIC_TEST(roster_set_all_peers_offline_clears_presence) {
     }
 }
 
+FABRIC_TEST(roster_duplicate_names_with_instances) {
+    PeerRoster roster;
+    roster.touch_peer("Sally", "Creative", ReceiveStatus::Open, 1, "phone");
+    roster.touch_peer("Sally", "CAD", ReceiveStatus::AskFirst, 0, "laptop");
+    CHECK_EQ(roster.peers().size(), static_cast<size_t>(2));
+    CHECK(roster.find_by_id("i:phone").has_value());
+    CHECK(roster.find_by_id("i:laptop").has_value());
+}
+
 FABRIC_TEST(roster_mark_stale_peers_offline) {
     PeerRoster roster;
     roster.seed_from_config(

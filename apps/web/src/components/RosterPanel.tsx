@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { collectDropFiles } from '../lib/collect_drop_files';
-import { isOutboundHandshakeWait, receiveStatusLabel } from '../lib/format';
+import { isOutboundHandshakeWait, peerRosterLabel, receiveStatusLabel } from '../lib/format';
 import { DEFAULT_STALE_MS } from '../lib/peer_roster';
 import { theme } from '../lib/theme';
 import type { PeerEntry } from '../lib/types';
@@ -14,8 +14,8 @@ interface RosterPanelProps {
   statusMessage: string;
   selectedPeer: string;
   lastAnnounceMs: number;
-  onSelectPeer: (name: string) => void;
-  onDropFiles: (peerName: string, files: File[]) => void | Promise<void>;
+  onSelectPeer: (peerId: string) => void;
+  onDropFiles: (peerId: string, files: File[]) => void | Promise<void>;
   onOpenSettings?: () => void;
   onDropError?: (message: string) => void;
 }
@@ -67,14 +67,24 @@ export function RosterPanel({
   const nextAnnounceIn = lastAnnounceMs > 0
     ? Math.max(0, ANNOUNCE_INTERVAL_MS - (now - lastAnnounceMs))
     : 0;
+  const announceStalled =
+    lastAnnounceMs > 0 && now - lastAnnounceMs > ANNOUNCE_INTERVAL_MS * 2;
 
   return (
     <section className="roster panel-inner">
       <div className="section-label" style={{ color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Connected peers</span>
         {fabricConnected && lastAnnounceMs > 0 && (
-          <span style={{ fontSize: '0.75rem', color: theme.muted, fontWeight: 400 }}>
-            Next announce in {formatSecondsLeft(nextAnnounceIn)}
+          <span
+            style={{
+              fontSize: '0.75rem',
+              color: announceStalled ? theme.warn : theme.muted,
+              fontWeight: 400,
+            }}
+          >
+            {announceStalled
+              ? 'Broadcast stalled — reconnect USB'
+              : `Next announce in ${formatSecondsLeft(nextAnnounceIn)}`}
           </span>
         )}
       </div>
@@ -91,19 +101,23 @@ export function RosterPanel({
             )}
           </div>
         ) : (
-          visible.map((peer) => (
+          visible.map((peer) => {
+            const label = peerRosterLabel(peer, visible);
+            return (
             <PeerRow
-              key={peer.display_name}
+              key={peer.id}
               peer={peer}
-              selected={selectedPeer === peer.display_name}
-              busy={busy && selectedPeer === peer.display_name}
+              label={label}
+              selected={selectedPeer === peer.id}
+              busy={busy && selectedPeer === peer.id}
               statusMessage={statusMessage}
               now={now}
-              onSelect={() => onSelectPeer(peer.display_name)}
-              onFiles={(files) => onDropFiles(peer.display_name, files)}
+              onSelect={() => onSelectPeer(peer.id)}
+              onFiles={(files) => onDropFiles(peer.id, files)}
               onDropError={onDropError}
             />
-          ))
+            );
+          })
         )}
       </div>
     </section>
@@ -120,6 +134,7 @@ function peerTimerLabel(lastSeenMs: number, now: number): string {
 
 function PeerRow({
   peer,
+  label,
   selected,
   busy,
   statusMessage,
@@ -129,6 +144,7 @@ function PeerRow({
   onDropError,
 }: {
   peer: PeerEntry;
+  label: string;
   selected: boolean;
   busy: boolean;
   statusMessage: string;
@@ -215,7 +231,7 @@ function PeerRow({
     >
       <span className="presence-dot" style={{ background: theme.ok }} aria-hidden />
       <div className="peer-meta">
-        <div className="peer-name">{peer.display_name}</div>
+        <div className="peer-name">{label}</div>
         <div className="peer-sub" style={{ color: theme.muted }}>
           {receiveStatusLabel(peer.receive_status)} · Port {peer.port_index}
           {peer.lastSeenMs > 0 && <> · {peerTimerLabel(peer.lastSeenMs, now)}</>}
@@ -234,7 +250,7 @@ function PeerRow({
         ) : (
           <>
             <span style={{ color: theme.accent }}>
-              {dragActive ? 'Release to send' : `Drop a file to send to ${peer.display_name}`}
+              {dragActive ? 'Release to send' : `Drop a file to send to ${label}`}
             </span>
             <button
               type="button"

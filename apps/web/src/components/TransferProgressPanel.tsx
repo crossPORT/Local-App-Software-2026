@@ -88,7 +88,10 @@ export function TransferProgressPanel({ state, onReset }: TransferProgressPanelP
   const autoReceive = state.identity.receive_status === 'open';
   const isListening =
     phase === 'waiting' && state.waitingForPartner && !state.pendingOffer && !state.busy;
-  const peerName = state.roster[0]?.display_name ?? state.selectedPeer;
+  const peerName =
+    state.roster.find((peer) => peer.id === state.selectedPeer)?.display_name
+    ?? state.roster[0]?.display_name
+    ?? '';
   const showProgress = phase === 'transferring' || phase === 'complete';
   const fraction =
     state.bytesTotal > 0 ? Math.min(1, state.bytesDone / state.bytesTotal) : 0;

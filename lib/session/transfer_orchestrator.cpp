@@ -121,7 +121,8 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
     : port_index_(port_index)
     , identity_(std::move(identity))
     , handshake_(handshake_timing_from_identity(identity_))
-    , on_ui_update_(std::move(on_ui_update)) {
+    , on_ui_update_(std::move(on_ui_update))
+    , instance_id_(make_instance_id()) {
     state_.identity = identity_;
     state_.booth_display_mib_s = identity_.booth_display_mib_s;
     if (identity_.transfer_timeout_ms > 0) {
@@ -674,14 +675,25 @@ void TransferOrchestrator::tick_presence() {
 }
 
 void TransferOrchestrator::handle_announce(const FabricSessionMessage& message) {
-    if (message.from_name.empty() || message.from_name == identity_.display_name) {
+    if (message.from_name.empty()) {
         return;
     }
 
-    int peer_port = port_index_ == 0 ? 1 : 0;
+    int announced_port = port_index_ == 0 ? 1 : 0;
     ReceiveStatus peer_status = ReceiveStatus::AskFirst;
-    parse_announce_note(message.note, peer_port, &peer_port, &peer_status);
-    roster_.touch_peer(message.from_name, message.team, peer_status, peer_port);
+    std::string instance_id;
+    parse_announce_note(message.note, announced_port, &announced_port, &peer_status, &instance_id);
+
+    if (!instance_id.empty() && instance_id == instance_id_) {
+        return;
+    }
+    if (instance_id.empty() && message.from_name == identity_.display_name
+        && announced_port == port_index_) {
+        return;
+    }
+
+    const int peer_port = resolve_remote_fabric_port(port_index_, announced_port);
+    roster_.touch_peer(message.from_name, message.team, peer_status, peer_port, instance_id);
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -740,7 +752,7 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
     message.from_name = identity_.display_name;
     message.team = identity_.team;
     message.session_id = make_session_id();
-    message.note = build_announce_note(port_index_, identity_.receive_status);
+    message.note = build_announce_note(port_index_, identity_.receive_status, instance_id_);
 
     std::string error;
     if (send_session_with_routing(message, false, &error)) {
@@ -771,8 +783,6 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
         booth_log(port_index_, "offer_rejected", "busy from=" + message.from_name);
         return;
     }
-
-    roster_.touch_peer(message.from_name, message.team, ReceiveStatus::Open, port_index_ == 0 ? 1 : 0);
 
     ReceiveStatus effective = identity_.receive_status;
     if (effective == ReceiveStatus::Busy) {

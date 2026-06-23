@@ -51,8 +51,9 @@ describe('effectiveDisplayMbps', () => {
     expect(effectiveDisplayMbps(100, 7168, true)).toBe(100);
   });
 
-  it('uses booth display rate only while busy', () => {
-    expect(effectiveDisplayMbps(0, 7168, true)).toBe(7168);
+  it('uses booth display rate only while busy with payload progress', () => {
+    expect(effectiveDisplayMbps(0, 7168, true, 1024)).toBe(7168);
+    expect(effectiveDisplayMbps(0, 7168, true, 0)).toBe(0);
     expect(effectiveDisplayMbps(0, 7168, false)).toBe(0);
   });
 });

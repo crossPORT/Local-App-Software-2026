@@ -32,6 +32,7 @@ export interface FabricTransport {
   tryReceiveSessionMessage(headerTimeoutMs: number): Promise<FabricSessionMessage | null>;
   receiveFileTransfer(
     headerTimeoutMs: number,
+    expectedBytes?: number,
     onProgress?: (done: number, total: number) => void,
   ): Promise<{ data: Uint8Array; filename: string }>;
   /** Abort a stuck session poll and drain the USB queue before payload OUT. */

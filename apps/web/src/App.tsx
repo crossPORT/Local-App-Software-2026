@@ -14,10 +14,9 @@ export function App() {
     setSettingsOpen,
     ledPulse,
     usbDescription,
-    connectUsb,
     disconnectUsb,
     forgetUsb,
-    clearTransferState,
+    recoverUsb,
     saveIdentity,
     sendToPeer,
     acceptOffer,
@@ -30,10 +29,6 @@ export function App() {
     return <div className="app loading">Loading RocketBox App…</div>;
   }
 
-  const onConnect = () => {
-    void connectUsb();
-  };
-
   return (
     <div className="app">
       <Header state={state} ledPulse={ledPulse} onOpenSettings={() => setSettingsOpen(true)} />
@@ -41,17 +36,12 @@ export function App() {
         <ConnectionPanel state={state} usbDescription={usbDescription}>
           {!state.usbConnected ? (
             <div className="connect-actions">
-              <button type="button" className="primary connect-btn" onClick={onConnect}>
-                Connect USB
+              <button type="button" className="primary connect-btn" onClick={() => void recoverUsb()}>
+                {state.fabricDevicesSeen > 0 ? 'Reconnect USB' : 'Connect USB'}
               </button>
               {state.fabricDevicesSeen > 0 && (
                 <button type="button" className="disconnect-btn" onClick={() => void forgetUsb()}>
                   Forget USB device
-                </button>
-              )}
-              {state.errorMessage && (
-                <button type="button" className="disconnect-btn" onClick={clearTransferState}>
-                  Clear errors
                 </button>
               )}
             </div>

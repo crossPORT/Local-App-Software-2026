@@ -25,11 +25,11 @@ function readIdentityPortHint(): number {
 const MANUAL_DISCONNECT_KEY = 'rocketbox-manual-disconnect';
 
 function pickSelectedPeer(roster: PeerRoster, portIndex: number, current: string): string {
-  if (current && roster.findByName(current)) {
+  if (current && roster.findById(current)) {
     return current;
   }
   const online = roster.visiblePeers(true);
-  return online.find((peer) => peer.port_index !== portIndex)?.display_name ?? online[0]?.display_name ?? '';
+  return online.find((peer) => peer.port_index !== portIndex)?.id ?? online[0]?.id ?? '';
 }
 
 function syncFabricPortIndex(
@@ -44,11 +44,12 @@ function syncFabricPortIndex(
 export function useRocketBox() {
   const identityPortHint = readIdentityPortHint();
   const portIndexRef = useRef(0);
-  const sessionRef = useRef(createTransportSession(0));
+  const sessionRef = useRef(createTransportSession(identityPortHint));
   const rosterRef = useRef(new PeerRoster());
   const orchestratorRef = useRef<WebTransferOrchestrator | null>(null);
   const disconnectingRef = useRef(false);
   const reconnectAttemptedRef = useRef(false);
+  const lastAutoRecoverMsRef = useRef(0);
   const identityRef = useRef<IdentityProfile | null>(null);
 
   const [state, setState] = useState<AppUiState | null>(null);
@@ -164,35 +165,6 @@ export function useRocketBox() {
   hasStateRef.current = state !== null;
 
   useEffect(() => {
-    let staleTick = 0;
-    const tick = async () => {
-      if (!hasStateRef.current) {
-        return;
-      }
-      const count = await countTransportDevices();
-      const usbConnected = sessionRef.current.connected;
-      const portIndex = portIndexRef.current;
-      if (usbConnected) {
-        staleTick += 1;
-        if (staleTick >= 15) {
-          rosterRef.current.markStalePeersOffline();
-          staleTick = 0;
-        }
-      }
-      patch((prev) => ({
-        usbConnected,
-        fabricDevicesSeen: count,
-        fabricConnected: usbConnected,
-        roster: rosterRef.current.visiblePeers(usbConnected),
-        selectedPeer: pickSelectedPeer(rosterRef.current, portIndex, prev.selectedPeer),
-      }));
-    };
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [patch]);
-
-  useEffect(() => {
     const onDisconnect = (event: USBConnectionEvent) => {
       if (sessionRef.current.ownsDevice(event.device)) {
         sessionRef.current.markDisconnected();
@@ -242,10 +214,12 @@ export function useRocketBox() {
         roster: rosterRef.current.visiblePeers(true),
         errorMessage: '',
       });
-      ensureOrchestrator().startListener();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        void Notification.requestPermission();
+      }
       promptSetupIfNeeded();
     },
-    [ensureOrchestrator, patch, promptSetupIfNeeded],
+    [patch, promptSetupIfNeeded],
   );
 
   const connectUsb = useCallback(async () => {
@@ -274,12 +248,63 @@ export function useRocketBox() {
 
   const reconnectUsb = useCallback(async () => {
     try {
+      orchestratorRef.current?.stopListener();
+      clearTransferState();
       const desc = await sessionRef.current.reconnectKnown();
       await applyUsbConnected(desc);
-    } catch {
-      // Silent — user clicks Connect USB if auto-reconnect doesn't work.
+    } catch (err) {
+      const message = formatUsbConnectError(err);
+      if (message) {
+        patchError(message);
+      }
     }
-  }, [applyUsbConnected]);
+  }, [applyUsbConnected, clearTransferState, patchError]);
+
+  const recoverUsb = useCallback(async () => {
+    sessionStorage.removeItem(MANUAL_DISCONNECT_KEY);
+    if (transportHasSavedSerial()) {
+      await reconnectUsb();
+      return;
+    }
+    await connectUsb();
+  }, [connectUsb, reconnectUsb]);
+
+  useEffect(() => {
+    let staleTick = 0;
+    const tick = async () => {
+      if (!hasStateRef.current) {
+        return;
+      }
+      const count = await countTransportDevices();
+      const usbConnected = sessionRef.current.connected;
+      const portIndex = portIndexRef.current;
+      if (usbConnected) {
+        staleTick += 1;
+        if (staleTick >= 15) {
+          rosterRef.current.markStalePeersOffline();
+          staleTick = 0;
+        }
+      } else if (
+        count > 0 &&
+        transportHasSavedSerial() &&
+        sessionStorage.getItem(MANUAL_DISCONNECT_KEY) !== '1' &&
+        Date.now() - lastAutoRecoverMsRef.current >= 12_000
+      ) {
+        lastAutoRecoverMsRef.current = Date.now();
+        void reconnectUsb();
+      }
+      patch((prev) => ({
+        usbConnected,
+        fabricDevicesSeen: count,
+        fabricConnected: usbConnected,
+        roster: rosterRef.current.visiblePeers(usbConnected),
+        selectedPeer: pickSelectedPeer(rosterRef.current, portIndex, prev.selectedPeer),
+      }));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [patch, reconnectUsb]);
 
   useEffect(() => {
     if (!state || state.usbConnected || reconnectAttemptedRef.current) {
@@ -360,14 +385,14 @@ export function useRocketBox() {
   );
 
   const sendToPeer = useCallback(
-    async (peerName: string, files: File[]) => {
+    async (peerId: string, files: File[]) => {
       const file = files[0];
       if (!file) {
         patch({ errorMessage: 'No file selected' });
         return;
       }
       try {
-        await ensureOrchestrator().sendToPeer(peerName, file);
+        await ensureOrchestrator().sendToPeer(peerId, file);
       } catch (err) {
         patch({ errorMessage: err instanceof Error ? err.message : 'Send failed' });
       }
@@ -402,6 +427,7 @@ export function useRocketBox() {
     sendToPeer,
     acceptOffer,
     declineOffer,
+    recoverUsb,
     resetTransfer,
     patch,
   };

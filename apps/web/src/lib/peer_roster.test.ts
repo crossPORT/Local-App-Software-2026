@@ -24,7 +24,25 @@ describe('PeerRoster', () => {
     const visible = roster.visiblePeers(true);
     expect(visible).toHaveLength(1);
     expect(visible[0]?.display_name).toBe('Alice');
+    expect(visible[0]?.id).toBe('0:Alice');
     expect(visible[0]?.online).toBe(true);
+  });
+
+  it('shows one online peer per fabric port', () => {
+    const roster = new PeerRoster();
+    roster.touchPeer('Alice', 'Creative', 'open', 1, 'new-session');
+    roster.touchPeer('Alice', 'Creative', 'ask_first', 1);
+    expect(roster.visiblePeers(true)).toHaveLength(1);
+    expect(roster.visiblePeers(true)[0]?.receive_status).toBe('ask_first');
+  });
+
+  it('keeps duplicate display names on different fabric ports', () => {
+    const roster = new PeerRoster();
+    roster.touchPeer('Sally', 'Creative', 'open', 1, 'phone');
+    roster.touchPeer('Sally', 'CAD', 'ask_first', 0, 'laptop');
+    const visible = roster.visiblePeers(true);
+    expect(visible).toHaveLength(2);
+    expect(visible.map((peer) => peer.id).sort()).toEqual(['i:laptop', 'i:phone']);
   });
 
   it('replaces peer on the same port when name changes', () => {

@@ -64,6 +64,14 @@ export function makeSessionId(): string {
   return out;
 }
 
+/** Stable id for this app instance — distinguishes stations with the same display name. */
+export function makeInstanceId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  }
+  return makeSessionId().slice(0, 12);
+}
+
 function parseLine(line: string, out: FabricSessionMessage): void {
   const eq = line.indexOf('=');
   if (eq < 0) {
@@ -169,6 +177,7 @@ export function parseSessionPayload(data: Uint8Array): FabricSessionMessage | nu
 export function buildAnnounceMessage(
   identity: Pick<IdentityProfile, 'display_name' | 'team' | 'receive_status'>,
   portIndex: number,
+  instanceId: string,
 ): FabricSessionMessage {
   return {
     kind: 'announce',
@@ -176,7 +185,7 @@ export function buildAnnounceMessage(
     from_name: identity.display_name,
     team: identity.team,
     to_name: '',
-    note: buildAnnounceNote(portIndex, identity.receive_status),
+    note: buildAnnounceNote(portIndex, identity.receive_status, instanceId),
     payload_type: '',
     payload_name: '',
     file_count: 0,
