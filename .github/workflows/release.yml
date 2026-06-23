@@ -231,7 +231,17 @@ jobs:
 
       - name: CPack (NSIS)
         working-directory: build
-        run: cpack -G NSIS -C Release
+        shell: pwsh
+        run: |
+          cpack -G NSIS -C Release
+          if ($LASTEXITCODE -ne 0) {
+            $log = "_CPack_Packages/win64/NSIS/NSISOutput.log"
+            if (Test-Path $log) {
+              Write-Host "--- NSISOutput.log ---"
+              Get-Content $log
+            }
+            exit $LASTEXITCODE
+          }
 
       - name: Verify NSIS installer
         shell: pwsh

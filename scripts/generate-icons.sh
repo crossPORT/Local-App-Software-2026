@@ -14,7 +14,9 @@ convert -background none "$SVG" -resize 512x512 "$PNG512"
 convert -background none "$SVG" -resize 192x192 "$PNG192"
 cp "$SVG" "${ICONDIR}/rocketbox.svg"
 convert "$PNG512" -resize 256x256 "${ICONDIR}/rocketbox-256.png"
-# NSIS makensis needs BMP-style ICO entries, not PNG-compressed icons.
-convert "$PNG512" -compress none -define icon:auto-resize=256,48,32,16 "${ICONDIR}/rocketbox.ico"
+# App/window icon (installed next to RocketBox.exe).
+convert "$PNG512" -compress none -define icon:auto-resize=48,32,16 "${ICONDIR}/rocketbox.ico"
+# NSIS embeds icons in the setup.exe; keep small (no 256x256 BMP layer).
+convert "$PNG512" -compress none -define icon:auto-resize=48,32,16 "${ICONDIR}/rocketbox-installer.ico"
 
-echo "Updated PWA PNGs and cmake/icons (rocketbox.ico is NSIS-compatible BMP ICO)"
+echo "Updated PWA PNGs and cmake/icons"
