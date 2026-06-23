@@ -52,32 +52,36 @@ elseif(WIN32)
     include(${CMAKE_SOURCE_DIR}/cmake/rocketbox_windows_vcpkg.cmake)
     rocketbox_resolve_vcpkg_bin(_rb_vcpkg_bin)
 
-    install(TARGETS rocketbox RUNTIME DESTINATION bin)
-
-    if(_rb_vcpkg_bin)
-        file(GLOB _rb_primary_dlls
-            "${_rb_vcpkg_bin}/wx*.dll"
-            "${_rb_vcpkg_bin}/libusb-1.0.dll"
-        )
-        if(_rb_primary_dlls)
-            install(FILES ${_rb_primary_dlls} DESTINATION bin)
-            list(LENGTH _rb_primary_dlls _rb_primary_count)
-            message(STATUS "Windows: install ${_rb_primary_count} primary DLL(s) from ${_rb_vcpkg_bin}")
-        else()
-            message(FATAL_ERROR "Windows: no wx/libusb DLLs found in ${_rb_vcpkg_bin}")
-        endif()
-    else()
+    if(NOT _rb_vcpkg_bin)
         message(FATAL_ERROR "Windows: vcpkg bin directory not found; cannot bundle runtime DLLs")
     endif()
 
-    set(ROCKETBOX_VCPKG_BIN "${_rb_vcpkg_bin}")
-    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
-    configure_file(
-        "${CMAKE_SOURCE_DIR}/cmake/windows_fixup_install.cmake.in"
-        "${CMAKE_BINARY_DIR}/generated/windows_fixup_install.cmake"
-        @ONLY
-    )
-    install(SCRIPT "${CMAKE_BINARY_DIR}/generated/windows_fixup_install.cmake")
+    rocketbox_collect_vcpkg_runtime_dlls("${_rb_vcpkg_bin}" _rb_runtime_dlls)
+    rocketbox_assert_vcpkg_runtime_dlls("${_rb_runtime_dlls}" "${_rb_vcpkg_bin}")
+
+    list(LENGTH _rb_runtime_dlls _rb_dll_count)
+    message(STATUS "Windows: bundle ${_rb_dll_count} runtime DLL(s) from ${_rb_vcpkg_bin}")
+
+    install(TARGETS rocketbox RUNTIME DESTINATION bin)
+    install(FILES ${_rb_runtime_dlls} DESTINATION bin)
+
+    # Post-install sanity check only — no file(GET_RUNTIME_DEPENDENCIES).
+    install(CODE [[
+        set(_bin "${CMAKE_INSTALL_PREFIX}/bin")
+        if(NOT EXISTS "${_bin}/RocketBox.exe")
+            message(FATAL_ERROR "Windows install missing RocketBox.exe in ${_bin}")
+        endif()
+        if(NOT EXISTS "${_bin}/libusb-1.0.dll")
+            message(FATAL_ERROR "Windows install missing libusb-1.0.dll in ${_bin}")
+        endif()
+        file(GLOB _wx "${_bin}/wx*.dll")
+        if(NOT _wx)
+            message(FATAL_ERROR "Windows install missing wxWidgets DLLs in ${_bin}")
+        endif()
+        file(GLOB _all "${_bin}/*.dll")
+        list(LENGTH _all _n)
+        message(STATUS "Windows install verified: RocketBox.exe + ${_n} bundled DLL(s) in ${_bin}")
+    ]])
 
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
