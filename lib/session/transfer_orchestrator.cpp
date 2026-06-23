@@ -357,7 +357,7 @@ bool TransferOrchestrator::stage_paths(const std::vector<std::string>& paths,
     }
 
     std::string tar_error;
-    out.path = create_tar_for_file(paths[0], "", &tar_error);
+    out.path = create_tar_for_paths(paths, &tar_error);
     if (out.path.empty()) {
         if (error_out) {
             *error_out = tar_error.empty() ? "Could not stage files" : tar_error;
