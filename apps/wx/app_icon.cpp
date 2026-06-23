@@ -1,5 +1,6 @@
 #include "app_icon.h"
 
+#include <wx/frame.h>
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
 
