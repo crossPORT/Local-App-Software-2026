@@ -27,40 +27,20 @@ function(rocketbox_resolve_vcpkg_bin out_var)
     set(${out_var} "${_found}" PARENT_SCOPE)
 endfunction()
 
-# Allowlisted filename patterns under vcpkg bin only (no dependency walker, no *.dll sweep).
+# Bundle every runtime DLL vcpkg installed for this triplet (wx/libusb pull in z.dll, liblzma, etc.).
 function(rocketbox_collect_vcpkg_runtime_dlls vcpkg_bin out_var)
-    set(_patterns
-        "libusb-1.0.dll"
-        "wx*.dll"
-        "zlib*.dll"
-        "libpng*.dll"
-        "jpeg*.dll"
-        "tiff*.dll"
-        "libwebp*.dll"
-        "libsharpyuv*.dll"
-        "pcre2*.dll"
-        "pcre*.dll"
-        "expat*.dll"
-    )
-
     set(_collected "")
     if(vcpkg_bin AND IS_DIRECTORY "${vcpkg_bin}")
-        foreach(_pattern IN LISTS _patterns)
-            file(GLOB _matches "${vcpkg_bin}/${_pattern}")
-            list(APPEND _collected ${_matches})
-        endforeach()
+        file(GLOB _collected "${vcpkg_bin}/*.dll")
     endif()
-
-    if(_collected)
-        list(REMOVE_DUPLICATES _collected)
-    endif()
-
     set(${out_var} "${_collected}" PARENT_SCOPE)
 endfunction()
 
 function(rocketbox_assert_vcpkg_runtime_dlls dll_list vcpkg_bin)
     set(_has_libusb FALSE)
     set(_has_wx FALSE)
+    set(_has_zlib FALSE)
+    set(_has_lzma FALSE)
     foreach(_dll IN LISTS dll_list)
         get_filename_component(_name "${_dll}" NAME)
         if(_name STREQUAL "libusb-1.0.dll")
@@ -69,6 +49,12 @@ function(rocketbox_assert_vcpkg_runtime_dlls dll_list vcpkg_bin)
         if(_name MATCHES "^wx.*\\.dll$")
             set(_has_wx TRUE)
         endif()
+        if(_name MATCHES "^(z|zlib).*\\.dll$")
+            set(_has_zlib TRUE)
+        endif()
+        if(_name MATCHES "^(lib)?lzma.*\\.dll$")
+            set(_has_lzma TRUE)
+        endif()
     endforeach()
 
     if(NOT _has_libusb)
@@ -76,5 +62,11 @@ function(rocketbox_assert_vcpkg_runtime_dlls dll_list vcpkg_bin)
     endif()
     if(NOT _has_wx)
         message(FATAL_ERROR "Windows: no wx*.dll found in ${vcpkg_bin}")
+    endif()
+    if(NOT _has_zlib)
+        message(FATAL_ERROR "Windows: no z.dll/zlib*.dll found in ${vcpkg_bin}")
+    endif()
+    if(NOT _has_lzma)
+        message(FATAL_ERROR "Windows: no liblzma*.dll found in ${vcpkg_bin}")
     endif()
 endfunction()
