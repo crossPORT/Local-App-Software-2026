@@ -3,6 +3,9 @@ name: Release
 # Each platform job is independent. A failure on one OS must never block artifacts
 # from the others. Every successful job uploads workflow artifacts AND attaches
 # files to the GitHub Release for the tag immediately.
+#
+# workflow_dispatch: pick a tag and which platforms to build (defaults: all four).
+# Tag push: always builds all platforms.
 on:
   push:
     tags:
@@ -13,15 +16,34 @@ on:
       tag:
         description: "Existing tag to build (e.g. v0.0.1 or 0.0.1)"
         required: true
+      build_linux:
+        description: "Build Linux (.deb + AppImage)"
+        type: boolean
+        default: true
+      build_macos:
+        description: "Build macOS (.dmg)"
+        type: boolean
+        default: true
+      build_windows:
+        description: "Build Windows (.exe installer)"
+        type: boolean
+        default: true
+      build_pwa:
+        description: "Build PWA (zip)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+  packages: write
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  VCPKG_FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
 
 jobs:
   package-linux:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_linux == true || github.event.inputs.build_linux == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +59,7 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX"
 
       - name: Build
-        run: cmake --build build --config Release --target rocketbox -j 4
+        run: cmake --build build --config Release --target rocketbox --parallel
 
       - name: Install staging tree
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
@@ -72,6 +94,7 @@ jobs:
             ${{ runner.temp }}/out/**
 
   package-macos:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_macos == true || github.event.inputs.build_macos == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +111,7 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DwxWidgets_CONFIG=$(brew --prefix)/bin/wx-config
 
       - name: Build
-        run: cmake --build build --config Release --target rocketbox -j 4
+        run: cmake --build build --config Release --target rocketbox --parallel
 
       - name: Install and bundle dylibs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
@@ -128,10 +151,13 @@ jobs:
             ${{ runner.temp }}/out/**
 
   package-windows:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_windows == true || github.event.inputs.build_windows == 'true'
     runs-on: windows-2022
     timeout-minutes: 120
     # Windows is best-effort. It must never fail the workflow or block other platforms.
     continue-on-error: true
+    env:
+      VCPKG_BINARY_SOURCES: "clear;nuget,${{ env.VCPKG_FEED_URL }},readwrite"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,6 +167,7 @@ jobs:
         with:
           path: |
             vcpkg
+            vcpkg/downloads
             build/vcpkg_installed
           key: vcpkg-${{ hashFiles('vcpkg.json') }}-windows-2022
           restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-windows-2022
@@ -153,11 +180,25 @@ jobs:
         run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
       - name: Install vcpkg dependencies
+        shell: pwsh
+        env:
+          FEED_URL: ${{ env.VCPKG_FEED_URL }}
         run: |
           if (-not (Test-Path vcpkg\vcpkg.exe)) {
             git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
             .\vcpkg\bootstrap-vcpkg.bat
           }
+
+          $nuget = & .\vcpkg\vcpkg.exe fetch nuget | Select-Object -Last 1
+          & $nuget sources add `
+            -Source $env:FEED_URL `
+            -Name GitHubPackages `
+            -Username "${{ github.repository_owner }}" `
+            -Password "${{ secrets.GITHUB_TOKEN }}" `
+            -StorePasswordInClearText
+          & $nuget setapikey "${{ secrets.GITHUB_TOKEN }}" `
+            -Source $env:FEED_URL
+
           .\vcpkg\vcpkg install --triplet x64-windows
 
       - name: Configure
@@ -170,7 +211,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
-        run: cmake --build build --config Release --target rocketbox -j 4
+        run: cmake --build build --config Release --target rocketbox --parallel
 
       - name: Install and bundle DLLs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
@@ -217,6 +258,7 @@ jobs:
             ${{ runner.temp }}/out/**
 
   package-pwa:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_pwa == true || github.event.inputs.build_pwa == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -269,7 +311,7 @@ jobs:
             case "$2" in
               success) echo "- $1: included on GitHub Release + workflow Artifacts" ;;
               failure) echo "- $1: **failed** (other platforms unaffected)" ;;
-              skipped) echo "- $1: skipped" ;;
+              skipped) echo "- $1: skipped (not selected or upstream skip)" ;;
               *) echo "- $1: $2" ;;
             esac
           }
@@ -280,5 +322,6 @@ jobs:
             status_line "Windows (.exe)" "$WINDOWS"
             status_line "PWA (zip)" "$PWA"
             echo
-            echo "Each platform publishes independently. Re-run only the failed job to add missing installers."
+            echo "Each platform publishes independently. Use workflow_dispatch to build one platform, or re-run only a failed job."
+            echo "Windows vcpkg deps are cached in GitHub Packages (NuGet) after the first successful build."
           } >> "$GITHUB_STEP_SUMMARY"
