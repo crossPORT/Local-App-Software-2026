@@ -6,8 +6,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_PNG="${ROOT}/apps/web/public/icon-512.png"
 OUT_ICNS="${ROOT}/cmake/icons/rocketbox.icns"
 ICONSET="${TMPDIR:-/tmp}/rocketbox.iconset.$$"
+WORK_SRC="${TMPDIR:-/tmp}/rocketbox-rgba.$$"
 
-cleanup() { rm -rf "$ICONSET"; }
+cleanup() { rm -rf "$ICONSET" "$WORK_SRC"; }
 trap cleanup EXIT
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -23,11 +24,24 @@ fi
 mkdir -p "${ROOT}/cmake/icons"
 mkdir -p "$ICONSET"
 
-# iconutil requires a *.iconset folder and exact icon_WxH[@2x].png names.
+# iconutil requires RGBA PNGs; our source may be RGB if an old asset was committed.
+sips -s format png "$SRC_PNG" --out "$WORK_SRC" >/dev/null
+if ! sips -g hasAlpha "$WORK_SRC" 2>/dev/null | grep -q "yes"; then
+    echo "Source icon lacks alpha; iconutil needs RGBA PNG (regenerate icon-512.png from favicon.svg)" >&2
+    exit 1
+fi
+
 write_icon() {
     local name="$1"
     local size="$2"
-    sips -z "$size" "$size" "$SRC_PNG" --out "${ICONSET}/${name}" >/dev/null
+    sips -z "$size" "$size" "$WORK_SRC" --out "${ICONSET}/${name}" >/dev/null
+    local w h
+    w="$(sips -g pixelWidth "${ICONSET}/${name}" | awk '/pixelWidth/ {print $2}')"
+    h="$(sips -g pixelHeight "${ICONSET}/${name}" | awk '/pixelHeight/ {print $2}')"
+    if [[ "$w" != "$size" || "$h" != "$size" ]]; then
+        echo "Icon ${name} is ${w}x${h}, expected ${size}x${size}" >&2
+        exit 1
+    fi
 }
 
 write_icon "icon_16x16.png" 16
