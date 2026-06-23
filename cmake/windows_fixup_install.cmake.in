@@ -50,9 +50,6 @@ function(_rocketbox_copy_runtime_deps)
         RESOLVED_DEPENDENCIES_VAR _resolved
         UNRESOLVED_DEPENDENCIES_VAR _unresolved
     )
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
-        list(APPEND _grd_args CONFLICT_POLICY SKIP)
-    endif()
 
     if(_ARG_LIBRARIES)
         file(GET_RUNTIME_DEPENDENCIES
