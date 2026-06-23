@@ -242,27 +242,22 @@ jobs:
             }
             exit $LASTEXITCODE
           }
+          Write-Host "CPack output in build/:"
+          Get-ChildItem -Filter '*.exe' | Format-Table Name, Length
 
       - name: Verify NSIS installer
         shell: pwsh
         run: |
-          Get-ChildItem build -Filter '*.exe' | Format-Table Name, Length
-          $setup = @(
-            Get-ChildItem build -Filter '*setup.exe' -ErrorAction SilentlyContinue
-            Get-ChildItem build -Filter 'RocketBox-*.exe' -ErrorAction SilentlyContinue
-          ) | Where-Object { $_.Name -ne 'RocketBox.exe' } | Select-Object -First 1
-          if (-not $setup) {
-            Write-Error "No NSIS installer .exe found in build/"
-          }
-          ./scripts/verify-windows-nsis.ps1 -SetupExe $setup.FullName
+          $setup = & ./scripts/find-windows-installer.ps1 -BuildDir build
+          ./scripts/verify-windows-nsis.ps1 -SetupExe $setup
 
       - name: Collect packages
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p "${{ runner.temp }}/out"
-          find build -maxdepth 1 -name 'RocketBox-*-setup.exe' -exec cp -v {} "${{ runner.temp }}/out/" \;
-          find build -maxdepth 1 -name 'RocketBox-*.exe' ! -name 'RocketBox.exe' -exec cp -v {} "${{ runner.temp }}/out/" \;
-          ls -la "${{ runner.temp }}/out/"
+          New-Item -ItemType Directory -Force -Path "${{ runner.temp }}/out" | Out-Null
+          $setup = & ./scripts/find-windows-installer.ps1 -BuildDir build
+          Copy-Item -Path $setup -Destination "${{ runner.temp }}/out/" -Force
+          Get-ChildItem "${{ runner.temp }}/out" | Format-Table Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
