@@ -1,4 +1,5 @@
 import { theme, type LinkLed } from '../lib/theme';
+import { webUsbBlockedReason } from '../lib/webusb_env';
 
 interface ConnectionLedProps {
   state: LinkLed;
@@ -61,9 +62,10 @@ export function statusLine(
   if (fabricConnected) {
     return { text: 'USB connected', colour: theme.ok };
   }
-  if (!navigator.usb) {
+  if (webUsbBlockedReason()) {
+    const reason = webUsbBlockedReason()!;
     return {
-      text: 'Use Chrome on this computer — other browsers cannot connect USB',
+      text: reason,
       colour: theme.error,
     };
   }

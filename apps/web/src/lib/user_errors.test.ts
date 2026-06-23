@@ -20,7 +20,7 @@ describe('formatUsbConnectError', () => {
   });
 
   it('maps common WebUSB failures to user copy', () => {
-    expect(formatUsbConnectError(new Error('WebUSB unavailable'))).toMatch(/Chrome or Edge/);
+    expect(formatUsbConnectError(new Error('WebUSB requires HTTPS'))).toMatch(/HTTPS/);
     expect(formatUsbConnectError(new Error('SecurityError Access denied'))).toMatch(/access denied/i);
     expect(formatUsbConnectError(new Error('device disconnected'))).toMatch(/disconnected/i);
     expect(formatUsbConnectError(new Error('No USB device found'))).toMatch(/Cable not found/);

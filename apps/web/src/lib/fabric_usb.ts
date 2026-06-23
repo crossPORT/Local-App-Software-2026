@@ -17,6 +17,7 @@ import {
 } from './fabric_session';
 import type { FabricTransport } from './fabric_transport';
 import { MAX_SESSION_FILE_BYTES } from './usb_constants';
+import { webUsbBlockedReason } from './webusb_env';
 
 const SELECTED_SERIAL_KEY = 'rocketbox_usb_serial';
 
@@ -262,8 +263,9 @@ export class FabricUsbSession implements FabricTransport {
   }
 
   async connect(): Promise<string> {
-    if (!navigator.usb) {
-      throw new FabricUsbError('WebUSB unavailable — use Chrome on localhost');
+    const blocked = webUsbBlockedReason();
+    if (blocked) {
+      throw new FabricUsbError(blocked);
     }
     await this.disconnect();
     let device: USBDevice;

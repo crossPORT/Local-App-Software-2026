@@ -18,8 +18,8 @@ export function formatUsbConnectError(err: unknown): string | null {
     return err.message;
   }
   const message = (err as Error)?.message ?? String(err);
-  if (message.includes('WebUSB unavailable')) {
-    return 'WebUSB is not available — use Chrome or Edge on localhost.';
+  if (message.includes('WebUSB unavailable') || message.includes('WebUSB requires HTTPS')) {
+    return 'WebUSB needs HTTPS — open https://<your-ip>:8080 on this device and accept the certificate warning.';
   }
   if (message.includes('Access denied') || message.includes('SecurityError')) {
     return 'USB access denied — close other RocketBox App tabs, click Forget USB device, then connect again.';

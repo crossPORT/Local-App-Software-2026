@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -7,6 +8,7 @@ const base = process.env.VITE_BASE_PATH ?? '/';
 export default defineConfig({
   base,
   plugins: [
+    basicSsl(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -32,5 +34,6 @@ export default defineConfig({
   ],
   server: {
     port: 8080,
+    host: true, // bind 0.0.0.0 so phones on the same LAN can reach the dev server
   },
 });
