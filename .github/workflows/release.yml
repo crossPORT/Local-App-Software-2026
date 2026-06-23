@@ -179,6 +179,10 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/verify-windows-install.ps1 -InstallPrefix "${{ runner.temp }}/install"
+          $dllCount = (Get-ChildItem "${{ runner.temp }}/install/bin" -Filter "*.dll").Count
+          if ($dllCount -lt 3) {
+            Write-Error "Expected multiple bundled DLLs in install/bin, found $dllCount"
+          }
           Get-ChildItem "${{ runner.temp }}/install/bin" | Format-Table Name, Length
 
       - name: CPack (NSIS)

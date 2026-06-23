@@ -48,12 +48,43 @@ target_compile_features(rocketbox PRIVATE cxx_std_17)
 if(APPLE)
     install(TARGETS rocketbox BUNDLE DESTINATION .)
     install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/macos_fixup_bundle.cmake")
+elseif(WIN32)
+    if(NOT VCPKG_TARGET_TRIPLET)
+        set(VCPKG_TARGET_TRIPLET "x64-windows")
+    endif()
+    if(VCPKG_INSTALLED_DIR)
+        set(_rocketbox_vcpkg_bin "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+    else()
+        set(_rocketbox_vcpkg_bin "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin")
+    endif()
+
+    install(RUNTIME_DEPENDENCY_SET rocketbox_runtime_deps
+        DIRECTORIES "${_rocketbox_vcpkg_bin}"
+        POST_EXCLUDE_REGEXES
+            ".*[\\\\]Windows[\\\\]System32[\\\\].*"
+            ".*[\\\\]Windows[\\\\]SysWOW64[\\\\].*"
+            ".*[\\\\]WinSxS[\\\\].*"
+    )
+
+    install(TARGETS rocketbox
+        RUNTIME DESTINATION bin
+        RUNTIME_DEPENDENCY_SET rocketbox_runtime_deps
+    )
+
+    install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/windows_fixup_install.cmake")
+
+    install(FILES
+        ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
+        ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
+        DESTINATION share/rocketbox
+    )
+
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/demo-config/
+        DESTINATION share/rocketbox/demo-config
+        FILES_MATCHING PATTERN "*.conf" PATTERN "README.txt"
+    )
 else()
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
-
-    if(WIN32)
-        install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/windows_fixup_install.cmake")
-    endif()
 
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
