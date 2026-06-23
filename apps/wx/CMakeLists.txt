@@ -51,6 +51,10 @@ if(APPLE)
 else()
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
 
+    if(WIN32)
+        install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/windows_fixup_install.cmake")
+    endif()
+
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
         ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt

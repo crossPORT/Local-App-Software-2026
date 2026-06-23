@@ -172,8 +172,14 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --target rocketbox -j 4
 
-      - name: Install staging tree
+      - name: Install and bundle DLLs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
+
+      - name: Verify Windows install
+        shell: pwsh
+        run: |
+          ./scripts/verify-windows-install.ps1 -InstallPrefix "${{ runner.temp }}/install"
+          Get-ChildItem "${{ runner.temp }}/install/bin" | Format-Table Name, Length
 
       - name: CPack (NSIS)
         working-directory: build
