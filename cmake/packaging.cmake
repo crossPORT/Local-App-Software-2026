@@ -11,6 +11,7 @@ set(CPACK_PACKAGE_CONTACT "support@crossport.io")
 
 if(WIN32)
     set(CPACK_GENERATOR "NSIS")
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-setup")
     set(_rb_nsis_icon "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-installer.ico")
     set(CPACK_NSIS_MUI_ICON "${_rb_nsis_icon}")
     set(CPACK_NSIS_MUI_UNIICON "${_rb_nsis_icon}")

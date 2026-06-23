@@ -246,9 +246,13 @@ jobs:
       - name: Verify NSIS installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem build -Filter '*setup.exe' | Select-Object -First 1
+          Get-ChildItem build -Filter '*.exe' | Format-Table Name, Length
+          $setup = @(
+            Get-ChildItem build -Filter '*setup.exe' -ErrorAction SilentlyContinue
+            Get-ChildItem build -Filter 'RocketBox-*.exe' -ErrorAction SilentlyContinue
+          ) | Where-Object { $_.Name -ne 'RocketBox.exe' } | Select-Object -First 1
           if (-not $setup) {
-            Write-Error "No NSIS setup.exe found in build/"
+            Write-Error "No NSIS installer .exe found in build/"
           }
           ./scripts/verify-windows-nsis.ps1 -SetupExe $setup.FullName
 
@@ -256,7 +260,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p "${{ runner.temp }}/out"
-          find build -maxdepth 1 \( -name '*setup.exe' -o -name '*.exe' \) -exec cp -v {} "${{ runner.temp }}/out/" \;
+          find build -maxdepth 1 -name 'RocketBox-*-setup.exe' -exec cp -v {} "${{ runner.temp }}/out/" \;
+          find build -maxdepth 1 -name 'RocketBox-*.exe' ! -name 'RocketBox.exe' -exec cp -v {} "${{ runner.temp }}/out/" \;
           ls -la "${{ runner.temp }}/out/"
 
       - uses: actions/upload-artifact@v4
