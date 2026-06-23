@@ -52,6 +52,8 @@ elseif(WIN32)
     include(${CMAKE_SOURCE_DIR}/cmake/rocketbox_windows_vcpkg.cmake)
     rocketbox_resolve_vcpkg_bin(_rb_vcpkg_bin)
 
+    install(TARGETS rocketbox RUNTIME DESTINATION bin)
+
     if(_rb_vcpkg_bin)
         file(GLOB _rb_primary_dlls
             "${_rb_vcpkg_bin}/wx*.dll"
@@ -62,27 +64,10 @@ elseif(WIN32)
             list(LENGTH _rb_primary_dlls _rb_primary_count)
             message(STATUS "Windows: install ${_rb_primary_count} primary DLL(s) from ${_rb_vcpkg_bin}")
         else()
-            message(WARNING "Windows: no wx/libusb DLLs found in ${_rb_vcpkg_bin}")
+            message(FATAL_ERROR "Windows: no wx/libusb DLLs found in ${_rb_vcpkg_bin}")
         endif()
-
-        install(RUNTIME_DEPENDENCY_SET rocketbox_runtime_deps
-            DIRECTORIES "${_rb_vcpkg_bin}"
-            POST_EXCLUDE_REGEXES
-                ".*[\\\\]Windows[\\\\]System32[\\\\].*"
-                ".*[\\\\]Windows[\\\\]SysWOW64[\\\\].*"
-                ".*[\\\\]WinSxS[\\\\].*"
-                ".*[\\\\]api-ms-win.*"
-                ".*[\\\\]ext-ms-win.*"
-        )
-        install(TARGETS rocketbox
-            RUNTIME DESTINATION bin
-            RUNTIME_DEPENDENCY_SET rocketbox_runtime_deps
-        )
     else()
-        message(WARNING "Windows: vcpkg bin directory not found; DLL bundling may fail at install")
-        install(TARGETS rocketbox
-            RUNTIME DESTINATION bin
-        )
+        message(FATAL_ERROR "Windows: vcpkg bin directory not found; cannot bundle runtime DLLs")
     endif()
 
     set(ROCKETBOX_VCPKG_BIN "${_rb_vcpkg_bin}")
