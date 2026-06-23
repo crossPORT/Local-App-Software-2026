@@ -102,7 +102,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
 
       - name: Install dependencies
-        run: brew install wxwidgets libusb pkg-config
+        run: brew install wxwidgets libusb pkg-config libicns
 
       - name: Generate macOS app icon
         run: |
