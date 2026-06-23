@@ -53,7 +53,6 @@ export interface OrchestratorCallbacks {
 export class WebTransferOrchestrator {
   private listenerCancel = false;
   private listenerPaused = false;
-  private listenerRunning = false;
   private lastAnnounceMs = 0;
 
   private busy = false;
@@ -97,7 +96,6 @@ export class WebTransferOrchestrator {
     this.listenerCancel = false;
     this.listenerPaused = false;
     this.lastAnnounceMs = 0;
-    this.listenerRunning = true;
     this.startPresenceLoop();
     void this.listenerLoop(generation);
   }
@@ -381,9 +379,6 @@ export class WebTransferOrchestrator {
       if (this.isListenerActive(generation) && !this.outboundOffer) {
         await sleep(handshakePoll ? 10 : 50);
       }
-    }
-    if (generation === this.listenerGeneration) {
-      this.listenerRunning = false;
     }
   }
 

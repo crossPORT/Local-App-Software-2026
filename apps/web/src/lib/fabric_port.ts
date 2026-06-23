@@ -75,7 +75,7 @@ export function resolveFabricPortIndex(
     }
   }
 
-  if (fromSerial !== null) {
+  if (fromSerial !== null && serial) {
     const savedPort = savedFabricPortForSerial(serial);
     if (savedPort !== null && savedPort !== fromSerial && typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(fabricPortStorageKey(serial));
