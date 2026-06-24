@@ -9,3 +9,7 @@ Or both instances can share demo-config/shared.conf (uses [port0]/[port1] sectio
 Without --port, a second instance with two cables connected shows the Connect USB picker instead.
 
 PWA: use in-app Settings (stored in the browser; no config file).
+
+Windows USB (WinUSB): see WINDOWS-USB.txt in this folder (INF/CAT driver +
+bundled Zadig). Installed with the Windows RocketBox App installer under
+share\rocketbox\demo-config\.

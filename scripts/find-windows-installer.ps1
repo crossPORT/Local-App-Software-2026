@@ -1,6 +1,7 @@
 # Locate the CPack NSIS installer under build/ (any RocketBox-*.exe except RocketBox.exe).
 param(
-    [string]$BuildDir = "build"
+    [string]$BuildDir = "build",
+    [string]$ExpectedTag = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,7 +19,12 @@ $candidates = Get-ChildItem -Path $BuildDir -Filter '*.exe' -File -ErrorAction S
     Sort-Object Length -Descending
 
 if (-not $candidates) {
-    Write-Error "No NSIS installer found in ${BuildDir} (expected RocketBox-*-setup.exe or RocketBox-*-win64.exe)"
+    Write-Error "No NSIS installer found in ${BuildDir} (expected RocketBox-<tag>-setup.exe)"
 }
 
-$candidates[0].FullName
+$setup = $candidates[0]
+if ($ExpectedTag -and $setup.Name -notlike "RocketBox-${ExpectedTag}-setup.exe") {
+    Write-Error "Installer name does not match release tag. Expected RocketBox-${ExpectedTag}-setup.exe, found $($setup.Name)"
+}
+
+$setup.FullName

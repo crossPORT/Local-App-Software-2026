@@ -15,6 +15,10 @@ Desktop (wx)
 
   Connect RocketBox hardware before or after launch.
 
+  Windows USB driver (one-time, required if the device is not detected):
+    See share\rocketbox\demo-config\WINDOWS-USB.txt
+    Bundled WinUSB INF/CAT and Zadig (zadig-2.9.exe) for 1772:0006.
+
   Linux USB access (one-time, required for RocketBox hardware):
     sudo cp /usr/share/rocketbox/99-sls-fabric-usb.rules /etc/udev/rules.d/
     sudo udevadm control --reload-rules && sudo udevadm trigger

@@ -24,7 +24,10 @@ On **Linux**, install the udev rule (see [Linux](#linux)) before the browser can
 3. Launch **RocketBox App** from the Start Menu (listed as RocketBox).
 4. Connect the RocketBox USB cable before transferring.
 
-If the device is not detected, ensure no other app holds the USB interface and retry.
+If the device is not detected, bind **WinUSB** for `1772:0006` (one-time per PC).
+The installer includes `share/rocketbox/demo-config/WINDOWS-USB.txt` with steps
+using the bundled `sls_usb_device.inf` / `SLS_USB_DEVICE.cat` or `zadig-2.9.exe`
+([Zadig](https://zadig.akeo.ie/)).
 
 No udev rule is required on Windows.
 

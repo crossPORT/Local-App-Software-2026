@@ -106,8 +106,13 @@ elseif(WIN32)
 
     install(DIRECTORY ${CMAKE_SOURCE_DIR}/demo-config/
         DESTINATION share/rocketbox/demo-config
-        FILES_MATCHING PATTERN "*.conf" PATTERN "README.txt"
-    )
+        FILES_MATCHING
+            PATTERN "*.conf"
+            PATTERN "README.txt"
+            PATTERN "WINDOWS-USB.txt"
+            PATTERN "*.inf"
+            PATTERN "*.cat"
+            PATTERN "zadig-*.exe")
 else()
     install(TARGETS rocketbox RUNTIME DESTINATION bin)
 

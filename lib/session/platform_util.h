@@ -15,6 +15,9 @@ std::string temp_directory();
 
 std::string default_booth_log_path();
 
+// Per-user identity settings file when --config is not passed.
+std::string default_identity_config_path();
+
 // Integration-test helper path shared by booth_cli / fabric_session_test.
 std::string shared_booth_path_config();
 

@@ -458,6 +458,33 @@ void PeerDropZonePanel::OnPaint(wxPaintEvent&) {
     dc.DrawRoundedRectangle(1, 1, sz.x - 2, sz.y - 2, 8);
 }
 
+class PresenceDotPanel : public wxPanel {
+public:
+    PresenceDotPanel(wxWindow* parent, const wxColour& colour)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(8, 8), wxBORDER_NONE)
+        , colour_(colour) {
+        SetMinSize(wxSize(8, 8));
+        SetMaxSize(wxSize(8, 8));
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetBackgroundColour(colour);
+        Bind(wxEVT_PAINT, &PresenceDotPanel::OnPaint, this);
+    }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        const wxSize sz = GetClientSize();
+        if (sz.x <= 0 || sz.y <= 0) {
+            return;
+        }
+        dc.SetPen(*wxTRANSPARENT_PEN);
+        dc.SetBrush(wxBrush(colour_));
+        dc.DrawRectangle(0, 0, sz.x, sz.y);
+    }
+
+    wxColour colour_;
+};
+
 class PeerRowPanel : public wxPanel {
 public:
     PeerRowPanel(wxWindow* parent,
@@ -469,6 +496,7 @@ public:
         , border_(border)
         , selected_(selected) {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetBackgroundColour(fill_);
         Bind(wxEVT_PAINT, &PeerRowPanel::OnPaint, this);
     }
 
@@ -717,14 +745,7 @@ void RosterPanel::RebuildList() {
         auto* row_sizer = new wxBoxSizer(wxVERTICAL);
 
         auto* meta_row = new wxBoxSizer(wxHORIZONTAL);
-        auto* presence_dot = new wxPanel(row,
-                                         wxID_ANY,
-                                         wxDefaultPosition,
-                                         wxSize(8, 8),
-                                         wxBORDER_NONE);
-        presence_dot->SetBackgroundColour(offline ? kOfflineDot : kOnlineDot);
-        presence_dot->SetMinSize(wxSize(8, 8));
-        presence_dot->SetMaxSize(wxSize(8, 8));
+        auto* presence_dot = new PresenceDotPanel(row, offline ? kOfflineDot : kOnlineDot);
         meta_row->Add(presence_dot, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
         meta_row->AddSpacer(10);
 

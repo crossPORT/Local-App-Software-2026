@@ -74,6 +74,14 @@ std::string default_booth_log_path() {
     return (std::filesystem::path(temp_directory()) / "slsfabric-booth.log").string();
 }
 
+std::string default_identity_config_path() {
+    const std::string home = home_directory();
+    if (home.empty()) {
+        return {};
+    }
+    return (std::filesystem::path(home) / ".config" / "sls-fabric" / "session.conf").string();
+}
+
 std::string shared_booth_path_config() {
     return (std::filesystem::path(temp_directory()) / "slsfabric-booth-path.conf")
         .string();

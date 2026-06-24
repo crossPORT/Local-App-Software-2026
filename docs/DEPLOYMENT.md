@@ -20,11 +20,13 @@ When you push a version tag (e.g. `v0.0.1` or `0.0.1`), `release.yml`:
 
 | File (typical) | Platform | Kept on |
 |----------------|----------|---------|
-| `rocketbox_*_amd64.deb` | Linux (Debian/Ubuntu) | GitHub Release (permanent) |
-| `RocketBox-v*-linux-x64.AppImage` | Linux (portable) | GitHub Release |
-| `RocketBox-*.dmg` | macOS (arm64 CI runner) | GitHub Release |
-| `RocketBox-*-setup.exe` | Windows (NSIS) | GitHub Release |
-| `RocketBox-pwa-v*.zip` | Web PWA | GitHub Release |
+| `rocketbox_<semver>_amd64.deb` | Linux (Debian/Ubuntu) | GitHub Release (permanent) |
+| `RocketBox-<tag>-linux-x64.AppImage` | Linux (portable) | GitHub Release |
+| `RocketBox-<tag>-macos.dmg` | macOS (arm64 CI runner) | GitHub Release |
+| `RocketBox-<tag>-setup.exe` | Windows (NSIS) | GitHub Release |
+| `RocketBox-pwa-<tag>.zip` | Web PWA | GitHub Release |
+
+`<tag>` is the git tag as pushed (e.g. `v0.0.1` or `0.0.1`). `.deb` uses semver without a leading `v` in the filename (`0.0.1`). Release CI passes the tag into CMake via `ROCKETBOX_RELEASE_TAG` / `ROCKETBOX_VERSION`.
 
 Download from: **Releases →** pick tag → **Assets**.
 

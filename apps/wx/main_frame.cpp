@@ -8,6 +8,7 @@
 #include "incoming_dialog.h"
 #include "link_status.h"
 #include "peer_roster.h"
+#include "platform_util.h"
 #include "roster_panel.h"
 #include "settings_dialog.h"
 #include "transfer_progress_panel.h"
@@ -29,6 +30,7 @@
 #include <wx/dialog.h>
 #include <wx/dcclient.h>
 #include <wx/dcbuffer.h>
+#include <wx/statbmp.h>
 
 #include <libusb-1.0/libusb.h>
 
@@ -123,6 +125,7 @@ public:
         , border_(border)
         , radius_(radius) {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetBackgroundColour(fill_);
         Bind(wxEVT_PAINT, &RoundedPanel::OnPaint, this);
     }
 
@@ -150,6 +153,7 @@ public:
         SetMinSize(wxSize(14, 14));
         SetMaxSize(wxSize(14, 14));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetBackgroundColour(parent->GetBackgroundColour());
         Bind(wxEVT_PAINT, &ConnectionLedPanel::OnPaint, this);
     }
 
@@ -406,10 +410,23 @@ void MainFrame::BuildUi() {
     icon_box->SetMinSize(wxSize(36, 36));
     icon_box->SetMaxSize(wxSize(36, 36));
     auto* icon_sizer = new wxBoxSizer(wxVERTICAL);
-    auto* icon_label = MakeLabel(icon_box, wxString::FromUTF8("🚀"), kText, 14);
-    icon_sizer->AddStretchSpacer();
-    icon_sizer->Add(icon_label, 0, wxALIGN_CENTER_HORIZONTAL);
-    icon_sizer->AddStretchSpacer();
+    wxBitmap header_icon;
+    const wxIcon app_icon = LoadRocketBoxIcon();
+    if (app_icon.IsOk()) {
+        header_icon = wxBitmap(app_icon);
+        constexpr int kHeaderIconPx = 24;
+        if (header_icon.GetWidth() != kHeaderIconPx || header_icon.GetHeight() != kHeaderIconPx) {
+            header_icon = wxBitmap(
+                header_icon.ConvertToImage().Scale(kHeaderIconPx, kHeaderIconPx, wxIMAGE_QUALITY_HIGH));
+        }
+    }
+    if (header_icon.IsOk()) {
+        auto* icon_bitmap = new wxStaticBitmap(icon_box, wxID_ANY, header_icon);
+        icon_bitmap->SetBackgroundColour(kIconBox);
+        icon_sizer->AddStretchSpacer();
+        icon_sizer->Add(icon_bitmap, 0, wxALIGN_CENTER_HORIZONTAL);
+        icon_sizer->AddStretchSpacer();
+    }
     icon_box->SetSizer(icon_sizer);
 
     auto* brand_block = new wxBoxSizer(wxVERTICAL);
@@ -875,9 +892,15 @@ void MainFrame::OnSettings() {
     SettingsDialog dlg(this, identity_, [this](const IdentityProfile& profile) {
         identity_ = profile;
         config_path_ = profile.config_path;
-        UpdateWindowTitle();
+
         if (orchestrator_) {
             orchestrator_->set_identity(profile);
+        } else if (!config_path_.empty()) {
+            save_identity_profile(profile);
+        }
+
+        UpdateWindowTitle();
+        if (orchestrator_) {
             const OrchestratorUiState snap = orchestrator_->snapshot();
             roster_panel_->UpdateRoster(peer_entries_from_config(identity_.peers),
                                         identity_,
@@ -886,6 +909,14 @@ void MainFrame::OnSettings() {
                                         port_index_,
                                         snap.busy,
                                         snap.last_announce_ms);
+        } else {
+            roster_panel_->UpdateRoster(peer_entries_from_config(identity_.peers),
+                                        identity_,
+                                        false,
+                                        0,
+                                        port_index_,
+                                        false,
+                                        0);
         }
     }, dev);
     dlg.ShowModal();

@@ -1,0 +1,45 @@
+RocketBox USB driver (Windows) — WinUSB for 1772:0006
+======================================================
+
+RocketBox App uses libusb and needs the RocketBox device (USB 1772:0006)
+bound to the WinUSB driver. Windows does not ship that binding by default.
+
+After installing RocketBox App, these files are in:
+
+  share\rocketbox\demo-config\
+
+(from the install folder, e.g. C:\Program Files\RocketBox\share\rocketbox\demo-config\)
+
+
+Option A — bundled INF (one-time per PC)
+----------------------------------------
+1. Plug in the RocketBox USB cable.
+2. Open Device Manager. Find the device (often under "Universal Serial Bus
+   devices" or "Other devices").
+3. Right-click sls_usb_device.inf in this folder → Install.
+   Or: Device Manager → Update driver → Browse → select this folder.
+4. Unplug and replug the cable, then launch RocketBox App.
+
+Files: sls_usb_device.inf, SLS_USB_DEVICE.cat
+
+
+Option B — Zadig (GUI, good for tradeshow / troubleshooting)
+-------------------------------------------------------------
+Zadig replaces the driver for a plugged-in device with WinUSB.
+
+1. Run zadig-2.9.exe from this folder (no install required).
+2. Options → List All Devices.
+3. Select the RocketBox / SLS USB device (1772:0006).
+4. Choose WinUSB as the target driver → Replace Driver / Install Driver.
+5. Unplug and replug, then launch RocketBox App.
+
+Bundled: zadig-2.9.exe (from https://zadig.akeo.ie/)
+Newer releases: https://github.com/pbatard/libwdi/releases
+
+
+Notes
+-----
+- Run Option A or B once per Windows machine (or again if Windows resets the
+  driver after an update).
+- Close other apps that may hold the USB interface before replacing the driver.
+- Linux uses a udev rule instead; macOS usually works without extra steps.
