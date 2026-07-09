@@ -44,12 +44,16 @@ wxStaticText* MakeLabel(wxWindow* parent,
     return label;
 }
 
-std::string multi_device_meta_line(int devices_seen) {
+std::string multi_device_meta_line(int devices_seen, bool connected) {
     std::ostringstream out;
     if (devices_seen <= 1) {
         return {};
     }
-    out << devices_seen << " devices — pick your cable in the USB dialog";
+    if (connected) {
+        out << devices_seen << "-port crossport switching block detected";
+    } else {
+        out << devices_seen << " devices — pick your cable in the USB dialog";
+    }
     return out.str();
 }
 
@@ -303,7 +307,7 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
         device_label_->SetLabel(wxString::FromUTF8(device_label.c_str()));
         device_label_->Show();
         show_connected = true;
-        const std::string multi_meta = multi_device_meta_line(fabric_devices_seen);
+        const std::string multi_meta = multi_device_meta_line(fabric_devices_seen, true);
         if (multi_meta.empty()) {
             meta_label_->Hide();
         } else {
@@ -316,7 +320,7 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
             "USB cable detected — click Connect USB and pick it in the USB dialog.");
         hint_label_->Show();
         device_label_->Hide();
-        const std::string multi_meta = multi_device_meta_line(fabric_devices_seen);
+        const std::string multi_meta = multi_device_meta_line(fabric_devices_seen, false);
         if (multi_meta.empty()) {
             meta_label_->Hide();
         } else {

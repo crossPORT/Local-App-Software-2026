@@ -34,6 +34,8 @@ export interface IdentityProfile {
   booth_display_enabled: boolean;
   peers: PeerConfig[];
   config_path: string;
+  usb_read_buffer_size?: string;
+  announce_interval_sec?: number;
 }
 
 export interface PendingOffer {

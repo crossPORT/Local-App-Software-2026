@@ -1,34 +1,19 @@
 import { useState } from 'react';
 import { boothDisplayPresetLabel, receiveStatusToString } from '../lib/config';
 import { getBoothLogLevel, setBoothLogLevel, type BoothLogLevel } from '../lib/booth_log';
-import { FABRIC_LEG_COUNT, displayPortFromLeg } from '../lib/fabric_port';
 import { theme } from '../lib/theme';
-import type { IdentityProfile, PeerConfig, ReceiveStatus } from '../lib/types';
+import type { IdentityProfile, ReceiveStatus } from '../lib/types';
 
 interface SettingsDialogProps {
   identity: IdentityProfile;
-  portIndex: number;
   onClose: () => void;
   onSave: (identity: IdentityProfile) => void;
-  onOpenEventLog?: () => void;
 }
 
-function emptyPeer(portIndex: number): PeerConfig {
-  return {
-    display_name: '',
-    team: '',
-    role: '',
-    receive_status: 'ask_first',
-    port_index: portIndex === 0 ? 1 : 0,
-  };
-}
-
-export function SettingsDialog({ identity, portIndex, onClose, onSave, onOpenEventLog }: SettingsDialogProps) {
-  const [peers, setPeers] = useState<PeerConfig[]>(
-    identity.peers.length > 0 ? identity.peers.map((peer) => ({ ...peer })) : [],
-  );
+export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProps) {
   const [boothDisplayEnabled, setBoothDisplayEnabled] = useState(identity.booth_display_enabled);
   const [debugLogLevel, setDebugLogLevel] = useState<BoothLogLevel>(() => getBoothLogLevel());
+  const [usbReadBufferSize, setUsbReadBufferSize] = useState(identity.usb_read_buffer_size ?? '256kb');
   const [error, setError] = useState('');
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -40,30 +25,16 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave, onOpenEve
       return;
     }
 
-    const nextPeers = peers
-      .map((peer, index) => ({
-        ...peer,
-        display_name: String(data.get(`peer_${index}_name`) ?? '').trim(),
-        port_index: Number.parseInt(String(data.get(`peer_${index}_port`) ?? '0'), 10) || 0,
-      }))
-      .filter((peer) => peer.display_name);
-
     onSave({
       ...identity,
       display_name,
       team: String(data.get('team') ?? '').trim(),
       receive_status: String(data.get('receive_status') ?? 'ask_first') as ReceiveStatus,
       booth_display_enabled: boothDisplayEnabled,
-      peers: nextPeers,
+      peers: [],
+      usb_read_buffer_size: usbReadBufferSize,
+      announce_interval_sec: parseInt(String(data.get('announce_interval_sec') ?? '10'), 10) || 10,
     });
-  };
-
-  const addPeer = () => {
-    setPeers((current) => [...current, emptyPeer(portIndex)]);
-  };
-
-  const removePeer = (index: number) => {
-    setPeers((current) => (current.length <= 1 ? current : current.filter((_, i) => i !== index)));
   };
 
   return (
@@ -113,6 +84,30 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave, onOpenEve
             </select>
           </label>
 
+          <label>
+            USB Read Buffer Size
+            <select
+              value={usbReadBufferSize}
+              onChange={(e) => setUsbReadBufferSize(e.target.value)}
+            >
+              <option value="16kb">16 KB Chunks (Standard USB legacy)</option>
+              <option value="64kb">64 KB Chunks (High performance)</option>
+              <option value="256kb">256 KB Chunks (Symmetrical matrix)</option>
+              <option value="1mb">1 MB Chunks (Ultra-fast local loop)</option>
+            </select>
+          </label>
+
+          <label>
+            Announcement Period
+            <select name="announce_interval_sec" defaultValue={String(identity.announce_interval_sec ?? 10)}>
+              <option value="3">3 Seconds (High responsiveness)</option>
+              <option value="5">5 Seconds (Normal active matrix)</option>
+              <option value="10">10 Seconds (Standard balanced)</option>
+              <option value="30">30 Seconds (Low overhead bandwidth)</option>
+              <option value="60">1 Minute (Conservative broadcast)</option>
+            </select>
+          </label>
+
           <div className="settings-toggle-row">
             <label className="settings-toggle-label">
               <input
@@ -145,58 +140,6 @@ export function SettingsDialog({ identity, portIndex, onClose, onSave, onOpenEve
                 <option value="verbose">Verbose</option>
               </select>
             </label>
-            {onOpenEventLog && (
-              <button type="button" className="settings-inline-btn" onClick={onOpenEventLog}>
-                Open event log
-              </button>
-            )}
-          </div>
-
-          <div className="settings-section">
-            <div className="settings-section-head">
-              <h3>Peer bookmarks (optional)</h3>
-              <button type="button" className="settings-inline-btn" onClick={addPeer}>
-                Add bookmark
-              </button>
-            </div>
-            <p className="settings-hint" style={{ color: theme.muted }}>
-              Connected peers are discovered automatically. Bookmarks are only needed to pre-label a known station.
-            </p>
-            {peers.length === 0 ? (
-              <p className="settings-hint" style={{ color: theme.muted }}>
-                No bookmarks yet.
-              </p>
-            ) : (
-              peers.map((peer, index) => (
-              <div key={index} className="peer-settings-row">
-                <label>
-                  Name
-                  <input
-                    name={`peer_${index}_name`}
-                    type="text"
-                    defaultValue={peer.display_name}
-                    placeholder="Peer name"
-                    autoComplete="off"
-                  />
-                </label>
-                <label>
-                  Fabric port
-                  <select name={`peer_${index}_port`} defaultValue={String(peer.port_index)}>
-                    {Array.from({ length: FABRIC_LEG_COUNT }, (_, leg) => (
-                      <option key={leg} value={String(leg)}>
-                        Port {displayPortFromLeg(leg)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {peers.length > 1 && (
-                  <button type="button" className="settings-inline-btn" onClick={() => removePeer(index)}>
-                    Remove
-                  </button>
-                )}
-              </div>
-              ))
-            )}
           </div>
 
           {error && (

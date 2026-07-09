@@ -165,6 +165,7 @@ export class FabricUsbSession implements FabricTransport {
   private resolvedFabricLeg = 0;
   private readonly link: FabricLink;
   private unsubscribeLink: (() => void) | null = null;
+  private connectHandlers = new Set<() => void>();
 
   constructor() {
     this.link = new FabricLink(() => this.device, 0);
@@ -221,6 +222,13 @@ export class FabricUsbSession implements FabricTransport {
     };
   }
 
+  subscribeConnect(handler: () => void): () => void {
+    this.connectHandlers.add(handler);
+    return () => {
+      this.connectHandlers.delete(handler);
+    };
+  }
+
   async waitForIdle(): Promise<void> {
     await this.link.waitForIdle();
   }
@@ -270,6 +278,15 @@ export class FabricUsbSession implements FabricTransport {
     this.device = device;
     rememberSerial(device);
     this.refreshResolvedLeg();
+
+    this.connectHandlers.forEach((handler) => {
+      try {
+        handler();
+      } catch (err) {
+        console.error('[USB SDK] Error in connect handler:', err);
+      }
+    });
+
     return this.describeDevice();
   }
 
@@ -300,6 +317,15 @@ export class FabricUsbSession implements FabricTransport {
     this.device = device;
     rememberSerial(device);
     this.refreshResolvedLeg();
+
+    this.connectHandlers.forEach((handler) => {
+      try {
+        handler();
+      } catch (err) {
+        console.error('[USB SDK] Error in connect handler:', err);
+      }
+    });
+
     return this.describeDevice();
   }
 

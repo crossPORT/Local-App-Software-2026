@@ -10,7 +10,7 @@ export interface RosterSlot {
 export function rosterSlots(
   peers: PeerEntry[],
   fabricConnected: boolean,
-  self: Pick<IdentityProfile, 'display_name'>,
+  _self: Pick<IdentityProfile, 'display_name'>,
   localLeg: number,
 ): RosterSlot[] {
   if (!fabricConnected || localLeg < 0) {
@@ -21,8 +21,7 @@ export function rosterSlots(
       peers.find(
         (entry) =>
           entry.online &&
-          entry.port_index === leg &&
-          entry.display_name !== self.display_name.trim(),
+          entry.port_index === leg,
       ) ?? null;
     return { leg, peer };
   });

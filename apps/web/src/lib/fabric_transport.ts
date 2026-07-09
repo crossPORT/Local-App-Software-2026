@@ -24,6 +24,7 @@ export interface FabricTransport {
   setListenMode(mode: ListenMode): void;
   ensureListening(): void;
   subscribeSession(handler: (message: FabricSessionMessage) => void): () => void;
+  subscribeConnect?(handler: () => void): () => void;
 
   sendBytes(
     payload: Uint8Array,

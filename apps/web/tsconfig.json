@@ -15,7 +15,11 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@rocketbox/sdk": ["../../sdks/typescript/src/index.ts"]
+    }
   },
   "include": ["src", "sim"],
   "exclude": ["src/**/*.test.ts"]

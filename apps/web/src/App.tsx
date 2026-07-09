@@ -75,6 +75,7 @@ export function App() {
           statusMessage={state.statusMessage}
           selectedPeer={state.selectedPeer}
           lastAnnounceMs={state.lastAnnounceMs}
+          announceIntervalSec={state.identity.announce_interval_sec}
           onSelectPeer={(name) => patch({ selectedPeer: name })}
           onDropFiles={(peerName, files) => sendToPeer(peerName, files)}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -86,13 +87,8 @@ export function App() {
       {settingsOpen && (
         <SettingsDialog
           identity={state.identity}
-          portIndex={state.portIndex}
           onClose={() => setSettingsOpen(false)}
           onSave={saveIdentity}
-          onOpenEventLog={() => {
-            setSettingsOpen(false);
-            setEventLogOpen(true);
-          }}
         />
       )}
 

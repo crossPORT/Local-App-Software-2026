@@ -55,6 +55,15 @@ target_compile_features(integration-tests PRIVATE cxx_std_17)
 add_test(NAME integration-tests COMMAND integration-tests)
 set_tests_properties(integration-tests PROPERTIES LABELS "integration")
 
+add_executable(sdk-integration-tests
+    integration/test_new_sdk.cpp
+)
+target_link_libraries(sdk-integration-tests PRIVATE rocketbox_sdk)
+target_compile_features(sdk-integration-tests PRIVATE cxx_std_17)
+
+add_test(NAME sdk-integration-tests COMMAND sdk-integration-tests)
+set_tests_properties(sdk-integration-tests PROPERTIES LABELS "integration")
+
 # --- Hardware suite: real fabric transfers; skips cleanly without devices --
 add_executable(hardware-tests
     test_util.cpp

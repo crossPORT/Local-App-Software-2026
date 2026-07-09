@@ -2,7 +2,12 @@ import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Connect } from 'vite';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -157,6 +162,11 @@ function boothNetworkPlugin(): Plugin {
 
 export default defineConfig({
   base,
+  resolve: {
+    alias: {
+      '@rocketbox/sdk': resolve(__dirname, '../../sdks/typescript/src/index.ts'),
+    },
+  },
   plugins: [
     basicSsl(),
     react(),

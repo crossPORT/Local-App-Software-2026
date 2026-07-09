@@ -220,17 +220,11 @@ export function useRocketBox() {
       const legIdentity = await loadIdentityProfileAsync(fabricPort);
       setUsbDescription(desc);
       const count = await countTransportDevices();
-      patch((prev) => {
-        const mergedIdentity = {
-          ...prev.identity,
-          display_name: prev.identity.display_name.trim() || legIdentity.display_name,
-          team: prev.identity.team.trim() || legIdentity.team,
-          receive_status: prev.identity.receive_status || legIdentity.receive_status,
-        };
-        identityRef.current = mergedIdentity;
+      patch(() => {
+        identityRef.current = legIdentity;
         return {
           portIndex: fabricPort,
-          identity: mergedIdentity,
+          identity: legIdentity,
           usbConnected: true,
           fabricDevicesSeen: count,
           fabricConnected: true,
@@ -320,8 +314,16 @@ export function useRocketBox() {
       }
       const count = await countTransportDevices();
       const usbConnected = sessionRef.current.connected;
-      const portIndex = portIndexRef.current;
+      let portIndex = portIndexRef.current;
+      let identityPatch: IdentityProfile | null = null;
       if (usbConnected) {
+        const nextPort = syncFabricPortIndex(sessionRef.current, portIndexRef);
+        if (nextPort !== portIndex) {
+          portIndex = nextPort;
+          const legIdentity = await loadIdentityProfileAsync(portIndex);
+          identityRef.current = legIdentity;
+          identityPatch = legIdentity;
+        }
         disconnectedSinceMs = 0;
         staleTick += 1;
         if (staleTick >= 15) {
@@ -353,6 +355,7 @@ export function useRocketBox() {
         fabricConnected: usbConnected,
         roster: rosterRef.current.visiblePeers(usbConnected),
         selectedPeer: pickSelectedPeer(rosterRef.current, portIndex, prev.selectedPeer),
+        ...(identityPatch ? { identity: identityPatch } : {}),
       }));
     };
     tick();

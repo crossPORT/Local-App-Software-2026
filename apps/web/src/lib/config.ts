@@ -207,6 +207,8 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
       (portCfg.booth_display_mib_s ?? 0) > 0 || (global.booth_display_mib_s ?? 0) > 0,
     peers: global.peers ?? [],
     config_path: configPath,
+    usb_read_buffer_size: portCfg.usb_read_buffer_size || global.usb_read_buffer_size || '256kb',
+    announce_interval_sec: portCfg.announce_interval_sec || global.announce_interval_sec || 10,
   };
 
   return profile;
@@ -247,6 +249,8 @@ export function defaultIdentityProfile(portIndex: number): IdentityProfile {
     booth_display_enabled: true,
     peers: [],
     config_path: `local:port${portIndex}`,
+    usb_read_buffer_size: '256kb',
+    announce_interval_sec: 10,
   };
 }
 
@@ -280,6 +284,8 @@ function normalizeIdentity(raw: Partial<IdentityProfile>, portIndex: number): Id
       .map((peer) => normalizePeer(peer))
       .filter((peer): peer is PeerConfig => peer != null),
     config_path: `local:port${portIndex}`,
+    usb_read_buffer_size: raw.usb_read_buffer_size ?? defaults.usb_read_buffer_size,
+    announce_interval_sec: raw.announce_interval_sec ?? defaults.announce_interval_sec,
   };
 }
 

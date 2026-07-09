@@ -3,12 +3,15 @@ import type { AppUiState } from '../lib/types';
 import { effectiveDisplayMbps, isOutboundHandshakeWait } from '../lib/format';
 import { ActivityMonitor } from './ActivityMonitor';
 
-function deviceMetaLine(devicesSeen: number): string {
+function deviceMetaLine(devicesSeen: number, connected: boolean): string {
   if (devicesSeen === 0) {
     return 'No devices detected';
   }
   if (devicesSeen === 1) {
     return 'Connected';
+  }
+  if (connected) {
+    return `${devicesSeen}-port crossport switching block detected`;
   }
   return `${devicesSeen} devices — pick your cable in the USB dialog`;
 }
@@ -57,7 +60,7 @@ export function ConnectionPanel({
           </div>
           {state.fabricDevicesSeen > 1 && (
             <div className="connection-meta" style={{ color: theme.muted }}>
-              {deviceMetaLine(state.fabricDevicesSeen)}
+              {deviceMetaLine(state.fabricDevicesSeen, true)}
             </div>
           )}
           <ActivityMonitor

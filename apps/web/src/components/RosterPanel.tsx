@@ -18,6 +18,7 @@ interface RosterPanelProps {
   statusMessage: string;
   selectedPeer: string;
   lastAnnounceMs: number;
+  announceIntervalSec?: number;
   onSelectPeer: (peerId: string) => void;
   onDropFiles: (peerId: string, files: File[]) => void | Promise<void>;
   onOpenSettings?: () => void;
@@ -60,6 +61,7 @@ export function RosterPanel({
   statusMessage,
   selectedPeer,
   lastAnnounceMs,
+  announceIntervalSec = 10,
   onSelectPeer,
   onDropFiles,
   onOpenSettings,
@@ -76,11 +78,12 @@ export function RosterPanel({
   const empty = rosterEmptyMessage(fabricConnected, identityConfigured);
   const showSettingsAction = !identityConfigured && onOpenSettings;
 
+  const intervalMs = announceIntervalSec * 1000;
   const nextAnnounceIn = lastAnnounceMs > 0
-    ? Math.max(0, ANNOUNCE_INTERVAL_MS - (now - lastAnnounceMs))
+    ? Math.max(0, intervalMs - (now - lastAnnounceMs))
     : 0;
   const announceStalled =
-    lastAnnounceMs > 0 && now - lastAnnounceMs > ANNOUNCE_INTERVAL_MS * 2;
+    lastAnnounceMs > 0 && now - lastAnnounceMs > intervalMs * 2;
 
   return (
     <section className="roster panel-inner">

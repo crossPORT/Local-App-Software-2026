@@ -57,6 +57,7 @@ export interface OrchestratorCallbacks {
 
 export class WebTransferOrchestrator {
   private sessionUnsubscribe: (() => void) | null = null;
+  private connectUnsubscribe: (() => void) | null = null;
   private lastAnnounceMs = 0;
   private lastAnnounceAttemptMs = 0;
   private lastAnnounceSkipReason = '';
@@ -84,6 +85,18 @@ export class WebTransferOrchestrator {
   private retransmitTimer: number | null = null;
   private fabricActivitySeq = 0;
   private readonly instanceId = makeInstanceId();
+  private readonly completedSessionIds = new Set<string>();
+
+  private addCompletedSession(id: string): void {
+    if (!id) return;
+    this.completedSessionIds.add(id);
+    if (this.completedSessionIds.size > 100) {
+      const oldest = this.completedSessionIds.values().next().value;
+      if (oldest !== undefined) {
+        this.completedSessionIds.delete(oldest);
+      }
+    }
+  }
 
   constructor(
     private readonly usb: FabricTransport,
@@ -100,18 +113,28 @@ export class WebTransferOrchestrator {
 
   startListener(): void {
     this.lastAnnounceMs = 0;
+    this.lastAnnounceAttemptMs = Date.now();
     this.lastAnnounceSkipReason = '';
     this.setLinkActivity('idle');
     this.sessionUnsubscribe?.();
     this.sessionUnsubscribe = this.usb.subscribeSession((message) => {
       this.onSessionMessage(message);
     });
+    if (this.usb.subscribeConnect) {
+      this.connectUnsubscribe?.();
+      this.connectUnsubscribe = this.usb.subscribeConnect(() => {
+        console.log('[RocketBox] Transport connection/reconnection event detected — forcing immediate announcement');
+        void this.maybeSendAnnounce(true);
+      });
+    }
     const leg = this.callbacks.getPortIndex();
-    const name = this.callbacks.getIdentity().display_name.trim();
+    const identity = this.callbacks.getIdentity();
+    const name = identity.display_name.trim();
     boothLog(leg, 'listener_started', name || 'display_name not set');
     this.startPresenceLoop();
     this.startRetransmitLoop();
-    const staggerMs = leg * (ANNOUNCE_INTERVAL_MS / FABRIC_LEG_COUNT);
+    const intervalMs = (identity.announce_interval_sec ?? 10) * 1000;
+    const staggerMs = leg * (intervalMs / FABRIC_LEG_COUNT);
     void (async () => {
       await sleep(staggerMs + Math.floor(Math.random() * ANNOUNCE_JITTER_MS));
       if (this.sessionUnsubscribe) {
@@ -123,6 +146,8 @@ export class WebTransferOrchestrator {
   stopListener(): void {
     this.sessionUnsubscribe?.();
     this.sessionUnsubscribe = null;
+    this.connectUnsubscribe?.();
+    this.connectUnsubscribe = null;
     this.stopPresenceLoop();
     this.stopRetransmitLoop();
     this.usb.setListenMode('off');
@@ -190,9 +215,11 @@ export class WebTransferOrchestrator {
       this.expireStalePendingOffer();
       this.recoverStuckHandshakeState();
       this.usb.ensureListening();
+      const identity = this.callbacks.getIdentity();
+      const intervalMs = (identity.announce_interval_sec ?? 10) * 1000;
       const overdue =
         this.lastAnnounceMs > 0 &&
-        Date.now() - this.lastAnnounceMs >= ANNOUNCE_INTERVAL_MS;
+        Date.now() - this.lastAnnounceMs >= intervalMs;
       await this.maybeSendAnnounce(overdue);
     } finally {
       this.presenceTickInFlight = false;
@@ -389,7 +416,17 @@ export class WebTransferOrchestrator {
       return;
     }
     const now = Date.now();
-    if (!force && now - this.lastAnnounceAttemptMs < ANNOUNCE_INTERVAL_MS) {
+    const intervalMs = (identity.announce_interval_sec ?? 10) * 1000;
+
+    // Prevent double/spam announcements: never allow sending announcements
+    // within 2 seconds of the last successful attempt or forced attempt.
+    const minThrottleMs = 2000;
+    if (this.lastAnnounceAttemptMs > 0 && now - this.lastAnnounceAttemptMs < minThrottleMs) {
+      this.logAnnounceSkip('throttled');
+      return;
+    }
+
+    if (!force && now - this.lastAnnounceAttemptMs < intervalMs) {
       return;
     }
     this.lastAnnounceAttemptMs = now;
@@ -449,6 +486,12 @@ export class WebTransferOrchestrator {
     );
     console.log(`[RocketBox] session message received: kind=${message.kind} from="${message.from_name}"`);
     this.bumpSessionActivity();
+
+    if (message.session_id && this.completedSessionIds.has(message.session_id)) {
+      console.log(`[RocketBox] session message ignored: session_id "${message.session_id}" was already completed/handled`);
+      return;
+    }
+
     switch (message.kind) {
       case 'offer':
         void this.handleOffer(message);
@@ -473,6 +516,7 @@ export class WebTransferOrchestrator {
   private handleAnnounce(message: FabricSessionMessage): void {
     const identity = this.callbacks.getIdentity();
     if (!message.from_name) {
+      console.warn('[RocketBox] handleAnnounce: ignored because message.from_name is empty.');
       return;
     }
 
@@ -481,7 +525,7 @@ export class WebTransferOrchestrator {
     const parsed = parseAnnounceNote(message.note, defaultLeg);
 
     if (parsed.instanceId && parsed.instanceId === this.instanceId) {
-      console.debug('[RocketBox] announce ignored (own instance)');
+      console.log(`[RocketBox] Announce from "${message.from_name}" ignored: matches own instanceId (${this.instanceId})`);
       return;
     }
     if (
@@ -489,16 +533,24 @@ export class WebTransferOrchestrator {
       message.from_name === identity.display_name &&
       parsed.portIndex === myLeg
     ) {
-      console.debug('[RocketBox] announce ignored (own station, legacy)');
+      console.log(`[RocketBox] Announce from "${message.from_name}" ignored: matches own legacy station (name/port match)`);
       return;
     }
 
     const peerLeg = resolveRemoteFabricLeg(myLeg, parsed.portIndex);
     if (peerLeg === null) {
+      console.log(`[RocketBox] Announce from "${message.from_name}" ignored: resolveRemoteFabricLeg returned null (own port index ${myLeg} matches parsed port index ${parsed.portIndex})`);
       boothLog(myLeg, 'announce_echo_reject', `port=${displayPortFromLeg(parsed.portIndex)}`);
       return;
     }
-    console.log(`[RocketBox] announce RECEIVED from "${message.from_name}" (leg ${peerLeg})`);
+
+    // Name collision detection:
+    if (message.from_name.trim() === identity.display_name.trim()) {
+      console.warn(`%c[RocketBox] NAME COLLISION WARNING: Received announce from peer "${message.from_name}" on Port ${displayPortFromLeg(peerLeg)} with the EXACT same name as yourself! This peer is accepted and displayed under Port ${displayPortFromLeg(peerLeg)}.`, 'color: #ffaa00; font-weight: bold;');
+    } else {
+      console.log(`[RocketBox] Announce processed successfully: "${message.from_name}" (Port ${displayPortFromLeg(peerLeg)}) is online.`);
+    }
+
     boothLog(myLeg, 'announce_received', `${message.from_name} port=${displayPortFromLeg(peerLeg)}`);
     this.callbacks
       .getRoster()
@@ -508,7 +560,17 @@ export class WebTransferOrchestrator {
 
   private async handleOffer(message: FabricSessionMessage): Promise<void> {
     const identity = this.callbacks.getIdentity();
-    if (message.to_name && message.to_name !== identity.display_name) {
+    const myLeg = this.callbacks.getPortIndex();
+
+    // Check if the offer specifically targets our physical port index (to_port=X)
+    const toPortMatch = message.note?.match(/to_port=(\d+)/);
+    if (toPortMatch) {
+      const targetPortIndex = parseInt(toPortMatch[1], 10);
+      if (targetPortIndex !== myLeg) {
+        console.log(`[RocketBox] offer ignored: addressed to Port ${targetPortIndex + 1}, our physical port is Port ${myLeg + 1}`);
+        return;
+      }
+    } else if (message.to_name && message.to_name !== identity.display_name) {
       console.warn(
         `[RocketBox] offer ignored: addressed to "${message.to_name}", local name is "${identity.display_name}"`,
       );
@@ -742,6 +804,9 @@ export class WebTransferOrchestrator {
         this.finishTransfer(false, 'Receive failed', formatTransferError(err));
       }
     } finally {
+      if (offer?.session_id) {
+        this.addCompletedSession(offer.session_id);
+      }
       this.pendingInbound = null;
       this.pendingInboundAt = 0;
       this.busy = false;
@@ -844,7 +909,7 @@ export class WebTransferOrchestrator {
       from_name: identity.display_name,
       team: identity.team,
       to_name: peerName,
-      note: '',
+      note: `to_port=${peer.port_index}`,
       payload_type: 'file',
       payload_name: file.name,
       file_count: 1,
@@ -968,6 +1033,9 @@ export class WebTransferOrchestrator {
     } catch (err) {
       this.finishTransfer(false, 'Send failed', formatTransferError(err));
     } finally {
+      if (offer?.session_id) {
+        this.addCompletedSession(offer.session_id);
+      }
       this.outboundOffer = null;
       this.awaitingReady = false;
       this.busy = false;
