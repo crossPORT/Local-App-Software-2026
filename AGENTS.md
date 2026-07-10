@@ -5,10 +5,11 @@ Read this first when working in this repository. Goal: USB file transfer to/from
 ## Read order
 
 1. **This file** — repo layout, build, conventions
-2. **[protocols/session.md](protocols/session.md)** — session handshake best practices (no-buffer fabric, timing, listener rules)
-3. **[protocols/file-transfer.md](protocols/file-transfer.md)** — ROCKETBX payload best practices (send/receive, mutex, staging)
-4. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
-5. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, release installers, PWA zip on tags
+2. **[docs/DEV-DEMO.md](docs/DEV-DEMO.md)** — run/test with **simulated hardware** or **real USB** (PWA, wx, tunnel)
+3. **[protocols/session.md](protocols/session.md)** — session handshake best practices (no-buffer fabric, timing, listener rules)
+4. **[protocols/file-transfer.md](protocols/file-transfer.md)** — ROCKETBX payload best practices (send/receive, mutex, staging)
+5. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
+6. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, release installers, PWA zip on tags
 
 ## 30-second context
 

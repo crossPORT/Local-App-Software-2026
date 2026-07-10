@@ -46,5 +46,7 @@ Requires Node.js 18+.
 
 ## Clients
 
-- **PWA / WebUSB sim:** `ws://localhost:1773?port=N`
+- **PWA / WebUSB sim:** `ws://localhost:1773?port=N` (open the PWA with `?simulate=1&port=N`)
 - **C++ / fabric-tunnel:** TCP `127.0.0.1:1772`
+
+Full clone → sim → PWA → native walkthrough: **[docs/DEV-DEMO.md](../docs/DEV-DEMO.md)**.

@@ -146,15 +146,19 @@ Optional sample identity configs for booth setups live in `demo-config/`. They a
 
 ## For developers and contributors
 
-This repository is a monorepo: shared USB engine (`core/`), session logic (`lib/session/`), desktop app (`apps/wx/`), web PWA (`apps/web/`), simulators, and CLI tools.
+This repository is a monorepo: shared USB engine (`core/`), session logic (`lib/session/`), desktop app (`apps/wx/`), web PWA (`apps/web/`), simulated hardware, SDKs, and CLI tools.
+
+**Start here for clone → sim → PWA → native:** [docs/DEV-DEMO.md](docs/DEV-DEMO.md) (simulation device **and** real RocketBox hardware).
 
 | Document | Contents |
 |----------|----------|
+| [docs/DEV-DEMO.md](docs/DEV-DEMO.md) | Repo sections; run/test with **sim** or **real USB** |
 | [docs/INSTALL.md](docs/INSTALL.md) | Install details (mirrors end-user steps above) |
 | [docs/BUILD.md](docs/BUILD.md) | Build desktop app from source (Linux, macOS, Windows) |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | CI vs release; how installers are published |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code layout and dependency graph |
 | [AGENTS.md](AGENTS.md) | Contributor / agent onboarding |
+| [simulated-hardware/README.md](simulated-hardware/README.md) | Sim daemon ports (1772 / 1773) |
 
 **Build desktop from source (Linux example):**
 
@@ -165,11 +169,15 @@ cmake -S . -B build && cmake --build build -j
 ./build/apps/wx/RocketBox
 ```
 
-**Web dev:**
+**Sim + web (no cable):**
 
 ```bash
-cd apps/web && npm ci && npm run dev
+cd simulated-hardware && npm install && npm start   # terminal 1 — dashboard :1773
+cd apps/web && npm ci && npm run dev                # terminal 2
+# open https://localhost:5173/?simulate=1&port=1  and  ...&port=2
 ```
+
+**Web against real USB:** same `npm run dev`, open without `simulate`, Connect USB in Chrome/Edge.
 
 **Tests:**
 
@@ -178,6 +186,8 @@ cmake -S . -B build -DBUILD_WX_GUI=OFF && cmake --build build -j
 ctest --test-dir build -L unit --output-on-failure
 cd apps/web && npm test
 ```
+
+See [docs/DEV-DEMO.md](docs/DEV-DEMO.md) for the full matrix (tunnel, hardware CTest, booth scripts).
 
 ## License
 

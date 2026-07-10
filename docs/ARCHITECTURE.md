@@ -6,13 +6,18 @@
 |------|------|------|
 | `core/` | Library | USB engine (`fabric_usb_core`) — libusb, ROCKETBX wire protocol |
 | `lib/session/` | Library | Shared native session logic (`rocketbox_session`) — handshake, roster, orchestration |
-| `apps/wx/` | App | RocketBox App (desktop / wxWidgets) — links `rocketbox_session` |
-| `apps/web/` | App | RocketBox App (PWA / WebUSB) — **parallel implementation**, does not link C++ |
-| `sim/` | Library | In-process fabric simulator for tests |
+| `apps/wx/` | App | RocketBox App (desktop / wxWidgets) — links `rocketbox_session` (**real USB**) |
+| `apps/web/` | App | RocketBox App (PWA / WebUSB) — parallel TS stack; `?simulate=1` or real WebUSB |
+| `simulated-hardware/` | Service | Crossport simulator — TCP **1772** (C++), WS **1773** (PWA) + dashboard |
+| `sdks/cpp/`, `sdks/typescript/` | SDKs | Session/Connection API with sim + USB transports |
+| `fabric-tunnel/` | App | Fabric ↔ host IP; `--transport sim` or `usb` |
+| `sim/` | Library | In-process fabric simulator for older/native tests |
 | `tools/` | Binaries | CLIs — raw USB tools link `core`; session tools link `rocketbox_session` |
 | `tests/` | Binaries | C++ unit + integration suites (CTest) |
 
 **Rule:** `apps/` holds runnable products only. Shared C++ logic lives under `lib/`.
+
+For clone → run/test steps (sim **and** hardware), see **[DEV-DEMO.md](DEV-DEMO.md)**.
 
 ## Design goal
 
