@@ -1,0 +1,13 @@
+services:
+  simulated-hardware:
+    build: .
+    image: rocketbox-sim-hw:local
+    container_name: rocketbox-sim-hw
+    ports:
+      - "1772:1772"
+      - "1773:1773"
+    environment:
+      ROCKETBOX_LISTEN_HOST: "0.0.0.0"
+      ROCKETBOX_TCP_PORT: "1772"
+      ROCKETBOX_WS_PORT: "1773"
+    restart: unless-stopped

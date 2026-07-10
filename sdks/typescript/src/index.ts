@@ -5,12 +5,8 @@ const MSG_ATTACH = 0x01;
 const MSG_LIST = 0x02;
 const MSG_CONNECT = 0x03;
 const MSG_DISCONNECT = 0x04;
-const MSG_KEEPALIVE = 0x05;
 
-const MSG_ATTACHED = 0x81;
 const MSG_SYSTEMS = 0x82;
-const MSG_ACK = 0x83;
-const MSG_NAK = 0x84;
 const MSG_CIRCUIT_UP = 0x85;
 const MSG_CIRCUIT_DOWN = 0x86;
 
@@ -63,13 +59,18 @@ export class Session {
       }
     });
 
+    this.transport.onDisconnected(() => {
+      this.activeConnection?.handleRemoteClose('detached');
+      this.activeConnection = null;
+      this.detachedListeners.forEach((l) => l());
+    });
+
     // Send ATTACH control packet to register port
     await this.sendAttach();
   }
 
   private handleControlMessage(header: DataView, payload: Uint8Array): void {
     const type = header.getUint8(1);
-    const arg = header.getUint32(4);
 
     switch (type) {
       case MSG_SYSTEMS: {
@@ -267,6 +268,6 @@ export class Connection {
     return () => this.closedListeners.delete(callback);
   }
 }
-export { Transport } from './transport';
+export { type Transport } from './transport';
 export { SimTransport } from './transports/sim';
 export { UsbTransport } from './transports/usb';

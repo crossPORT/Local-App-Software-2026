@@ -114,7 +114,7 @@ int main() {
 
     if (pid == 0) {
         // Child process: start node simulation-daemon
-        char* args[] = {const_cast<char*>("node"), const_cast<char*>("/home/geoff-whittington/Projects/data-transfer-demo/tools/simulation-daemon/daemon.js"), nullptr};
+        char* args[] = {const_cast<char*>("node"), const_cast<char*>("/home/geoff-whittington/Projects/data-transfer-demo/simulated-hardware/daemon.js"), nullptr};
         execvp("node", args);
         // If execvp fails
         std::cerr << "Failed to start node daemon" << std::endl;

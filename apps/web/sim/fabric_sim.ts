@@ -1,31 +1,14 @@
-/** Enable with ?simulate=1 on the PWA URL (mirrors native ROCKETBOX_SIM=1). */
-
-import { SIM_CABLE_SERIALS } from './fabric_hub';
+/** Enable only with ?simulate=1 (or true) on the PWA URL. */
 
 export function fabricSimEnabled(): boolean {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+  if (typeof window === 'undefined') {
     return false;
   }
-  const params = new URLSearchParams(window.location.search);
-  const value = params.get('simulate');
-  if (value === '1' || value === 'true') {
-    localStorage.setItem('rocketbox_simulate', 'true');
-    return true;
-  }
-  if (value === '0' || value === 'false') {
-    localStorage.setItem('rocketbox_simulate', 'false');
-    return false;
-  }
-  
-  const stored = localStorage.getItem('rocketbox_simulate');
-  if (stored !== null) {
-    return stored === 'true';
-  }
-  
-  // Default to simulation on localhost or 127.0.0.1
-  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const value = new URLSearchParams(window.location.search).get('simulate');
+  return value === '1' || value === 'true';
 }
 
+/** Fabric ports available in the simulation daemon. */
 export function fabricSimDeviceCount(): number {
-  return SIM_CABLE_SERIALS.length;
+  return 4;
 }

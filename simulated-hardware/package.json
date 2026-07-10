@@ -1,0 +1,14 @@
+{
+  "name": "rocketbox-simulation-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "daemon.js",
+  "scripts": {
+    "start": "node daemon.js",
+    "dev": "node --watch daemon.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

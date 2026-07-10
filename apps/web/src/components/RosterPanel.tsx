@@ -6,7 +6,6 @@ import { DEFAULT_STALE_MS } from '../lib/peer_roster';
 import { rosterSlots } from '../lib/roster_slots';
 import { theme } from '../lib/theme';
 import type { PeerEntry } from '../lib/types';
-import { ANNOUNCE_INTERVAL_MS } from '../lib/web_transfer_orchestrator';
 
 interface RosterPanelProps {
   peers: PeerEntry[];
@@ -98,8 +97,8 @@ export function RosterPanel({
             }}
           >
             {announceStalled
-              ? 'Broadcast stalled — reconnect USB'
-              : `Next announce in ${formatSecondsLeft(nextAnnounceIn)}`}
+              ? 'Discovery stalled — reconnect'
+              : `Next sync in ${formatSecondsLeft(nextAnnounceIn)}`}
           </span>
         )}
       </div>
@@ -281,7 +280,7 @@ function PeerRow({
         </div>
         <div className="peer-sub" style={{ color: theme.muted }}>
           {offline ? (
-            <>Not connected — waiting for announce · port {displayPortFromLeg(leg)}</>
+            <>Not connected — waiting for peer · port {displayPortFromLeg(leg)}</>
           ) : (
             <>
               {receiveStatusLabel(peer!.receive_status)} · port {displayPortFromLeg(peer!.port_index)}

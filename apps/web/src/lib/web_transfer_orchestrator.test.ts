@@ -9,12 +9,20 @@ import type { AppUiState } from './types';
 
 function makeTransport(): FabricTransport & {
   sent: FabricSessionMessage[];
+  syncCount: number;
   sessionHandler: ((message: FabricSessionMessage) => void) | null;
 } {
   const sent: FabricSessionMessage[] = [];
+  let syncCount = 0;
   let sessionHandler: ((message: FabricSessionMessage) => void) | null = null;
   return {
     sent,
+    get syncCount() {
+      return syncCount;
+    },
+    set syncCount(v) {
+      syncCount = v;
+    },
     get sessionHandler() {
       return sessionHandler;
     },
@@ -25,6 +33,7 @@ function makeTransport(): FabricTransport & {
     getFabricPortIndex: () => 0,
     getFabricLeg: () => 0,
     getSerialNumber: () => '0000000000000001',
+    getSystemId: () => 'sys-port-1',
     connect: async () => '',
     reconnectKnown: async () => '',
     describeDevice: () => '',
@@ -35,6 +44,11 @@ function makeTransport(): FabricTransport & {
     markDisconnected: () => {},
     setListenMode: () => {},
     ensureListening: () => {},
+    syncSystems: async (handler) => {
+      syncCount += 1;
+      handler([]);
+    },
+    ensureCircuit: async () => {},
     subscribeSession: (handler) => {
       sessionHandler = handler;
       return () => {
@@ -104,20 +118,22 @@ describe('WebTransferOrchestrator presence recovery', () => {
     const sendGate = new Promise<void>((resolve) => {
       releaseSend = resolve;
     });
-    transport.sendSessionMessage = async (message: FabricSessionMessage) => {
-      transport.sent.push(message);
+    let started = 0;
+    transport.syncSystems = async (handler) => {
+      started += 1;
       await sendGate;
+      handler([]);
     };
 
     const first = orch.tickPresence(false);
     const second = orch.tickPresence(false);
     await Promise.resolve();
-    expect(transport.sent.filter((m) => m.kind === 'announce')).toHaveLength(1);
+    expect(started).toBe(1);
 
     releaseSend?.();
     await first;
     await second;
-    expect(transport.sent.filter((m) => m.kind === 'announce')).toHaveLength(1);
+    expect(started).toBe(1);
   });
 
   it('resumes announcing after a stuck link activity while idle', async () => {
@@ -136,7 +152,7 @@ describe('WebTransferOrchestrator presence recovery', () => {
     await orch.tickPresence(false);
 
     expect(orch.linkActivity).toBe('idle');
-    expect(transport.sent.some((m) => m.kind === 'announce')).toBe(true);
+    expect(transport.syncCount).toBeGreaterThan(0);
     expect(patch).toHaveBeenCalledWith(expect.objectContaining({ lastAnnounceMs: expect.any(Number) }));
   });
 
@@ -242,7 +258,7 @@ describe('WebTransferOrchestrator incoming offer handling', () => {
 
     expect(orch.pendingInbound).toBeNull();
     expect(patch).toHaveBeenCalledWith(expect.objectContaining({ pendingOffer: null }));
-    expect(transport.sent.some((m) => m.kind === 'announce')).toBe(true);
+    expect(transport.syncCount).toBeGreaterThan(0);
   });
 });
 

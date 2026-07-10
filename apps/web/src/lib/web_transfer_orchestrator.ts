@@ -4,7 +4,6 @@ import { parseAnnounceNote, resolveRemoteFabricLeg } from './announce_note';
 import { boothLog } from './booth_log';
 import { displayPortFromLeg } from './fabric_port';
 import {
-  buildAnnounceMessage,
   buildSessionReply,
   makeInstanceId,
   type FabricSessionMessage,
@@ -13,7 +12,7 @@ import {
 import { FABRIC_LEG_COUNT } from './fabric_port';
 import type { FabricTransport } from './fabric_transport';
 import { PeerRoster } from './peer_roster';
-import { readFilePayload } from './fabric_usb';
+import { readFilePayload } from './file_bytes';
 import type { AppUiState, IdentityProfile, PendingOffer, ReceiveStatus } from './types';
 import { formatTransferError } from './user_errors';
 import { handshakeTimingFromIdentity } from './session_handshake';
@@ -417,15 +416,11 @@ export class WebTransferOrchestrator {
     }
     const now = Date.now();
     const intervalMs = (identity.announce_interval_sec ?? 10) * 1000;
-
-    // Prevent double/spam announcements: never allow sending announcements
-    // within 2 seconds of the last successful attempt or forced attempt.
     const minThrottleMs = 2000;
     if (this.lastAnnounceAttemptMs > 0 && now - this.lastAnnounceAttemptMs < minThrottleMs) {
       this.logAnnounceSkip('throttled');
       return;
     }
-
     if (!force && now - this.lastAnnounceAttemptMs < intervalMs) {
       return;
     }
@@ -433,18 +428,29 @@ export class WebTransferOrchestrator {
     this.announceInFlight = true;
     boothLog(leg, 'announce_attempt', force ? 'forced' : 'scheduled');
     try {
-      const message = buildAnnounceMessage(identity, leg, this.instanceId);
-      await this.usb.sendSessionMessage(message);
+      await this.usb.syncSystems((systems) => {
+        const roster = this.callbacks.getRoster();
+        for (const sys of systems) {
+          const portNum = Number.parseInt(sys.id.replace(/^sys-port-/, ''), 10);
+          if (!Number.isFinite(portNum) || portNum < 1) continue;
+          if (sys.status === 'offline') continue;
+          const peerLeg = portNum - 1;
+          const receive = sys.status === 'busy' ? 'ask_first' : 'open';
+          roster.touchPeer(sys.name || sys.id, '', receive, peerLeg, sys.id);
+        }
+        roster.markStalePeersOffline();
+        this.publishRoster();
+      });
       this.lastAnnounceMs = now;
       this.lastAnnounceSkipReason = '';
       this.bumpSessionActivity();
       this.callbacks.patch({ lastAnnounceMs: now });
-      boothLog(leg, 'announce_sent', identity.display_name);
-      console.log(`[RocketBox] announce SENT as "${identity.display_name}"`);
+      boothLog(leg, 'systems_synced', identity.display_name);
+      console.log(`[RocketBox] systems synced as "${identity.display_name}"`);
     } catch (err) {
       const message = (err as Error).message;
       boothLog(leg, 'announce_fail', message);
-      console.warn('[RocketBox] announce send failed:', message);
+      console.warn('[RocketBox] listSystems failed:', message);
     } finally {
       this.announceInFlight = false;
     }
@@ -937,6 +943,11 @@ export class WebTransferOrchestrator {
     });
 
     try {
+      const systemId =
+        peer.instance_id.startsWith('sys-port-')
+          ? peer.instance_id
+          : `sys-port-${peer.port_index + 1}`;
+      await this.usb.ensureCircuit(systemId);
       await this.usb.sendSessionMessage(offer);
       this.bumpSessionActivity();
     } catch (err) {

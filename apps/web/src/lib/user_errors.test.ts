@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FabricUsbError } from './fabric_usb';
+import { FabricUsbError } from './fabric_errors';
 import { formatTransferError, formatUsbConnectError, isUsbPickerCancel } from './user_errors';
 
 describe('isUsbPickerCancel', () => {

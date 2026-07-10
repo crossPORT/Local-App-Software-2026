@@ -2,6 +2,8 @@ export interface Transport {
   readonly connected: boolean;
   init(): Promise<void>;
   disconnect(): Promise<void>;
+  /** Fired on unexpected link loss (not intentional disconnect()). */
+  onDisconnected(callback: () => void): void;
 
   // Data Plane (EP1 / EP2)
   writeEP1(data: Uint8Array): void;

@@ -1,16 +1,17 @@
 import type { FabricSessionMessage } from './fabric_session';
 import type { ParsedHeader } from './fabric_protocol';
-import type { ListenMode } from './fabric_link';
+import type { SystemInfo } from '@rocketbox/sdk';
 
-/** App-layer transport contract — implemented by WebUSB and by apps/web/sim. */
+export type ListenMode = 'always' | 'handshake' | 'off';
+
+/** App-layer transport contract — implemented by the TypeScript SDK adapter. */
 export interface FabricTransport {
   readonly connected: boolean;
 
-  /** Fabric leg of the connected cable (from USB serial). */
   getFabricPortIndex(): number;
-
   getFabricLeg(): number;
   getSerialNumber(): string;
+  getSystemId(): string;
 
   connect(): Promise<string>;
   reconnectKnown(): Promise<string>;
@@ -25,6 +26,8 @@ export interface FabricTransport {
   ensureListening(): void;
   subscribeSession(handler: (message: FabricSessionMessage) => void): () => void;
   subscribeConnect?(handler: () => void): () => void;
+  syncSystems(handler: (systems: SystemInfo[]) => void): Promise<void>;
+  ensureCircuit(peerSystemId: string): Promise<void>;
 
   sendBytes(
     payload: Uint8Array,
