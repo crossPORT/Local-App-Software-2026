@@ -1,5 +1,11 @@
 import type { Connection } from '@rocketbox/sdk';
-import { HEADER_SIZE, buildHeader, parseHeader, type ParsedHeader } from './fabric_protocol';
+import {
+  CHUNK_SIZE,
+  HEADER_SIZE,
+  buildHeader,
+  parseHeader,
+  type ParsedHeader,
+} from './fabric_protocol';
 import {
   parseSessionPayload,
   serializeSessionMessage,
@@ -19,6 +25,17 @@ export function isLengthPrefixedFrame(bytes: Uint8Array): boolean {
   return len === bytes.length - 4;
 }
 
+/** Let React paint liveMbps / activity bars between USB chunks. */
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
+    setTimeout(resolve, 0);
+  });
+}
+
 export async function sendSessionOnCircuit(
   connection: Connection,
   message: FabricSessionMessage,
@@ -33,8 +50,18 @@ export async function sendFileOnCircuit(
   onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
   const header = new Uint8Array(buildHeader(payload.length, { frameKind: 'payload', filename }));
-  await connection.send(concatBytes(header, payload));
-  onProgress?.(payload.length, payload.length);
+  await connection.send(header);
+  onProgress?.(0, payload.length);
+  await yieldToUi();
+
+  let offset = 0;
+  while (offset < payload.length) {
+    const n = Math.min(CHUNK_SIZE, payload.length - offset);
+    await connection.send(payload.subarray(offset, offset + n));
+    offset += n;
+    onProgress?.(offset, payload.length);
+    await yieldToUi();
+  }
 }
 
 export function parseIncomingSession(bytes: Uint8Array): FabricSessionMessage | null {

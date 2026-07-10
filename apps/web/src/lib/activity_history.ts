@@ -1,24 +1,51 @@
-/** Time-bucketed USB activity: session message pulses + transfer throughput. */
+/** Time-bucketed USB activity with fractional scroll for smooth strip motion. */
 
 export interface ActivityBucket {
   session: number;
   transferMbps: number;
 }
 
+/** ~18s window at 250ms columns. */
+export const ACTIVITY_MAX_BUCKETS = 72;
+export const ACTIVITY_BUCKET_MS = 250;
+
 export class ActivityHistory {
   private buckets: ActivityBucket[] = [];
   private bucketStartMs = 0;
 
   constructor(
-    private readonly maxBuckets = 28,
-    private readonly bucketMs = 400,
+    private readonly maxBuckets = ACTIVITY_MAX_BUCKETS,
+    private readonly bucketMs = ACTIVITY_BUCKET_MS,
     private readonly maxSessionPerBucket = 5,
   ) {}
 
+  prime(now = Date.now()): void {
+    if (this.buckets.length > 0) {
+      return;
+    }
+    this.buckets = Array.from({ length: this.maxBuckets }, () => ({
+      session: 0,
+      transferMbps: 0,
+    }));
+    this.bucketStartMs = now;
+  }
+
+  /** Commit elapsed whole buckets; returns 0..1 phase within the current column. */
+  scrollPhase(now = Date.now()): number {
+    this.ensureBucket(now);
+    if (this.bucketMs <= 0) {
+      return 0;
+    }
+    return Math.min(0.999, Math.max(0, (now - this.bucketStartMs) / this.bucketMs));
+  }
+
+  advance(now = Date.now()): number {
+    return this.scrollPhase(now);
+  }
+
   private ensureBucket(now: number): void {
     if (this.buckets.length === 0) {
-      this.bucketStartMs = now;
-      this.buckets.push({ session: 0, transferMbps: 0 });
+      this.prime(now);
       return;
     }
     while (now - this.bucketStartMs >= this.bucketMs) {
@@ -32,7 +59,7 @@ export class ActivityHistory {
 
   pushSession(now = Date.now()): void {
     this.ensureBucket(now);
-    const bucket = this.buckets[this.buckets.length - 1];
+    const bucket = this.buckets[this.buckets.length - 1]!;
     bucket.session = Math.min(this.maxSessionPerBucket, bucket.session + 1);
   }
 
@@ -41,7 +68,7 @@ export class ActivityHistory {
       return;
     }
     this.ensureBucket(now);
-    const bucket = this.buckets[this.buckets.length - 1];
+    const bucket = this.buckets[this.buckets.length - 1]!;
     bucket.transferMbps = Math.max(bucket.transferMbps, mbps);
   }
 
@@ -50,7 +77,6 @@ export class ActivityHistory {
     this.bucketStartMs = 0;
   }
 
-  /** Drop transfer bars when idle — session pulses stay visible. */
   clearTransferTrack(): void {
     for (const bucket of this.buckets) {
       bucket.transferMbps = 0;
@@ -74,4 +100,15 @@ export class ActivityHistory {
 
 export function bytesToActivityMbps(bytes: number, windowSec = 0.08): number {
   return Math.max(0.12, (bytes / (1024 * 1024)) / windowSec);
+}
+
+export function pushCompletedTransferSpike(
+  history: ActivityHistory,
+  resultMbps: number,
+  prevResultMbps: number,
+): number {
+  if (resultMbps > 0 && prevResultMbps <= 0) {
+    history.pushTransfer(resultMbps);
+  }
+  return resultMbps;
 }
