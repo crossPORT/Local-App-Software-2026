@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { RocketBox, SimTransport } from '@rocketbox/sdk';
-import { buildHeader } from './fabric_protocol';
-import { parseSessionPayload, serializeSessionMessage } from './fabric_session';
+import { buildHeader } from '@rocketbox/sdk';
+import { parseSessionPayload, serializeSessionMessage } from '@rocketbox/sdk';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));

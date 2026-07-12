@@ -1,4 +1,4 @@
-import { remoteFabricLegs } from './fabric_port';
+import { remoteFabricLegs } from '@rocketbox/sdk';
 import type { IdentityProfile, PeerEntry } from './types';
 
 export interface RosterSlot {

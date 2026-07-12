@@ -132,11 +132,11 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
     if (identity_.usb_inflight_mb > 0) {
         set_inflight_budget_mb(static_cast<unsigned>(identity_.usb_inflight_mb));
     }
-    booth_log(port_index_, "usb_inflight",
+    booth_log(log_leg(), "usb_inflight",
               "usbfs_limit_mb=" + std::to_string(usbfs_limit_mb())
                   + " queue_depth=" + std::to_string(inflight_queue_depth()));
     if (identity_.booth_display_mib_s > 0.0) {
-        booth_log(port_index_, "booth_display",
+        booth_log(log_leg(), "booth_display",
                   "base_mib_s=" + std::to_string(identity_.booth_display_mib_s)
                       + " jitter_pct=" + std::to_string(identity_.booth_display_jitter_pct));
     }
@@ -166,7 +166,7 @@ void TransferOrchestrator::start(bool run_wiring_probe, bool enable_listener) {
     }
     shutting_down_.store(false);
     startup_thread_ = std::thread([this, run_wiring_probe, enable_listener]() {
-        booth_log(port_index_, "startup", "wiring_probe=" + std::string(run_wiring_probe ? "yes" : "no"));
+        booth_log(log_leg(), "startup", "wiring_probe=" + std::string(run_wiring_probe ? "yes" : "no"));
         // Only port 0 runs loopback wiring probe (opens both cables briefly).
         // Port 1 waits so the two GUI processes do not fight for USB handles.
         if (run_wiring_probe && port_index_ > 0) {
@@ -220,7 +220,7 @@ void TransferOrchestrator::ensure_listener_started() {
                   "working_send=" + std::to_string(working_send_port_)
                       + " working_recv=" + std::to_string(working_recv_port_));
     } else {
-        booth_log(port_index_,
+        booth_log(log_leg(),
                   "listener_started",
                   "working_send=" + std::to_string(working_send_port_)
                       + " working_recv=" + std::to_string(working_recv_port_));
@@ -256,7 +256,7 @@ void TransferOrchestrator::stop() {
                 reaper.join();
             }
         } else {
-            booth_log(port_index_, "shutdown", "payload thread detach on timeout");
+            booth_log(log_leg(), "shutdown", "payload thread detach on timeout");
             if (reaper.joinable()) {
                 reaper.detach();
             }
@@ -324,7 +324,7 @@ void TransferOrchestrator::ensure_wiring() {
 
     // The fabric routes both directions natively, so there is no working-port
     // discovery to do. The probe is disabled.
-    booth_log(port_index_, "wiring_probe", "skipped (native bidirectional routing)");
+    booth_log(log_leg(), "wiring_probe", "skipped (native bidirectional routing)");
 
     publish_state();
 }
@@ -388,7 +388,7 @@ bool TransferOrchestrator::send_session_with_routing(const FabricSessionMessage&
                                                      std::string* error_out) {
     (void)reverse_path;
     const bool ok = send_session_message(*controller_, port_index_, message, error_out);
-    booth_log(port_index_,
+    booth_log(log_leg(),
               ok ? "session_send_ok" : "session_send_fail",
               session_kind_to_string(message.kind)
                   + (error_out && !error_out->empty() ? " err=" + *error_out : ""));
@@ -527,7 +527,7 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
                     std::this_thread::sleep_for(std::chrono::milliseconds(50));
                     std::string send_error;
                     if (send_session_with_routing(offer, false, &send_error)) {
-                        booth_log(port_index_, "offer_retransmit", "to=" + peer->display_name);
+                        booth_log(log_leg(), "offer_retransmit", "to=" + peer->display_name);
                         std::this_thread::sleep_for(
                             std::chrono::milliseconds(handshake_.accept_ready_gap_ms));
                     }
@@ -592,7 +592,7 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
 
 void TransferOrchestrator::on_session_message(const FabricSessionMessage& message) {
     bump_fabric_activity();
-    booth_log(port_index_,
+    booth_log(log_leg(),
               "session_recv",
               session_kind_to_string(message.kind) + " from=" + message.from_name
                   + " to=" + message.to_name + " session=" + message.session_id);
@@ -658,6 +658,23 @@ void TransferOrchestrator::tick_presence() {
         roster_.mark_stale_peers_offline(std::chrono::seconds(45));
         if (fabric_just_connected) {
             last_announce_ms_ = 0;
+            // TS HwPlane.connect clears sticky switch with dest=0.
+            if (controller_) {
+                if (listener_) {
+                    listener_->pause();
+                }
+                const TransferResult clear = controller_->switch_port(0);
+                if (listener_) {
+                    listener_->resume();
+                }
+                if (!clear.ok) {
+                    booth_log(log_leg(),
+                              "switch_clear_fail",
+                              clear.error_message);
+                } else {
+                    booth_log(log_leg(), "switch_clear", "dest=0");
+                }
+            }
         }
     }
 
@@ -739,11 +756,17 @@ void TransferOrchestrator::ensure_listener_active() {
     }
 }
 
-void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
+void TransferOrchestrator::maybe_send_announce(int64_t now_ms, bool force) {
     if (identity_.display_name.empty()) {
+        if (force) {
+            booth_log(log_leg(), "announce_skip", "display_name empty");
+        }
         return;
     }
     if (listener_ && listener_->is_paused()) {
+        if (force) {
+            booth_log(log_leg(), "announce_skip", "listener paused");
+        }
         return;
     }
 
@@ -753,6 +776,9 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
         // same ROCKETBX payload header wire format and the receiver may
         // mistake them for the incoming file (typically ~100–200 B).
         if (outbound_offer_) {
+            if (force) {
+                booth_log(log_leg(), "announce_skip", "outbound_offer");
+            }
             return;
         }
     }
@@ -763,11 +789,33 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
         fabric_connected = state_.fabric_connected;
     }
     if (!fabric_connected) {
+        if (force) {
+            booth_log(log_leg(), "announce_skip", "not connected");
+        }
         return;
     }
 
     constexpr int64_t kAnnounceIntervalMs = 15000;
-    if (last_announce_ms_ != 0 && now_ms - last_announce_ms_ < kAnnounceIntervalMs) {
+    constexpr int64_t kForceMinGapMs = 1000;
+    if (force) {
+        if (last_announce_ms_ != 0 && now_ms - last_announce_ms_ < kForceMinGapMs) {
+            booth_log(log_leg(), "announce_skip", "force_throttled");
+            return;
+        }
+    } else if (last_announce_ms_ != 0
+               && now_ms - last_announce_ms_ < kAnnounceIntervalMs) {
+        return;
+    }
+
+    std::unique_lock<std::mutex> announce_lock(announce_mutex_, std::try_to_lock);
+    if (!announce_lock.owns_lock()) {
+        if (force) {
+            booth_log(log_leg(), "announce_skip", "in_flight");
+        }
+        return;
+    }
+    if (!force && last_announce_ms_ != 0
+        && now_ms - last_announce_ms_ < kAnnounceIntervalMs) {
         return;
     }
 
@@ -776,23 +824,28 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
     message.from_name = identity_.display_name;
     message.team = identity_.team;
     message.session_id = make_session_id();
-    const int my_leg = controller_ ? controller_->fabric_leg() : port_index_;
+    const int my_leg = log_leg();
     message.note = build_announce_note(my_leg, identity_.receive_status, instance_id_);
 
     std::string error;
     if (send_session_with_routing(message, false, &error)) {
         last_announce_ms_ = now_ms;
-        booth_log(port_index_,
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.last_announce_ms = now_ms;
+        }
+        booth_log(my_leg,
                   "announce_sent",
-                  "from=" + message.from_name + " note=" + message.note);
+                  std::string(force ? "forced " : "")
+                      + "from=" + message.from_name + " note=" + message.note);
     } else if (!error.empty()) {
-        booth_log(port_index_, "announce_fail", error);
+        booth_log(my_leg, "announce_fail", error);
     }
 }
 
 void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
     if (!message.to_name.empty() && message.to_name != identity_.display_name) {
-        booth_log(port_index_,
+        booth_log(log_leg(),
                   "offer_rejected",
                   "to=" + message.to_name + " local=" + identity_.display_name + " from="
                       + message.from_name);
@@ -803,17 +856,17 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (accepting_inbound_session_id_
             && *accepting_inbound_session_id_ == message.session_id) {
-            booth_log(port_index_, "offer_dup_ignore", "accepting session=" + message.session_id);
+            booth_log(log_leg(), "offer_dup_ignore", "accepting session=" + message.session_id);
             return;
         }
         if (last_completed_inbound_session_id_
             && *last_completed_inbound_session_id_ == message.session_id) {
-            booth_log(port_index_, "offer_completed_ignore", "session=" + message.session_id);
+            booth_log(log_leg(), "offer_completed_ignore", "session=" + message.session_id);
             return;
         }
         if (state_.pending_offer
             && state_.pending_offer->message.session_id == message.session_id) {
-            booth_log(port_index_, "offer_dup_pending", "session=" + message.session_id);
+            booth_log(log_leg(), "offer_dup_pending", "session=" + message.session_id);
             return;
         }
     }
@@ -824,7 +877,7 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
     }
 
     if (is_busy()) {
-        booth_log(port_index_, "offer_rejected", "busy from=" + message.from_name);
+        booth_log(log_leg(), "offer_rejected", "busy from=" + message.from_name);
         return;
     }
 
@@ -860,14 +913,14 @@ void TransferOrchestrator::accept_pending_offer() {
         offer_copy = *state_.pending_offer;
         if (accepting_inbound_session_id_
             && *accepting_inbound_session_id_ == offer_copy.message.session_id) {
-            booth_log(port_index_,
+            booth_log(log_leg(),
                       "accept_inflight_ignore",
                       "session=" + offer_copy.message.session_id);
             return;
         }
         if (last_completed_inbound_session_id_
             && *last_completed_inbound_session_id_ == offer_copy.message.session_id) {
-            booth_log(port_index_,
+            booth_log(log_leg(),
                       "accept_completed_ignore",
                       "session=" + offer_copy.message.session_id);
             state_.pending_offer.reset();
@@ -884,7 +937,7 @@ void TransferOrchestrator::accept_pending_offer() {
     payload_thread_ = std::thread([this, offer_copy]() {
         if (last_completed_inbound_session_id_
             && *last_completed_inbound_session_id_ == offer_copy.message.session_id) {
-            booth_log(port_index_,
+            booth_log(log_leg(),
                       "inbound_dup_skip",
                       "session=" + offer_copy.message.session_id);
             {
@@ -1092,7 +1145,7 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
     if (!result.ok) {
         const FailedInboundReceive failed = handle_failed_inbound_receive(result, out_path);
         if (failed.cleanup.existed_before) {
-            booth_log(port_index_,
+            booth_log(log_leg(),
                       "partial_cleanup",
                       out_path + " bytes=" + std::to_string(failed.cleanup.bytes_removed)
                           + (failed.cleanup.removed ? " removed" : " remove_failed"));
@@ -1104,7 +1157,7 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
     if (offer.total_bytes > 0 && result.bytes_transferred != offer.total_bytes) {
         const PartialReceiveCleanup cleanup = cleanup_partial_receive_file(out_path);
         if (cleanup.existed_before) {
-            booth_log(port_index_,
+            booth_log(log_leg(),
                       "partial_cleanup",
                       out_path + " size_mismatch bytes="
                           + std::to_string(cleanup.bytes_removed));
@@ -1122,7 +1175,7 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
         if (!extract_tar_to_dir(out_path, extract_dir, &extract_error)) {
             const PartialReceiveCleanup cleanup = cleanup_partial_receive_file(out_path);
             if (cleanup.existed_before) {
-                booth_log(port_index_,
+                booth_log(log_leg(),
                           "partial_cleanup",
                           out_path + " tar_extract_fail bytes="
                               + std::to_string(cleanup.bytes_removed));
@@ -1171,7 +1224,7 @@ void TransferOrchestrator::begin_booth_display_rate() {
     state_.booth_display_mib_s = roll_booth_display_mib_s(identity_.booth_display_mib_s,
                                                         identity_.booth_display_jitter_pct);
     state_.live_mbps = state_.booth_display_mib_s;
-    booth_log(port_index_, "booth_display",
+    booth_log(log_leg(), "booth_display",
               "ui_rate_mib_s=" + std::to_string(state_.booth_display_mib_s)
                   + " base_mib_s=" + std::to_string(identity_.booth_display_mib_s)
                   + " jitter_pct=" + std::to_string(identity_.booth_display_jitter_pct));
@@ -1184,7 +1237,7 @@ void TransferOrchestrator::finish_transfer(bool ok,
                                            TransferDoneKind done_kind) {
     const bool schedule_dismiss =
         ok && (done_kind == TransferDoneKind::Sent || done_kind == TransferDoneKind::Received);
-    booth_log(port_index_,
+    booth_log(log_leg(),
               ok ? "transfer_done" : "transfer_fail",
               message + (error.empty() ? "" : " err=" + error));
     {
@@ -1276,9 +1329,24 @@ void TransferOrchestrator::invalidate_dismiss() {
     dismiss_epoch_.fetch_add(1, std::memory_order_relaxed);
 }
 
+void TransferOrchestrator::request_announce() {
+    maybe_send_announce(steady_now_ms(), true);
+    publish_state();
+}
+
+int TransferOrchestrator::log_leg() const {
+    if (controller_) {
+        const int leg = controller_->fabric_leg();
+        if (leg >= 0) {
+            return leg;
+        }
+    }
+    return port_index_;
+}
+
 void TransferOrchestrator::reset_connection() {
     invalidate_dismiss();
-    booth_log(port_index_, "reset_connection", "user");
+    booth_log(log_leg(), "reset_connection", "user");
 
     StagedPayload staged{};
     {
@@ -1310,7 +1378,7 @@ void TransferOrchestrator::reset_connection() {
     }
 
     if (listener_) {
-        listener_->resume();
+        listener_->pause();
     }
 
     if (payload_thread_.joinable()) {
@@ -1327,11 +1395,21 @@ void TransferOrchestrator::reset_connection() {
                 reaper.join();
             }
         } else {
-            booth_log(port_index_, "reset_connection", "payload thread detach on timeout");
+            booth_log(log_leg(), "reset_connection", "payload thread detach on timeout");
             if (reaper.joinable()) {
                 reaper.detach();
             }
             payload_thread_.detach();
+        }
+    }
+
+    // TS HwPlane.resetConnection clears sticky switch with dest=0.
+    if (controller_) {
+        const TransferResult clear = controller_->switch_port(0);
+        if (!clear.ok) {
+            booth_log(log_leg(), "switch_clear_fail", clear.error_message);
+        } else {
+            booth_log(log_leg(), "switch_clear", "dest=0");
         }
     }
 

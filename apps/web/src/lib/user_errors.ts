@@ -1,4 +1,4 @@
-import { FabricUsbError } from './fabric_errors';
+import { FabricUsbError } from '@rocketbox/sdk';
 
 /** User closed the browser USB picker without choosing a device. */
 export function isUsbPickerCancel(err: unknown): boolean {
@@ -35,6 +35,18 @@ export function formatUsbConnectError(err: unknown): string | null {
   }
   if (message.includes('Previously paired device not found')) {
     return 'Saved cable not found — tap Connect USB and pick your cable in the browser dialog.';
+  }
+  if (message === 'busy' || message.includes('busy')) {
+    return 'Port busy — close other RocketBox tabs, unplug/replug the cable, then Connect USB again.';
+  }
+  if (
+    message.includes('ATTACH timeout') ||
+    message === 'timeout' ||
+    message.includes('attach') ||
+    message.includes('EP3') ||
+    message.includes('EP4')
+  ) {
+    return 'USB opened, but the local port did not reply on EP3 after ATTACH — port control firmware required (not just 4 endpoints).';
   }
   return 'Could not connect — check the cable and try Connect USB again.';
 }

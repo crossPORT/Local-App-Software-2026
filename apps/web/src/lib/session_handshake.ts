@@ -41,7 +41,9 @@ export function handshakeTimingFromIdentity(identity: HandshakeIdentity): Handsh
   const accept_reply_delay_ms =
     identity.accept_reply_delay_ms > 0
       ? identity.accept_reply_delay_ms
-      : accept_ready_gap_ms * 2;
+      : identity.accept_ready_gap_ms > 0
+        ? accept_ready_gap_ms * 2
+        : HANDSHAKE_DEFAULTS.accept_reply_delay_ms;
   const accept_timeout_sec =
     identity.accept_timeout_sec > 0
       ? identity.accept_timeout_sec

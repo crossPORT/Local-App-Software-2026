@@ -9,7 +9,7 @@ import {
   subscribeBoothLog,
   type BoothLogLevel,
 } from '../lib/booth_log';
-import { FABRIC_LEG_COUNT, displayPortFromLeg } from '../lib/fabric_port';
+import { FABRIC_LEG_COUNT, displayPortFromLeg } from '@rocketbox/sdk';
 import { diagnoseBoothLog, parseBoothLogLine } from '../lib/booth_log_diagnostics';
 import { theme } from '../lib/theme';
 

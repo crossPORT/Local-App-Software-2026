@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from '../lib/fabric_port';
+import { displayPortFromLeg } from '@rocketbox/sdk';
 import { useEffect, useRef, useState } from 'react';
 import { collectDropFiles } from '../lib/collect_drop_files';
 import { isOutboundHandshakeWait, peerRosterLabel, receiveStatusLabel } from '../lib/format';
@@ -322,6 +322,7 @@ function PeerRow({
             <input
               ref={fileInputRef}
               type="file"
+              accept="*/*"
               hidden
               multiple
               onChange={onChooseFile}

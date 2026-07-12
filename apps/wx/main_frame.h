@@ -45,6 +45,7 @@ private:
     void OnEventLog(wxWindow* parent = nullptr);
     void OnEventLogMenu(wxCommandEvent& event);
     void OnResetConnection();
+    void OnAnnounceLedClick();
     void OnConnectUsb();
     void OnDisconnectUsb();
     int CountFabricDevices() const;

@@ -125,7 +125,7 @@ TransferResult TransferController::send_on_port(int port_index,
     TransferResult result = fabric_sim_enabled()
         ? fabric_sim_send_file(path, port_index, std::move(progress_cb), timeout_ms)
         : send_file_core(usb_ctx_, path, port_index, std::move(progress_cb), timeout_ms, frame_kind);
-    booth_log(port_index_,
+    booth_log(fabric_leg(),
               result.ok ? "usb_send_ok" : "usb_send_fail",
               path + " bytes=" + std::to_string(result.bytes_transferred)
                   + (result.error_message.empty() ? "" : " err=" + result.error_message));
@@ -154,12 +154,12 @@ TransferResult TransferController::receive_on_port(int port_index,
     if (!result.ok && header_timeout_ms <= usb_protocol::kSessionHeaderTimeoutMs + 1) {
         // Session listener polls frequently; only log non-timeout failures.
         if (result.error_message != "Header read failed") {
-            booth_log(port_index_,
+            booth_log(fabric_leg(),
                       "usb_recv_fail",
                       path + " err=" + result.error_message);
         }
     } else if (result.ok) {
-        booth_log(port_index_,
+        booth_log(fabric_leg(),
                   "usb_recv_ok",
                   path + " bytes=" + std::to_string(result.bytes_transferred));
     }
@@ -181,6 +181,29 @@ TransferResult TransferController::loopback_on_ports(const std::string& path,
         ? fabric_sim_loopback(path, send_port_index, recv_port_index, std::move(progress_cb))
         : loopback_transfer_core(
               usb_ctx_, path, send_port_index, recv_port_index, std::move(progress_cb));
+}
+
+TransferResult TransferController::switch_port(int dest_port) {
+    if (!usb_ctx_) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "libusb not initialized"};
+    }
+    if (shutting_down_.load(std::memory_order_acquire)) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
+    }
+    if (fabric_sim_enabled()) {
+        booth_log(fabric_leg(), "switch_port", "sim skip dest=" + std::to_string(dest_port));
+        return TransferResult{true, 16, 16, 0.0, 0.0, {}};
+    }
+    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
+    if (!lock.try_lock_for(kUsbLockWait)) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
+    }
+    TransferResult result = switch_port_core(usb_ctx_, port_index_, dest_port);
+    booth_log(fabric_leg(),
+              result.ok ? "switch_ok" : "switch_fail",
+              "dest=" + std::to_string(dest_port)
+                  + (result.error_message.empty() ? "" : " err=" + result.error_message));
+    return result;
 }
 
 void TransferController::run_payload_send(const std::string& path,

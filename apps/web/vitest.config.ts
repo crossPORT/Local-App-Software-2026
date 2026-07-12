@@ -11,8 +11,13 @@ export default defineConfig({
       '@rocketbox/sdk': resolve(__dirname, '../../sdks/typescript/src/index.ts'),
     },
   },
+  server: {
+    fs: {
+      allow: [resolve(__dirname, '../..')],
+    },
+  },
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', '../../sdks/typescript/src/fabric/**/*.test.ts'],
     environment: 'node',
     typecheck: {
       enabled: false,

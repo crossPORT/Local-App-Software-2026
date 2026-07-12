@@ -188,7 +188,7 @@ void ConnectionPanel::SyncActivityMonitor(bool show,
         activity_monitor_item_->Show(false);
         activity_monitor_item_->SetMinSize(wxSize(-1, 0));
         activity_monitor_->SetRecording(false);
-        activity_monitor_->Clear();
+        // Keep history across disconnect (PWA persistHistory parity).
         last_activity_seq_ = 0;
         last_live_mbps_ = 0.0;
         last_stats_count_ = 0;

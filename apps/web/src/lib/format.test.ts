@@ -60,8 +60,8 @@ describe('effectiveDisplayMbps', () => {
 
 describe('receiveStatusLabel', () => {
   it('maps receive policy to user copy', () => {
-    expect(receiveStatusLabel('open')).toContain('automatically');
+    expect(receiveStatusLabel('open')).toContain('Accepts transfers');
     expect(receiveStatusLabel('busy')).toContain('Not accepting');
-    expect(receiveStatusLabel('ask_first')).toContain('Asks');
+    expect(receiveStatusLabel('ask_first')).toContain('Asks before accepting');
   });
 });

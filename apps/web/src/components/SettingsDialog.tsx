@@ -78,8 +78,8 @@ export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProp
           <label>
             When someone sends you a file
             <select name="receive_status" defaultValue={receiveStatusToString(identity.receive_status)}>
-              <option value="open">Save automatically</option>
-              <option value="ask_first">Ask before saving</option>
+              <option value="open">Accept transfers automatically</option>
+              <option value="ask_first">Ask before accepting</option>
               <option value="busy">Do not accept files</option>
             </select>
           </label>

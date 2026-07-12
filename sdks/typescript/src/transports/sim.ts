@@ -1,6 +1,6 @@
 import type { Transport } from '../transport';
+import { MSG_NAK } from '../messages';
 
-const MSG_NAK = 0x84;
 const EP4_TIMEOUT_MS = 5_000;
 
 type TxnCb = {

@@ -7,16 +7,16 @@ One place to clone the repo, understand the main sections, and run/test against 
 | Path | What it is | Sim | Real USB |
 |------|------------|-----|----------|
 | `simulated-hardware/` | Crossport stand-in (TCP **1772** + WebSocket **1773** + dashboard) | Yes | — |
-| `apps/web/` | RocketBox App PWA (Vite / WebUSB) | `?simulate=1` | WebUSB |
+| `apps/web/` | RocketBox App PWA (UI; USB via SDK) | `?simulate=1` → SDK | SDK WebUSB |
 | `apps/wx/` | RocketBox App desktop (wxWidgets) | No | libusb |
-| `sdks/typescript/` | TS Session/Connection + `SimTransport` / `UsbTransport` | WS 1773 | WebUSB |
+| `sdks/typescript/` | TS SDK: `createFabricTransport`, ROCKETBX + IntelliConnex | WS 1773 | WebUSB |
 | `sdks/cpp/` | C++ Session/Connection + sim/USB transports | TCP 1772 | libusb |
 | `fabric-tunnel/` | Fabric ↔ host IP bridge | `--transport sim` | `--transport usb` |
 | `core/` + `lib/session/` | Native USB engine + session orchestration (wx / CLIs) | — | Yes |
 | `tools/` | `usb-probe`, `booth-cli`, loopback, … | — | Mostly USB |
 | `tests/` | CTest unit + integration; web vitest | Some | Hardware labels |
 
-**Rule of thumb:** PWA + TypeScript/C++ SDKs + fabric-tunnel can use the sim daemon. The **wx desktop app talks to real USB only** today.
+**Rule of thumb:** PWA captures `?simulate=` / `?port=` and calls `@rocketbox/sdk` `createFabricTransport` — all WebUSB/ROCKETBX/sim I/O is in the SDK. The **wx desktop app talks to real USB only** today.
 
 ---
 
@@ -90,8 +90,8 @@ Query flags:
 
 | Param | Meaning |
 |-------|---------|
-| `simulate=1` | Use `SimTransport` → `ws://localhost:1773?port=N` |
-| `port=1..4` | Fabric port (default `1`) |
+| `simulate=1` | PWA passes `simulate` to SDK → `SimTransport` → `ws://localhost:1773?port=N` |
+| `port=1..4` | Fabric port (default `1`); PWA passes through to SDK |
 
 ---
 
@@ -106,10 +106,10 @@ cd apps/web && npm ci && npm run dev
 # open https://localhost:5173/   (no ?simulate=)
 ```
 
-4. **Connect USB** → pick device `1772:0006` in the browser dialog.
+4. **Connect USB** → browser WebUSB picker (handled by `@rocketbox/sdk`, not PWA-local USB code).
 5. Second laptop/cable = second peer (or a second port if the fabric exposes multiple).
 
-WebUSB requires **HTTPS** (or localhost). `file://` will not work.
+WebUSB requires **HTTPS** (or localhost). `file://` will not work. The PWA must not implement WebUSB itself — see [apps/web/AGENTS.md](../apps/web/AGENTS.md).
 
 ---
 

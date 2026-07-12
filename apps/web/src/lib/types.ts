@@ -57,6 +57,8 @@ export interface AppUiState {
   usbConnected: boolean;
   fabricConnected: boolean;
   fabricDevicesSeen: number;
+  /** True when this origin has a remembered cable serial in sessionStorage. */
+  hasSavedCable: boolean;
   busy: boolean;
   waitingForPartner: boolean;
   statusMessage: string;
@@ -83,6 +85,7 @@ export const initialUiState = (identity: IdentityProfile, portIndex: number): Ap
   usbConnected: false,
   fabricConnected: false,
   fabricDevicesSeen: 0,
+  hasSavedCable: false,
   busy: false,
   waitingForPartner: false,
   statusMessage: '',

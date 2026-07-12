@@ -9,6 +9,8 @@ get_filename_component(LIBUSB_INCLUDE_PARENT "${LIBUSB_INCLUDE_DIRS}" DIRECTORY)
 
 add_library(fabric_usb_core STATIC
     src/usb_transfer_core.cpp
+    src/usb_device_open.cpp
+    src/usb_switch.cpp
 )
 
 target_include_directories(fabric_usb_core

@@ -19,6 +19,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstdlib>
+#include <functional>
 #include <initializer_list>
 #include <sstream>
 #include <thread>
@@ -154,7 +155,9 @@ public:
         SetMaxSize(wxSize(14, 14));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         SetBackgroundColour(parent->GetBackgroundColour());
+        SetCursor(wxCURSOR_HAND);
         Bind(wxEVT_PAINT, &ConnectionLedPanel::OnPaint, this);
+        Bind(wxEVT_LEFT_UP, &ConnectionLedPanel::OnClick, this);
     }
 
     void SetLedColour(const wxColour& colour) {
@@ -162,6 +165,10 @@ public:
             colour_ = colour;
             Refresh();
         }
+    }
+
+    void SetClickHandler(std::function<void()> handler) {
+        on_click_ = std::move(handler);
     }
 
 private:
@@ -173,12 +180,21 @@ private:
         dc.DrawRectangle(0, 0, sz.x, sz.y);
     }
 
+    void OnClick(wxMouseEvent&) {
+        if (on_click_) {
+            on_click_();
+        }
+    }
+
     wxColour colour_{kError};
+    std::function<void()> on_click_;
 };
 
-ConnectionLedPanel* MakeConnectionIndicator(wxWindow* parent) {
+ConnectionLedPanel* MakeConnectionIndicator(wxWindow* parent,
+                                            std::function<void()> on_click) {
     auto* indicator = new ConnectionLedPanel(parent);
     indicator->SetToolTip("Offline");
+    indicator->SetClickHandler(std::move(on_click));
     return indicator;
 }
 
@@ -446,7 +462,7 @@ void MainFrame::BuildUi() {
                                  12);
     brand_row->Add(node_name_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
 
-    connection_indicator_ = MakeConnectionIndicator(header);
+    connection_indicator_ = MakeConnectionIndicator(header, [this]() { OnAnnounceLedClick(); });
     brand_row->Add(connection_indicator_, 0, wxALIGN_CENTER_VERTICAL);
 
     brand_block->Add(brand_row, 0, wxEXPAND);
@@ -524,11 +540,11 @@ void MainFrame::RenderConnectionIndicator() {
             break;
         case LinkLed::Connected:
             colour = kOk;
-            tooltip = "Device connected";
+            tooltip = "Connected — click to announce";
             break;
         case LinkLed::Transferring:
             colour = led_pulse_on_ ? kOk : wxColour(0x2a, 0x9d, 0x6f);
-            tooltip = "Transfer in progress";
+            tooltip = "Transfer in progress — click to announce";
             break;
     }
     SetConnectionIndicator(static_cast<ConnectionLedPanel*>(connection_indicator_),
@@ -958,6 +974,13 @@ void MainFrame::OnResetConnection() {
     std::thread([this]() {
         orchestrator_->reset_connection();
     }).detach();
+}
+
+void MainFrame::OnAnnounceLedClick() {
+    if (!orchestrator_ || !fabric_connected_) {
+        return;
+    }
+    std::thread([this]() { orchestrator_->request_announce(); }).detach();
 }
 
 void MainFrame::OnConnectUsb() {

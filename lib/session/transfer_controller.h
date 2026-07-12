@@ -73,6 +73,9 @@ public:
                                      int send_port_index,
                                      int recv_port_index,
                                      ProgressCallback progress_cb = nullptr);
+    // Port switch (TS writeSwitch / HwPlane.switchPort parity).
+    // dest_port 1–4 links, 0 clears.
+    TransferResult switch_port(int dest_port);
     void run_payload_send(const std::string& path, ProgressCallback progress_cb = nullptr);
     void run_payload_receive(const std::string& out_path,
                              ProgressCallback progress_cb = nullptr);

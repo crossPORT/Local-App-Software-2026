@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from './fabric_port';
+import { displayPortFromLeg } from '@rocketbox/sdk';
 
 export type BoothLogLevel = 'off' | 'normal' | 'verbose';
 

@@ -81,6 +81,9 @@ public:
     /** Clear transfer errors, cancel a stuck handshake, and resume listening. */
     void reset_connection();
 
+    /** Send an announce now (bypasses the normal interval). No-op if not connected. */
+    void request_announce();
+
 private:
     void tick_presence();
     void start_presence_loop();
@@ -90,7 +93,8 @@ private:
     void handle_decline(const FabricSessionMessage& message);
     void handle_ready(const FabricSessionMessage& message);
     void handle_announce(const FabricSessionMessage& message);
-    void maybe_send_announce(int64_t now_ms);
+    void maybe_send_announce(int64_t now_ms, bool force = false);
+    int log_leg() const;
 
     bool send_session_reply(const FabricSessionMessage& request,
                             SessionMessageKind kind);
@@ -157,6 +161,7 @@ private:
     int working_recv_port_ = 0;
     bool fabric_was_connected_ = false;
     int64_t last_announce_ms_ = 0;
+    std::mutex announce_mutex_;
 
     std::string instance_id_;
 

@@ -1,4 +1,4 @@
-import { MSG_NAK } from './usb_ids';
+import { MSG_NAK } from '../messages';
 
 export type UsbTxnCb = {
   resolve: (header: DataView, payload: Uint8Array) => void;

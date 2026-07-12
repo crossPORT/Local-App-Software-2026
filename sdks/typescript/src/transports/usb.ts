@@ -1,6 +1,6 @@
 import type { Transport } from '../transport';
 import { USB_READ_SIZE, type UsbEndpoints } from './usb_ids';
-import { openAndClaim, pickDevice, releaseDevice } from './usb_open';
+import { pickDevice, releaseDevice, resetAndClaim, openAndClaim } from './usb_open';
 import {
   concatBytes,
   drainEp2,
@@ -15,7 +15,7 @@ export interface UsbTransportOptions {
 
 const EP4_TIMEOUT_MS = 5_000;
 
-/** WebUSB transport for the IntelliConnex 4-endpoint Session protocol. */
+/** WebUSB transport for the RocketBox 4-endpoint Session protocol. */
 export class UsbTransport implements Transport {
   private device: USBDevice | null = null;
   private eps: UsbEndpoints | null = null;
@@ -34,13 +34,35 @@ export class UsbTransport implements Transport {
     return this.device?.opened === true && this.running;
   }
 
+  getDevice(): USBDevice | null {
+    return this.device;
+  }
+
   onDisconnected(callback: () => void): void {
     this.onDisconnectCb = callback;
   }
 
   async init(): Promise<void> {
     this.device = await pickDevice(this.options.device);
+    // Open+claim only — do NOT bus-reset on every connect (breaks WebUSB handles).
+    // recover() still uses resetAndClaim after ATTACH timeout / ghost firmware state.
     this.eps = await openAndClaim(this.device);
+    this.running = true;
+    this.bindUsbDisconnect();
+    void this.readLoopEp2();
+    void this.readLoopEp3();
+  }
+
+  async recover(): Promise<void> {
+    this.unbindUsbDisconnect();
+    this.running = false;
+    this.failPending('detached');
+    await new Promise((r) => setTimeout(r, 40));
+    if (!this.device) throw new Error('detached');
+    this.txnCallbacks.clear();
+    this.ep2Buf = new Uint8Array(0);
+    this.ep3Buf = new Uint8Array(0);
+    this.eps = await resetAndClaim(this.device);
     this.running = true;
     this.bindUsbDisconnect();
     void this.readLoopEp2();

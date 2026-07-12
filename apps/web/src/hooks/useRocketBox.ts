@@ -4,14 +4,19 @@ import { PeerRoster } from '../lib/peer_roster';
 import { formatUsbConnectError } from '../lib/user_errors';
 import type { AppUiState, IdentityProfile } from '../lib/types';
 import { initialUiState } from '../lib/types';
-import { WebTransferOrchestrator } from '../lib/web_transfer_orchestrator';
+import { SessionOrchestrator } from '../lib/session_orchestrator';
 import {
   countTransportDevices,
   createTransportSession,
   clearTransportSavedPairing,
   transportHasSavedSerial,
 } from '../transport_factory';
-import { webUsbBlockedReason } from '../lib/webusb_env';
+import {
+  setFabricDebugLog,
+  subscribeFabricUsbDisconnect,
+  webUsbBlockedReason,
+} from '@rocketbox/sdk';
+import { boothLog, getBoothLogLevel } from '../lib/booth_log';
 
 export function identityNeedsSetup(identity: IdentityProfile): boolean {
   return !identity.display_name.trim();
@@ -50,7 +55,7 @@ export function useRocketBox() {
   const portIndexRef = useRef(0);
   const sessionRef = useRef(createTransportSession());
   const rosterRef = useRef(new PeerRoster());
-  const orchestratorRef = useRef<WebTransferOrchestrator | null>(null);
+  const orchestratorRef = useRef<SessionOrchestrator | null>(null);
   const disconnectingRef = useRef(false);
   const reconnectAttemptedRef = useRef(false);
   const lastAutoRecoverMsRef = useRef(0);
@@ -84,9 +89,9 @@ export function useRocketBox() {
     URL.revokeObjectURL(url);
   }, []);
 
-  const ensureOrchestrator = useCallback((): WebTransferOrchestrator => {
+  const ensureOrchestrator = useCallback((): SessionOrchestrator => {
     if (!orchestratorRef.current) {
-      orchestratorRef.current = new WebTransferOrchestrator(sessionRef.current, {
+      orchestratorRef.current = new SessionOrchestrator(sessionRef.current, {
         patch,
         getIdentity: () => identityRef.current!,
         getPortIndex: () => portIndexRef.current,
@@ -138,6 +143,7 @@ export function useRocketBox() {
       rosterRef.current.seedFromConfig(identity.peers);
       setState({
         ...initialUiState(identity, identityPortHint),
+        hasSavedCable: transportHasSavedSerial(),
         roster: rosterRef.current.visiblePeers(false),
       });
     });
@@ -145,6 +151,23 @@ export function useRocketBox() {
       cancelled = true;
     };
   }, [identityPortHint]);
+
+  useEffect(() => {
+    const release = () => {
+      disconnectingRef.current = true;
+      orchestratorRef.current?.stopListener();
+      const session = sessionRef.current;
+      if (typeof session.disconnect === 'function') {
+        void session.disconnect();
+      }
+    };
+    const onPageHide = () => release();
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      release();
+    };
+  }, []);
 
   useEffect(() => {
     if (!state || setupPromptedRef.current) {
@@ -169,8 +192,8 @@ export function useRocketBox() {
   hasStateRef.current = state !== null;
 
   useEffect(() => {
-    const onDisconnect = (event: USBConnectionEvent) => {
-      if (sessionRef.current.ownsDevice(event.device)) {
+    const onDisconnect = (device: USBDevice) => {
+      if (sessionRef.current.ownsDevice(device)) {
         sessionRef.current.markDisconnected();
         orchestratorRef.current?.stopListener();
         // A user-initiated disconnect should drop everyone. A transient/auto
@@ -192,9 +215,15 @@ export function useRocketBox() {
         setUsbDescription('');
       }
     };
-    navigator.usb?.addEventListener('disconnect', onDisconnect);
-    return () => navigator.usb?.removeEventListener('disconnect', onDisconnect);
+    return subscribeFabricUsbDisconnect(onDisconnect);
   }, [clearTransferState, patch]);
+
+  useEffect(() => {
+    setFabricDebugLog(
+      (port, event, detail = '') => boothLog(port, event, detail),
+      getBoothLogLevel() === 'off' ? 'normal' : getBoothLogLevel(),
+    );
+  }, []);
 
   useEffect(() => {
     if (!state?.usbConnected || !state.fabricConnected) {
@@ -228,6 +257,7 @@ export function useRocketBox() {
           usbConnected: true,
           fabricDevicesSeen: count,
           fabricConnected: true,
+          hasSavedCable: transportHasSavedSerial(),
           roster: rosterRef.current.visiblePeers(true),
           errorMessage: '',
         };
@@ -247,20 +277,12 @@ export function useRocketBox() {
         patchError(blocked);
         return;
       }
+      // Keep the user-gesture path: always open the picker on Connect USB.
+      // Silent reconnectKnown is only for the auto-recover effect (no gesture).
       patch({ errorMessage: '' });
       sessionStorage.removeItem(MANUAL_DISCONNECT_KEY);
       clearTransferState();
-      let desc: string;
-      if (transportHasSavedSerial()) {
-        try {
-          desc = await sessionRef.current.reconnectKnown();
-        } catch {
-          clearTransportSavedPairing();
-          desc = await sessionRef.current.connect();
-        }
-      } else {
-        desc = await sessionRef.current.connect();
-      }
+      const desc = await sessionRef.current.connect();
       await applyUsbConnected(desc);
     } catch (err) {
       const message = formatUsbConnectError(err);
@@ -353,6 +375,7 @@ export function useRocketBox() {
         usbConnected,
         fabricDevicesSeen: count,
         fabricConnected: usbConnected,
+        hasSavedCable: transportHasSavedSerial(),
         roster: rosterRef.current.visiblePeers(usbConnected),
         selectedPeer: pickSelectedPeer(rosterRef.current, portIndex, prev.selectedPeer),
         ...(identityPatch ? { identity: identityPatch } : {}),
@@ -415,6 +438,7 @@ export function useRocketBox() {
         usbConnected: false,
         fabricConnected: false,
         fabricDevicesSeen: 0,
+        hasSavedCable: false,
         roster: [],
       });
       setUsbDescription('');
@@ -472,6 +496,13 @@ export function useRocketBox() {
     await ensureOrchestrator().resetConnection();
   }, [clearTransferState, ensureOrchestrator]);
 
+  const requestAnnounce = useCallback(() => {
+    if (!state?.usbConnected && !state?.fabricConnected) {
+      return;
+    }
+    ensureOrchestrator().sendAnnounceNow();
+  }, [ensureOrchestrator, state?.fabricConnected, state?.usbConnected]);
+
   return {
     state,
     settingsOpen,
@@ -488,6 +519,7 @@ export function useRocketBox() {
     declineOffer,
     recoverUsb,
     resetTransfer,
+    requestAnnounce,
     patch,
   };
 }

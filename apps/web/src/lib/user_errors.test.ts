@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FabricUsbError } from './fabric_errors';
+import { FabricUsbError } from '@rocketbox/sdk';
 import { formatTransferError, formatUsbConnectError, isUsbPickerCancel } from './user_errors';
 
 describe('isUsbPickerCancel', () => {
@@ -24,6 +24,14 @@ describe('formatUsbConnectError', () => {
     expect(formatUsbConnectError(new Error('SecurityError Access denied'))).toMatch(/access denied/i);
     expect(formatUsbConnectError(new Error('device disconnected'))).toMatch(/disconnected/i);
     expect(formatUsbConnectError(new Error('No USB device found'))).toMatch(/Cable not found/);
+    expect(formatUsbConnectError(new Error('timeout'))).toMatch(/ATTACH|EP3|firmware/i);
+    expect(
+      formatUsbConnectError(
+        new FabricUsbError(
+          'USB opened, but the local port did not reply on EP3 after ATTACH — port control firmware required (not just 4 endpoints).',
+        ),
+      ),
+    ).toMatch(/did not reply on EP3/i);
   });
 });
 

@@ -1,18 +1,34 @@
-import type { FabricTransport } from './lib/fabric_transport';
-import { SdkFabricTransport } from './lib/sdk_fabric_transport';
+import {
+  clearSavedUsbPairing,
+  countFabricDevices,
+  createFabricTransport,
+  hasSavedSerial,
+  type FabricTransport,
+} from '@rocketbox/sdk';
+import { fabricPortFromUrl, fabricSimEnabled } from './sim_flags';
 
+/** PWA captures ?simulate= / ?port= and asks the SDK for a transport. */
 export function createTransportSession(): FabricTransport {
-  return new SdkFabricTransport();
+  return createFabricTransport({
+    simulate: fabricSimEnabled(),
+    port: fabricPortFromUrl(),
+  });
 }
 
 export async function countTransportDevices(): Promise<number> {
-  return SdkFabricTransport.countFabricDevices();
+  if (fabricSimEnabled()) {
+    return 4;
+  }
+  return countFabricDevices();
 }
 
 export function transportHasSavedSerial(): boolean {
-  return SdkFabricTransport.hasSavedSerial();
+  if (fabricSimEnabled()) {
+    return false;
+  }
+  return hasSavedSerial();
 }
 
 export function clearTransportSavedPairing(): void {
-  SdkFabricTransport.clearSavedUsbPairing();
+  clearSavedUsbPairing();
 }

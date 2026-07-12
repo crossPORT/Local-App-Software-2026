@@ -30,7 +30,7 @@ describe('handshakeTimingFromIdentity', () => {
   it('uses defaults when identity tuning keys are zero', () => {
     const timing = handshakeTimingFromIdentity(identity());
     expect(timing.accept_ready_gap_ms).toBe(HANDSHAKE_DEFAULTS.accept_ready_gap_ms);
-    expect(timing.accept_reply_delay_ms).toBe(HANDSHAKE_DEFAULTS.accept_ready_gap_ms * 2);
+    expect(timing.accept_reply_delay_ms).toBe(HANDSHAKE_DEFAULTS.accept_reply_delay_ms);
     expect(timing.accept_timeout_sec).toBe(HANDSHAKE_DEFAULTS.accept_timeout_sec);
     expect(timing.accept_dialog_sec).toBe(
       HANDSHAKE_DEFAULTS.accept_timeout_sec - HANDSHAKE_DEFAULTS.accept_receiver_margin_sec,

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <deque>
 #include <wx/wx.h>
+#include <wx/timer.h>
 
 struct ActivityBucket {
     int session = 0;
@@ -25,7 +26,6 @@ public:
     void ClearTransferTrack();
     void SetScaleFloor(double mbps);
     void UpdateHead(double live_mbps, const RateStats& stats);
-    /** Height after UpdateHead — use for parent sizer min size. */
     int PreferredHeight() const;
 
 private:
@@ -50,11 +50,13 @@ private:
     wxSizerItem* chart_item_ = nullptr;
 };
 
+/** Dual-bar activity strip — PWA ActivityMonitor parity (timer + scroll). */
 class SpeedMonitorChart : public wxPanel {
 public:
     static constexpr int kMonitorHeight = 64;
 
     explicit SpeedMonitorChart(wxWindow* parent);
+    ~SpeedMonitorChart() override;
 
     void SetRecording(bool recording);
     void EnsureChart();
@@ -66,9 +68,11 @@ public:
 
 private:
     void OnPaint(wxPaintEvent&);
+    void OnTimer(wxTimerEvent&);
     void EnsureBucket(const std::chrono::steady_clock::time_point& now);
+    void Prime(const std::chrono::steady_clock::time_point& now);
+    double ScrollPhase(const std::chrono::steady_clock::time_point& now);
     double TransferScaleMax() const;
-    void Redraw();
 
     struct TimedBucket {
         ActivityBucket data;
@@ -76,14 +80,17 @@ private:
     };
 
     std::deque<TimedBucket> buckets_;
+    wxTimer timer_;
     bool recording_ = false;
     double last_value_ = -1.0;
     std::chrono::steady_clock::time_point last_push_{};
     std::chrono::steady_clock::time_point bucket_start_{};
     double scale_floor_ = 0.0;
 
-    static constexpr size_t kMaxBuckets = 28;
-    static constexpr int kBucketMs = 400;
+    // Match PWA ActivityHistory (~18s window).
+    static constexpr size_t kMaxBuckets = 72;
+    static constexpr int kBucketMs = 250;
+    static constexpr int kTimerMs = 33;
     static constexpr int kMinIntervalMs = 100;
     static constexpr int kMaxSessionPerBucket = 5;
 };

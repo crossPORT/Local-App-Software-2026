@@ -25,6 +25,7 @@ export function App() {
     acceptOffer,
     declineOffer,
     resetTransfer,
+    requestAnnounce,
     patch,
   } = useRocketBox();
 
@@ -39,6 +40,7 @@ export function App() {
         ledPulse={ledPulse}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenEventLog={() => setEventLogOpen(true)}
+        onAnnounce={requestAnnounce}
       />
       <div className="app-main">
         <ConnectionPanel state={state} usbDescription={usbDescription}>
@@ -47,9 +49,11 @@ export function App() {
               <button type="button" className="primary connect-btn" onClick={() => void recoverUsb()}>
                 Connect USB
               </button>
-              <button type="button" className="disconnect-btn" onClick={() => void forgetUsb()}>
-                Clear saved cable
-              </button>
+              {state.hasSavedCable ? (
+                <button type="button" className="disconnect-btn" onClick={() => void forgetUsb()}>
+                  Clear saved cable
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="connect-actions connected-actions">

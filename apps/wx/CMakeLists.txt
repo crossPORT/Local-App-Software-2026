@@ -10,6 +10,7 @@ add_executable(rocketbox
     roster_panel.cpp
     transfer_progress_panel.cpp
     speed_monitor.cpp
+    speed_monitor_chart.cpp
     incoming_dialog.cpp
     settings_dialog.cpp
     event_log_dialog.cpp

@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from './fabric_port';
+import { displayPortFromLeg } from '@rocketbox/sdk';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -112,11 +112,11 @@ export function formatSpeedFromBytes(bytes: number, seconds: number): string {
 export function receiveStatusLabel(status: string): string {
   switch (status) {
     case 'open':
-      return 'Saves files automatically';
+      return 'Accepts transfers automatically';
     case 'busy':
       return 'Not accepting files';
     default:
-      return 'Asks before saving';
+      return 'Asks before accepting';
   }
 }
 

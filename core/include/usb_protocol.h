@@ -12,6 +12,10 @@ constexpr int kInterface = 0;
 
 constexpr unsigned char kEndpointDataOut = 0x02;
 constexpr unsigned char kEndpointDataIn = 0x81;
+constexpr unsigned char kEndpointCtrlOut = 0x04;
+
+constexpr std::size_t kSwitchPacketSize = 16;
+constexpr unsigned kSwitchTimeoutMs = 2000;
 
 // 32-byte file header — magic "ROCKETBX"
 constexpr char kHeaderMagic[8] = {'R', 'O', 'C', 'K', 'E', 'T', 'B', 'X'};

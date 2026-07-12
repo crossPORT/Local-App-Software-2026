@@ -7,9 +7,16 @@ interface HeaderProps {
   ledPulse: boolean;
   onOpenSettings: () => void;
   onOpenEventLog?: () => void;
+  onAnnounce?: () => void;
 }
 
-export function Header({ state, ledPulse, onOpenSettings, onOpenEventLog }: HeaderProps) {
+export function Header({
+  state,
+  ledPulse,
+  onOpenSettings,
+  onOpenEventLog,
+  onAnnounce,
+}: HeaderProps) {
   const led = deriveLinkLed(state.usbConnected, state.fabricConnected, state.busy);
   const status = statusLine(
     state.usbConnected,
@@ -30,7 +37,7 @@ export function Header({ state, ledPulse, onOpenSettings, onOpenEventLog }: Head
           <div className="brand-row">
             <span className="brand">RocketBox App</span>
             <span className="node-name">{state.identity.display_name}</span>
-            <ConnectionLed state={led} pulseOn={ledPulse} />
+            <ConnectionLed state={led} pulseOn={ledPulse} onClick={onAnnounce} />
           </div>
           <div className="status-line" style={{ color: status.colour }}>
             {status.text}
