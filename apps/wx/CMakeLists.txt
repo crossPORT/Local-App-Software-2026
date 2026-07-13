@@ -83,8 +83,9 @@ elseif(WIN32)
     message(STATUS "Windows: bundle ${_rb_dll_count} runtime DLL(s) from ${_rb_vcpkg_bin}")
 
     install(TARGETS rocketbox RUNTIME DESTINATION bin COMPONENT RocketBoxApp)
-    install(FILES ${_rb_runtime_dlls} DESTINATION bin)
-    install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico" DESTINATION bin)
+    install(FILES ${_rb_runtime_dlls} DESTINATION bin COMPONENT RocketBoxApp)
+    install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico" DESTINATION bin
+            COMPONENT RocketBoxApp)
 
     # Post-install sanity check only — no file(GET_RUNTIME_DEPENDENCIES).
     install(CODE [[
@@ -108,16 +109,18 @@ elseif(WIN32)
         file(GLOB _all "${_bin}/*.dll")
         list(LENGTH _all _n)
         message(STATUS "Windows install verified: RocketBox.exe + ${_n} bundled DLL(s) in ${_bin}")
-    ]])
+    ]] COMPONENT RocketBoxApp)
 
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-rocketbox-usb.rules
         ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
         DESTINATION share/rocketbox
+        COMPONENT RocketBoxApp
     )
 
     install(DIRECTORY ${CMAKE_SOURCE_DIR}/demo-config/
         DESTINATION share/rocketbox/demo-config
+        COMPONENT RocketBoxApp
         FILES_MATCHING
             PATTERN "*.conf"
             PATTERN "README.txt"
