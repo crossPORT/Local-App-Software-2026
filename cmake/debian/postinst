@@ -10,3 +10,6 @@ for RULE in 99-rocketbox-usb.rules 99-sls-fabric-usb.rules; do
 done
 udevadm control --reload-rules 2>/dev/null || true
 udevadm trigger 2>/dev/null || true
+# Refresh desktop/icon caches when present (tray/app menu + Icon=rocketbox).
+update-desktop-database /usr/share/applications 2>/dev/null || true
+gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true

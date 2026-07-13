@@ -61,11 +61,21 @@ target_compile_features(rocketbox-tunnel-tray PRIVATE cxx_std_17)
 
 install(TARGETS rocketbox-tunnel-tray RUNTIME DESTINATION bin COMPONENT RocketBoxTunnelTray)
 if(UNIX AND NOT APPLE)
+  # Absolute /etc so DEB does not land under /usr/etc (prefix is /usr).
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray.desktop
-          DESTINATION etc/xdg/autostart
+          DESTINATION /etc/xdg/autostart
           COMPONENT RocketBoxTunnelTray)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray.desktop
           DESTINATION share/applications
+          COMPONENT RocketBoxTunnelTray)
+  # Tray-only installs must ship the themed icon (App package is optional).
+  install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+          DESTINATION share/icons/hicolor/256x256/apps
+          RENAME rocketbox.png
+          COMPONENT RocketBoxTunnelTray)
+  install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+          DESTINATION share/pixmaps
+          RENAME rocketbox.png
           COMPONENT RocketBoxTunnelTray)
 endif()
 
