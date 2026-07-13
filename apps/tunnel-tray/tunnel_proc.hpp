@@ -60,6 +60,9 @@ bool stats_ready_new_pid(int prefer_port, const std::vector<long>& before, int* 
 /** Read /run/rocketbox/tunnel-<port>.stats written by rocketbox-tunnel. */
 TunnelRates read_tunnel_rates(int port);
 
+/** True if stats name a still-living tunnel process for this port. */
+bool live_tunnel_holds_port(int display_port);
+
 std::string format_rate(uint64_t bps);
 
 }  // namespace tunnel_tray

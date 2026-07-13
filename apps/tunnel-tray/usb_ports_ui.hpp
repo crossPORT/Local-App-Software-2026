@@ -29,4 +29,7 @@ int selected_display_port(const wxChoice* choice, const std::vector<int>& ports)
 bool display_port_available(int display_port);
 int sole_available_display_port();
 
+/** Present cables (may be busy). Empty = none plugged in. */
+int count_present_usb_ports();
+
 }  // namespace tunnel_tray

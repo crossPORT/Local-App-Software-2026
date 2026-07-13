@@ -1,6 +1,7 @@
 #include "tray_panel.hpp"
 
 #include "expose_list_ui.hpp"
+#include "tray_enable_msg.hpp"
 #include "tunnel_log_ui.hpp"
 #include "usb_ports_ui.hpp"
 
@@ -18,7 +19,8 @@ namespace {
 
 wxString status_label(bool on, int port) {
   if (!on) return wxT("Status: Off");
-  return wxString::Format(wxT("Status: Connected · Port %d"), port);
+  if (port < 1 || port > 4) return wxT("Status: Starting...");
+  return wxString::Format(wxT("Status: Connected - Port %d"), port);
 }
 
 }  // namespace
@@ -166,9 +168,8 @@ void TrayPanel::on_enable(wxCommandEvent& ev) {
     if (ctrls_.port <= 0) ctrls_.port = sole_available_display_port();
     if (ctrls_.port <= 0 || !display_port_available(ctrls_.port)) {
       enable_->SetValue(false);
-      wxMessageBox(wxT("Plug in a RocketBox USB cable (and close RocketBox App on it), "
-                       "or switch to Simulation."),
-                   wxT("RocketBox Tunnel"), wxOK | wxICON_ERROR);
+      wxMessageBox(usb_enable_blocked_message(ctrls_.port), wxT("RocketBox Tunnel"),
+                   wxOK | wxICON_ERROR);
       return;
     }
   }

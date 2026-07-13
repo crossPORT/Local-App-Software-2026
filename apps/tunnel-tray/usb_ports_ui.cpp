@@ -13,10 +13,10 @@ std::vector<UsbPortChoice> usb_port_choices() {
     c.display_port = p.display_port;
     c.present = true;
     c.available = p.available;
-    std::string lab = "Port " + std::to_string(p.display_port) + " · 10.64.0." +
+    std::string lab = "Port " + std::to_string(p.display_port) + " - 10.64.0." +
                       std::to_string(p.display_port);
     if (!p.serial.empty()) {
-      lab += " · " + (p.serial.size() > 8 ? p.serial.substr(p.serial.size() - 8) : p.serial);
+      lab += " - " + (p.serial.size() > 8 ? p.serial.substr(p.serial.size() - 8) : p.serial);
     }
     lab += p.available ? " (USB)" : " (in use)";
     c.label = std::move(lab);
@@ -32,7 +32,7 @@ std::vector<UsbPortChoice> sim_port_choices() {
     c.display_port = d;
     c.present = true;
     c.available = true;
-    c.label = "Port " + std::to_string(d) + " · 10.64.0." + std::to_string(d) + " (sim)";
+    c.label = "Port " + std::to_string(d) + " - 10.64.0." + std::to_string(d) + " (sim)";
     out.push_back(std::move(c));
   }
   return out;
@@ -97,6 +97,14 @@ int sole_available_display_port() {
     sole = p.display_port;
   }
   return n == 1 ? sole : 0;
+}
+
+int count_present_usb_ports() {
+  int n = 0;
+  for (const auto& p : rocketbox::list_present_ports()) {
+    if (p.display_port >= 1 && p.display_port <= 4) ++n;
+  }
+  return n;
 }
 
 }  // namespace tunnel_tray

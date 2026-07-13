@@ -125,13 +125,30 @@ void UsbPlane::sync_systems(std::function<void(const std::vector<SystemInfo>&)> 
 
 void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
     const int dest = peer_port_from_system_id(peer_system_id);
+    // Listen thread holds usb_mutex_ during receive polls; pause so switch can run.
+    const bool listening = listen_thread_.joinable();
+    if (listening) {
+        stop_listen();
+    }
     auto r = switch_port_if_needed(dest);
+    if (listening && connected_) {
+        start_listen();
+    }
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "ensure_circuit failed" : r.error_message);
     }
 }
 
-void UsbPlane::clear_circuit() { (void)switch_port(0); }
+void UsbPlane::clear_circuit() {
+    const bool listening = listen_thread_.joinable();
+    if (listening) {
+        stop_listen();
+    }
+    (void)switch_port(0);
+    if (listening && connected_) {
+        start_listen();
+    }
+}
 
 int UsbPlane::switch_dest() const {
     return controller_ ? controller_->last_switch_dest() : 0;

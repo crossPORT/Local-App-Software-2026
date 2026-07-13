@@ -71,6 +71,8 @@ void UsbPlane::listen_loop() {
         auto r = controller_->receive_on_port(port_index(), path, nullptr, kListenHeaderTimeoutMs,
                                               usb_protocol::kFrameKindPayload);
         if (listen_stop_ || !r.ok) {
+            // Yield so switch/send can take usb_mutex_ (avoid starve → "USB port busy").
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
         std::ifstream in(path, std::ios::binary);

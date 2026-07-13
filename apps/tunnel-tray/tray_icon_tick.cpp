@@ -37,8 +37,26 @@ void TunnelTrayIcon::on_tick(wxTimerEvent&) {
     dark_theme_ = dark;
     reload_icons();
   }
+  const bool up = proc_.running();
+  if (up && (port_ < 1 || port_ > 4)) {
+    for (int p = 1; p <= 4; ++p) {
+      const auto rates = tunnel_tray::read_tunnel_rates(p);
+      if (rates.ok && rates.display_port > 0) {
+        port_ = rates.display_port;
+        break;
+      }
+      if (rates.ok) {
+        port_ = p;
+        break;
+      }
+    }
+  }
+  if (up != last_up_) {
+    if (!up) persist_settings(false);
+    if (panel_ && panel_->is_shown()) panel_->sync_from_host(controls_now(), up);
+  }
   traffic_ = false;
-  if (proc_.running()) {
+  if (up) {
     const auto rates = tunnel_tray::read_tunnel_rates(port_);
     if (rates.ok && rates.up_bps + rates.down_bps >= kPulseThresholdBps) traffic_ = true;
   }

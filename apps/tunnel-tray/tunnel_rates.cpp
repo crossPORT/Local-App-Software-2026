@@ -2,10 +2,21 @@
 #include "platform/stats_paths.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <fstream>
 #include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <csignal>
+#include <unistd.h>
+#endif
 
 namespace tunnel_tray {
 
@@ -70,6 +81,23 @@ std::string format_rate(uint64_t bps) {
     return buf;
   }
   return std::to_string(bps) + " B/s";
+}
+
+bool live_tunnel_holds_port(int display_port) {
+  if (display_port < 1 || display_port > 4) return false;
+  const auto r = read_tunnel_rates(display_port);
+  if (!r.ok || r.pid <= 0) return false;
+#if defined(_WIN32)
+  HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(r.pid));
+  if (!h) return false;
+  DWORD code = 0;
+  const bool alive = GetExitCodeProcess(h, &code) && code == STILL_ACTIVE;
+  CloseHandle(h);
+  return alive;
+#else
+  if (::kill(static_cast<pid_t>(r.pid), 0) == 0) return true;
+  return errno == EPERM;
+#endif
 }
 
 }  // namespace tunnel_tray
