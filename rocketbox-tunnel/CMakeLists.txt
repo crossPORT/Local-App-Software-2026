@@ -31,6 +31,7 @@ add_executable(rocketbox-tunnel
   rocketbox_ping.cpp
   tunnel_stats.cpp
   stats_path.cpp
+  port_lock.cpp
   tunnel_log.cpp
 )
 target_include_directories(rocketbox-tunnel PRIVATE
@@ -43,9 +44,15 @@ if(WIN32)
 endif()
 target_compile_features(rocketbox-tunnel PRIVATE cxx_std_17)
 
+set(_helper_server helper/server_posix.cpp)
+if(WIN32)
+  set(_helper_server helper/server_win.cpp)
+endif()
 add_executable(rocketbox-tunnel-helper
   helper/main.cpp
+  helper/commands.cpp
   helper/protocol.cpp
+  ${_helper_server}
 )
 target_include_directories(rocketbox-tunnel-helper PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(rocketbox-tunnel-helper PRIVATE cxx_std_17)

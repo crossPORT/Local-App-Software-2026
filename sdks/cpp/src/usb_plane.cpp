@@ -47,9 +47,18 @@ void UsbPlane::connect() {
     (void)controller_->rocketbox_device_serial();
     (void)controller_->resolved_port_index();
     connected_ = true;
+    bool want_listen = false;
+    {
+        std::lock_guard<std::mutex> lock(listen_mu_);
+        want_listen = static_cast<bool>(on_msg_);
+    }
+    if (want_listen) {
+        start_listen();
+    }
 }
 
 void UsbPlane::disconnect() {
+    stop_listen();
     if (controller_) {
         try {
             controller_->switch_port(0);

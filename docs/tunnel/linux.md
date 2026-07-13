@@ -11,7 +11,8 @@ Use the RocketBox Linux installer (`.deb` / AppImage) and enable the **Tunnel**
 component. **Tray** is selected by default with Tunnel; uncheck Tray for
 server-only (CLI + helper).
 
-Tray registers for session autostart and restores the last Enable state.
+Tray autostarts at login with `--background` (icon only). App menu launch opens
+the control panel. Restores last Enable state.
 
 Docs install to `/usr/share/doc/rocketbox/tunnel/linux.md` (deb).
 
@@ -22,13 +23,19 @@ lists plugged cables only; with one cable there is nothing to pick.
 
 ## Tray
 
-1. Open the tray icon → Enable tunnel.
-2. USB: Cable is detected from serial (picker only if multiple cables).
-3. Optionally check services under Expose → Apply (restarts if running).
-4. Status shows `Connected · Port N`. Hover the icon for up/down rates.
+- **Close** hides the panel; the tray icon stays.
+- **Quit tray** (panel or right-click menu) exits the tray app.
+- Right-click: Open panel, Enable/Disable, Open log, Quit tray.
+- Left-click / second launch: show or raise the panel (single instance).
+
+1. Enable tunnel from the panel or tray menu.
+2. USB: Cable from serial (picker only if multiple cables).
+3. Optionally check Expose → Apply (restarts if running).
+4. Status shows `Connected · Port N`. Hover for up/down rates.
 
 Config: `~/.config/rocketbox/tunnel-tray.conf`  
 Stats: `/run/rocketbox/tunnel-<N>.stats`  
+Lock: `/run/rocketbox/tunnel-<N>.lock` (one bridge per Port)  
 Log: `/tmp/rocketbox/tunnel.log` (tray **Open log**, or `ROCKETBOX_TUNNEL_LOG`)
 
 ## CLI / server
@@ -48,11 +55,13 @@ sudo rocketbox-tunnel --transport sim --port 4
 | `--no-netns` | Keep TUN in the host netns |
 | `--transport usb` | USB (default) |
 
-Privilege: root/`CAP_NET_ADMIN`, `pkexec` from the tray, or `rocketbox-tunnel-helper`
-listening on `/run/rocketbox/helper.sock`.
+Only one `rocketbox-tunnel` may bridge a given Port (lock file). Privilege:
+root/`CAP_NET_ADMIN`, `pkexec` from the tray, or `rocketbox-tunnel-helper` on
+`/run/rocketbox/helper.sock`.
 
 ## Troubleshooting
 
+- **already running** — second CLI on same Port; stop the first or use another Port.
 - **in use / busy** — close RocketBox App on that cable.
 - **auth cancelled** — declined pkexec; tunnel stays Off.
 - **tray missing** — set `DBUS_SESSION_BUS_ADDRESS` or use `apps/tunnel-tray/run-tray.sh`.

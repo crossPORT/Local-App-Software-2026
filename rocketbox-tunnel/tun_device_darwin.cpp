@@ -1,13 +1,16 @@
 #include "tun_device.hpp"
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/kern_control.h>
 #include <sys/socket.h>
@@ -95,9 +98,33 @@ void TunDevice::close() {
 void TunDevice::interrupt() { close(); }
 
 std::vector<uint8_t> TunDevice::read_packet() {
+  if (fd_ < 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    return {};
+  }
+  pollfd pfd{};
+  pfd.fd = fd_;
+  pfd.events = POLLIN;
+  const int pr = ::poll(&pfd, 1, 250);
+  if (pr < 0) {
+    if (errno != EINTR) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return {};
+  }
+  if (pr == 0) return {};
+  if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    return {};
+  }
   std::vector<uint8_t> buf(65535);
   const ssize_t n = ::read(fd_, buf.data(), buf.size());
-  if (n <= 4) return {};
+  if (n <= 4) {
+    if (n < 0 && errno != EINTR && errno != EAGAIN) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return {};
+  }
   // Strip 4-byte AF header (utun).
   return std::vector<uint8_t>(buf.begin() + 4, buf.begin() + n);
 }

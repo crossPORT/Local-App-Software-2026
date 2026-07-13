@@ -10,8 +10,13 @@ Tunnel component is installed).
 Run `RocketBox-<tag>-setup.exe`. Enable **Tunnel** (includes **Tray** by default).
 Uncheck Tray for server-only.
 
-Tray restores last Enable state from config. Login autostart is via a Startup
-shortcut when you enable it (Run-key registration lands in a follow-up).
+Installer adds:
+- Start Menu → **RocketBox App** and **RocketBox Tunnel Tray** (branded icons)
+- Desktop → **RocketBox App**
+- Startup folder shortcut for the tray (login) when Tray is installed
+
+Tray restores last Enable state from config. Prefer launching Startup with
+`--background` so login only shows the tray icon.
 
 ## Port identity
 
@@ -20,12 +25,24 @@ Port 1–4 is **detected** from the cable USB serial. Prefer the tray Cable list
 
 ## Tray
 
-Notification-area icon → Enable tunnel (UAC once unless helper is running).
+- **Close** hides the panel; the tray icon stays.
+- **Quit tray** exits the tray app.
+- Right-click: Open panel, Enable/Disable, Open log, Quit tray.
+- Second Start Menu launch raises the existing panel (single instance).
+
+1. First Enable prompts **UAC once** to start `rocketbox-tunnel-helper` (elevated).
+2. Later Enable/Disable talk to that helper over a named pipe — no UAC each time.
+3. Keep the helper running after the UAC prompt.
+
 Status: `Connected · Port N` from the cable. Cable picker only if multiple USBs.
 
 Config: `%USERPROFILE%\.config\rocketbox\tunnel-tray.conf`  
 Stats: `%PROGRAMDATA%\RocketBox\tunnel-<N>.stats`  
+Lock: `%PROGRAMDATA%\RocketBox\tunnel-<N>.lock`  
 Log: `%TEMP%\rocketbox\tunnel.log`
+
+If Enable fails with “UAC cancelled”, approve the helper elevation prompt. If the helper
+is missing, reinstall with the **Tunnel** component checked.
 
 ## CLI
 
@@ -35,11 +52,16 @@ rocketbox-tunnel --port 3
 ```
 
 USB defaults to auto Port from serial. `--port` only disambiguates multiple cables.
-Run elevated (UAC). `--expose` is not enabled on Windows yet.
+Run elevated (UAC). Only one tunnel per Port (lock file). `--expose` is not enabled
+on Windows yet.
 
 ## Troubleshooting
 
 - **SmartScreen** — unsigned v1; Run anyway if you trust the build.
 - **Wintun missing** — reinstall with the Tunnel component checked.
 - **USB busy** — close RocketBox App on that cable.
-- **CreateAdapter failed** — run elevated; another Wintun adapter name may conflict.
+- **Port N tunnel already running** — stop the other tunnel on that Port.
+- **CreateAdapter failed / need Admin** — tray must elevate the helper once; or run
+  `rocketbox-tunnel-helper.exe` as Administrator, then Enable in the tray.
+- **Helper pipe not available** — start `rocketbox-tunnel-helper` elevated; tray will
+  also offer UAC on Enable.

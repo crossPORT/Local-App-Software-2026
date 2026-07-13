@@ -3,6 +3,7 @@
 #include "expose_spec.hpp"
 #include "open_transport.hpp"
 #include "peer_map.hpp"
+#include "port_lock.hpp"
 #include "rocketbox_ping.hpp"
 #include "tun_device.hpp"
 #include "tunnel_log.hpp"
@@ -133,6 +134,12 @@ int main(int argc, char** argv) {
     if (opt.iface.empty()) opt.iface = "rb" + std::to_string(port);
     rocketbox_tunnel_log("Port " + std::to_string(port) + " address " + local_ip + " system " +
                          transport->system_id() + " serial " + transport->serial());
+
+    TunnelPortLock port_lock;
+    std::string lock_err;
+    if (!port_lock.try_acquire(port, lock_err)) {
+      throw std::runtime_error(lock_err);
+    }
 
     if (opt.ping_peer != 0) {
       return run_rocketbox_ping(*transport, port, opt.ping_peer);

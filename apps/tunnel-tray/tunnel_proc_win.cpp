@@ -1,19 +1,17 @@
 #include "tunnel_proc.hpp"
+#include "helper_launch_win.hpp"
 #include "platform/stats_paths.hpp"
 #include "tunnel_args.hpp"
 
 #include <chrono>
 #include <cstdlib>
-#include <sstream>
 #include <string>
 #include <thread>
-#include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <shellapi.h>
 
 #include "helper/protocol.hpp"
 
@@ -32,20 +30,11 @@ std::string dirname_of(const std::string& path) {
   return path.substr(0, pos);
 }
 
-std::wstring utf8_to_wide(const std::string& s) {
-  if (s.empty()) return L"";
-  const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
-  std::wstring out(static_cast<size_t>(n > 0 ? n - 1 : 0), L'\0');
-  if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, out.data(), n);
-  return out;
-}
-
-std::string build_params(const TunnelConfig& cfg, const std::string& bin) {
-  // Skip argv0 — ShellExecute takes file + parameters separately.
-  const std::string tail = build_tunnel_arg_tail(cfg, bin);
-  const auto sp = tail.find(' ');
-  if (sp == std::string::npos) return {};
-  return tail.substr(sp + 1);
+std::string self_dir() {
+  char self[MAX_PATH];
+  const DWORD n = GetModuleFileNameA(nullptr, self, MAX_PATH);
+  if (n == 0 || n >= MAX_PATH) return {};
+  return dirname_of(self);
 }
 
 }  // namespace
@@ -54,10 +43,8 @@ std::string default_tunnel_bin() {
   if (const char* env = std::getenv("ROCKETBOX_TUNNEL_PATH")) {
     if (file_exists(env)) return env;
   }
-  char self[MAX_PATH];
-  const DWORD n = GetModuleFileNameA(nullptr, self, MAX_PATH);
-  if (n > 0 && n < MAX_PATH) {
-    const std::string dir = dirname_of(self);
+  const std::string dir = self_dir();
+  if (!dir.empty()) {
     const std::string cand = dir + "\\rocketbox-tunnel.exe";
     if (file_exists(cand)) return cand;
   }
@@ -85,18 +72,16 @@ bool TunnelProcess::child_exited(int* status_out) const {
   return false;
 }
 
-bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) {
-  if (cfg.port >= 1 && cfg.port <= 4 && file_exists(tunnel_stats_path(cfg.port))) return true;
-  if (cfg.port == 0) {
-    for (int p = 1; p <= 4; ++p) {
-      if (file_exists(tunnel_stats_path(p))) return true;
-    }
-  }
-  return false;
+bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) const {
+  int ready_port = 0;
+  return stats_ready_new_pid(cfg.port, pids_at_start_, &ready_port);
 }
 
 bool TunnelProcess::running() const {
-  if (helper_managed_) return file_exists(tunnel_stats_path(port_));
+  if (helper_managed_) {
+    std::string st, herr;
+    return tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0;
+  }
   if (pid_ <= 0) return false;
   return !child_exited(nullptr);
 }
@@ -109,51 +94,39 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
   TunnelConfig run = cfg;
   run.use_netns = false;
-  run.expose.clear();  // Windows --expose not enabled yet
+  run.expose.clear();
   const std::string tail = build_tunnel_arg_tail(run, bin);
 
+  if (!ensure_helper_elevated(error)) return false;
+
+  pids_at_start_ = snapshot_stats_pids();
+  clear_tunnel_stats(cfg.port);
+
   std::string reply, herr;
-  if (tunnel_helper::send_command("START " + tail, reply, herr) && reply.rfind("OK", 0) == 0) {
-    helper_managed_ = true;
-    port_ = cfg.port;
-    for (int i = 0; i < 600; ++i) {
-      if (tunnel_ready(cfg)) return true;
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    (void)tunnel_helper::send_command("STOP", reply, herr);
-    helper_managed_ = false;
-    error = "helper started tunnel but it did not become ready";
+  if (!tunnel_helper::send_command("START " + tail, reply, herr) || reply.rfind("OK", 0) != 0) {
+    error = herr.empty() ? (reply.empty() ? "helper START failed" : reply) : herr;
+    while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
     return false;
   }
-
-  const std::wstring wbin = utf8_to_wide(bin);
-  const std::wstring wparams = utf8_to_wide(build_params(run, bin));
-  SHELLEXECUTEINFOW sei{};
-  sei.cbSize = sizeof(sei);
-  sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-  sei.lpVerb = L"runas";
-  sei.lpFile = wbin.c_str();
-  sei.lpParameters = wparams.empty() ? nullptr : wparams.c_str();
-  sei.nShow = SW_HIDE;
-  if (!ShellExecuteExW(&sei) || !sei.hProcess) {
-    error = "authorization cancelled or failed to start tunnel";
-    return false;
-  }
-  pid_ = static_cast<long>(GetProcessId(sei.hProcess));
-  CloseHandle(sei.hProcess);
+  helper_managed_ = true;
   port_ = cfg.port;
-  helper_managed_ = false;
-
   for (int i = 0; i < 600; ++i) {
-    if (child_exited(nullptr)) {
-      error = "authorization cancelled or tunnel failed to start";
+    int ready = 0;
+    if (stats_ready_new_pid(cfg.port, pids_at_start_, &ready)) {
+      port_ = ready;
+      return true;
+    }
+    std::string st;
+    if (tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK stopped", 0) == 0) {
+      helper_managed_ = false;
+      error = "tunnel exited (need Admin/Wintun; check log)";
       return false;
     }
-    if (tunnel_ready(cfg)) return true;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
-  error = "tunnel failed to become ready";
-  stop();
+  (void)tunnel_helper::send_command("STOP", reply, herr);
+  helper_managed_ = false;
+  error = "helper started tunnel but it did not become ready";
   return false;
 }
 

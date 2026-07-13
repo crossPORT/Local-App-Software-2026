@@ -1,14 +1,17 @@
 #include "tun_device.hpp"
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #include <fcntl.h>
 #include <linux/if_tun.h>
 #include <net/if.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -108,9 +111,31 @@ void TunDevice::interrupt() {
 }
 
 std::vector<uint8_t> TunDevice::read_packet() {
+  if (fd_ < 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    return {};
+  }
+  pollfd pfd{};
+  pfd.fd = fd_;
+  pfd.events = POLLIN;
+  const int pr = ::poll(&pfd, 1, 250);
+  if (pr < 0) {
+    if (errno != EINTR) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return {};
+  }
+  if (pr == 0) return {};
+  if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    return {};
+  }
   std::vector<uint8_t> buf(65535);
   const ssize_t n = ::read(fd_, buf.data(), buf.size());
   if (n <= 0) {
+    if (n < 0 && errno != EINTR && errno != EAGAIN) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
     return {};
   }
   buf.resize(static_cast<size_t>(n));

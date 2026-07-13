@@ -268,9 +268,13 @@ jobs:
             -DROCKETBOX_RELEASE_TAG="$env:ROCKETBOX_RELEASE_TAG"
 
       - name: Build
-        run: >
-          cmake --build build --config Release --parallel
-          --target rocketbox rocketbox-tunnel rocketbox-tunnel-helper rocketbox-tunnel-tray
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($t in @("rocketbox","rocketbox-tunnel","rocketbox-tunnel-helper","rocketbox-tunnel-tray")) {
+            cmake --build build --config Release --parallel --target $t
+            if ($LASTEXITCODE -ne 0) { throw "build failed: $t" }
+          }
 
       - name: Install and bundle DLLs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"

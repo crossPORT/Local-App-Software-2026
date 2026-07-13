@@ -66,26 +66,14 @@ bool TunnelProcess::child_exited(int* status_out) const {
   return false;
 }
 
-bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) {
-  auto stats_ok = [](int p) {
-    struct stat st {};
-    return p >= 1 && p <= 4 && ::stat(tunnel_stats_path(p).c_str(), &st) == 0;
-  };
-  if (cfg.use_netns && cfg.port >= 1) {
-    struct stat st {};
-    if (::stat(("/var/run/netns/rbns" + std::to_string(cfg.port)).c_str(), &st) == 0) return true;
-  }
-  if (stats_ok(cfg.port)) return true;
-  if (cfg.port != 0) return false;
-  for (int p = 1; p <= 4; ++p)
-    if (stats_ok(p)) return true;
-  return false;
+bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) const {
+  return stats_ready_new_pid(cfg.port, pids_at_start_);
 }
 
 bool TunnelProcess::running() const {
   if (helper_managed_) {
-    struct stat st {};
-    return ::stat(tunnel_stats_path(port_).c_str(), &st) == 0;
+    std::string st, herr;
+    return tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0;
   }
   if (pid_ <= 0) return false;
   if (child_exited(nullptr)) return false;
@@ -100,6 +88,8 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   }
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
   const std::string tail = build_tunnel_arg_tail(cfg, bin);
+  pids_at_start_ = snapshot_stats_pids();
+  clear_tunnel_stats(cfg.port);
 
   std::string reply, herr;
   if (tunnel_helper::send_command("START " + tail, reply, herr) && reply.rfind("OK", 0) == 0) {
@@ -107,6 +97,12 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
     port_ = cfg.port;
     for (int i = 0; i < 600; ++i) {
       if (tunnel_ready(cfg)) return true;
+      std::string st;
+      if (tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK stopped", 0) == 0) {
+        helper_managed_ = false;
+        error = "tunnel failed to start (no USB cable or see log)";
+        return false;
+      }
       ::usleep(100000);
     }
     (void)tunnel_helper::send_command("STOP", reply, herr);
@@ -161,13 +157,13 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
 
   for (int i = 0; i < 600; ++i) {
     if (child_exited(nullptr)) {
-      error = "authorization cancelled or tunnel failed to start";
+      error = "tunnel failed to start (no USB cable, auth cancelled, or see log)";
       return false;
     }
     if (tunnel_ready(cfg)) return true;
     ::usleep(100000);
   }
-  error = "authorization cancelled or tunnel failed to start";
+  error = "tunnel failed to start (no USB cable, auth cancelled, or see log)";
   stop();
   return false;
 }

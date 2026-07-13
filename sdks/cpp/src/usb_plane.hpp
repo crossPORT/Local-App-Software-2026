@@ -4,8 +4,13 @@
 #include "rocketbox_frame.hpp"
 #include "transfer_controller.h"
 
+#include <atomic>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace rocketbox {
 namespace detail {
@@ -27,7 +32,7 @@ public:
     void reset_connection() override;
 
     void set_listen_mode(ListenMode) override {}
-    void ensure_listening() override {}
+    void ensure_listening() override;
     void sync_systems(std::function<void(const std::vector<SystemInfo>&)> handler) override;
     void ensure_circuit(const std::string& peer_system_id) override;
     void clear_circuit() override;
@@ -42,6 +47,7 @@ public:
     std::vector<uint8_t> receive_bytes() override;
     void prepare_for_payload_send() override {}
     void wait_for_idle() override;
+    void on_data_message(std::function<void(const std::vector<uint8_t>&)> cb) override;
 
     int device_count() const override;
     bool port_available() const override;
@@ -65,12 +71,19 @@ private:
                        const std::string& filename);
     std::vector<uint8_t> recv_raw_file(uint8_t expected_kind);
     static FileTransferResult from_core(const TransferResult& r);
+    void start_listen();
+    void stop_listen();
+    void listen_loop();
 
     int display_port_;
     int port_index_;
     bool connected_ = false;
     std::unique_ptr<TransferController> controller_;
     std::vector<uint8_t> pending_payload_;
+    std::mutex listen_mu_;
+    std::function<void(const std::vector<uint8_t>&)> on_msg_;
+    std::atomic<bool> listen_stop_{true};
+    std::thread listen_thread_;
 };
 
 }  // namespace detail

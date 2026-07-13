@@ -1,0 +1,2 @@
+/* Embedded app icon for Windows .exe (Start Menu / Explorer / shortcuts). */
+IDI_ICON1 ICON "rocketbox.ico"

@@ -46,7 +46,7 @@ void show_tunnel_log(wxWindow* parent) {
   auto* btns = new wxBoxSizer(wxHORIZONTAL);
   auto* refresh = new wxButton(&dlg, wxID_ANY, wxT("Refresh"));
   auto* open_ext = new wxButton(&dlg, wxID_ANY, wxT("Open externally"));
-  auto* close = new wxButton(&dlg, wxID_OK, wxT("Close"));
+  auto* close = new wxButton(&dlg, wxID_CLOSE, wxT("Close"));
   btns->Add(refresh, 0, wxRIGHT, 6);
   btns->Add(open_ext, 0);
   btns->AddStretchSpacer(1);
@@ -67,6 +67,7 @@ void show_tunnel_log(wxWindow* parent) {
     wxLaunchDefaultApplication(wpath);
 #endif
   });
+  close->Bind(wxEVT_BUTTON, [&dlg](wxCommandEvent&) { dlg.EndModal(wxID_CLOSE); });
 
   text->ShowPosition(text->GetLastPosition());
   dlg.CentreOnParent();

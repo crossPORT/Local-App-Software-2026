@@ -21,6 +21,7 @@ if (ROCKETBOX_BUILD_USB)
     list(APPEND ROCKETBOX_SDK_SOURCES
         src/usb_plane.cpp
         src/usb_plane_files.cpp
+        src/usb_plane_listen.cpp
     )
 endif()
 

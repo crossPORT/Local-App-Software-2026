@@ -7,10 +7,27 @@
 #include <fstream>
 #include <string>
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
+
+namespace {
+
+long self_pid() {
+#if defined(_WIN32)
+  return static_cast<long>(GetCurrentProcessId());
+#else
+  return static_cast<long>(::getpid());
+#endif
+}
+
+}  // namespace
 
 TunnelStatsPublisher::TunnelStatsPublisher(int port, TunnelBridge& bridge, std::string serial)
     : port_(port), serial_(std::move(serial)), bridge_(bridge) {
@@ -20,8 +37,10 @@ TunnelStatsPublisher::TunnelStatsPublisher(int port, TunnelBridge& bridge, std::
 #if !defined(_WIN32)
   ::chmod(dir.c_str(), 0755);
 #endif
+  write_file(0, 0, 0, 0);  // ready signal as soon as bridging starts
   thr_ = std::thread([this] { loop(); });
 }
+
 
 TunnelStatsPublisher::~TunnelStatsPublisher() {
   stop_ = true;
@@ -55,7 +74,8 @@ void TunnelStatsPublisher::write_file(uint64_t up_bps, uint64_t down_bps, uint64
         << "up_bytes=" << up_tot << "\n"
         << "down_bytes=" << down_tot << "\n"
         << "display_port=" << port_ << "\n"
-        << "serial=" << serial_ << "\n";
+        << "serial=" << serial_ << "\n"
+        << "pid=" << self_pid() << "\n";
   }
 #if !defined(_WIN32)
   ::chmod(tmp.c_str(), 0644);

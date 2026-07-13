@@ -21,8 +21,10 @@ On **Linux**, install the udev rule (see [Linux](#linux)) before the browser can
 
 1. Download `RocketBox-*-setup.exe` (NSIS installer from CPack).
 2. Run the installer (SmartScreen may warn — unsigned v1 build).
-3. Launch **RocketBox App** from the Start Menu (listed as RocketBox).
-4. Connect the RocketBox USB cable before transferring.
+3. Launch **RocketBox App** from the Start Menu.
+4. Optional: enable **Tunnel** / **Tray** — Start Menu **RocketBox Tunnel Tray**, plus a
+   Startup shortcut so the tray opens at login.
+5. Connect the RocketBox USB cable before transferring.
 
 If the device is not detected, bind **WinUSB** for `1772:0006` (one-time per PC).
 The installer includes `share/rocketbox/demo-config/WINDOWS-USB.txt` with steps

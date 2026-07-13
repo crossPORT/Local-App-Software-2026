@@ -16,16 +16,17 @@ struct UsbPortChoice {
   std::string label;
 };
 
-/** Present USB cables only (serial → Port). */
 std::vector<UsbPortChoice> usb_port_choices();
 std::vector<UsbPortChoice> sim_port_choices();
 
-int fill_port_choice(wxChoice* choice, int preferred_port, bool enable, bool usb);
-int fill_usb_port_choice(wxChoice* choice, int preferred_port, bool enable);
+/** Fill labels; ports_out[i] = display port for item i (0 = none). Returns selection. */
+int fill_port_choice(wxChoice* choice, int preferred_port, bool enable, bool usb,
+                     std::vector<int>* ports_out);
+int fill_usb_port_choice(wxChoice* choice, int preferred_port, bool enable,
+                         std::vector<int>* ports_out);
 
-int selected_display_port(wxChoice* choice);
+int selected_display_port(const wxChoice* choice, const std::vector<int>& ports);
 bool display_port_available(int display_port);
-/** Sole available USB display port, or 0 if none/ambiguous. */
 int sole_available_display_port();
 
 }  // namespace tunnel_tray

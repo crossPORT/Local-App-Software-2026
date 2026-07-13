@@ -25,7 +25,24 @@ std::string tunnel_stats_dir() {
 }
 
 std::string tunnel_stats_path(int display_port) {
+#if defined(_WIN32)
+  return tunnel_stats_dir() + "\\tunnel-" + std::to_string(display_port) + ".stats";
+#else
   return tunnel_stats_dir() + "/tunnel-" + std::to_string(display_port) + ".stats";
+#endif
+}
+
+void clear_tunnel_stats(int display_port) {
+  auto drop = [](int p) {
+    if (p < 1 || p > 4) return;
+    std::error_code ec;
+    std::filesystem::remove(tunnel_stats_path(p), ec);
+  };
+  if (display_port >= 1 && display_port <= 4) {
+    drop(display_port);
+    return;
+  }
+  for (int p = 1; p <= 4; ++p) drop(p);
 }
 
 }  // namespace tunnel_tray

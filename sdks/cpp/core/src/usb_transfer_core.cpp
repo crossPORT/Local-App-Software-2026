@@ -1,6 +1,7 @@
 #include "usb_transfer.h"
 #include "usb_protocol.h"
 #include "usb_device_open.h"
+#include "usb_diag.h"
 
 #include <algorithm>
 #include <atomic>
@@ -167,8 +168,8 @@ bool bulk_write_all(libusb_device_handle* handle,
         int transferred = 0;
         const std::size_t to_write =
             std::min(len - offset, usb_protocol::kChunkSize);
-        fprintf(stderr, "[USB-DIAG] bulk_write EP=0x%02x len=%zu timeout=%dms\n",
-                usb_protocol::kEndpointDataOut, to_write, timeout_ms);
+        USB_DIAG("[USB-DIAG] bulk_write EP=0x%02x len=%zu timeout=%dms\n",
+                 usb_protocol::kEndpointDataOut, to_write, timeout_ms);
         const int rc = libusb_bulk_transfer(
             handle,
             usb_protocol::kEndpointDataOut,
@@ -176,8 +177,8 @@ bool bulk_write_all(libusb_device_handle* handle,
             static_cast<int>(to_write),
             &transferred,
             timeout_ms);
-        fprintf(stderr, "[USB-DIAG] bulk_write result: rc=%d (%s) transferred=%d\n",
-                rc, libusb_strerror(static_cast<libusb_error>(rc)), transferred);
+        USB_DIAG("[USB-DIAG] bulk_write result: rc=%d (%s) transferred=%d\n",
+                 rc, libusb_strerror(static_cast<libusb_error>(rc)), transferred);
         if (rc != LIBUSB_SUCCESS) {
             if (error_out) {
                 *error_out = std::string(libusb_strerror(static_cast<libusb_error>(rc)));
@@ -206,9 +207,9 @@ bool bulk_read_all(libusb_device_handle* handle,
             &transferred,
             timeout_ms);
         if (rc != LIBUSB_SUCCESS) {
-            fprintf(stderr, "[USB-DIAG] bulk_read EP=0x%02x len=%zu timeout=%dms rc=%d (%s)\n",
-                    usb_protocol::kEndpointDataIn, to_read, timeout_ms,
-                    rc, libusb_strerror(static_cast<libusb_error>(rc)));
+            USB_DIAG("[USB-DIAG] bulk_read EP=0x%02x len=%zu timeout=%dms rc=%d (%s)\n",
+                     usb_protocol::kEndpointDataIn, to_read, timeout_ms,
+                     rc, libusb_strerror(static_cast<libusb_error>(rc)));
             return false;
         }
         offset += static_cast<std::size_t>(transferred);
@@ -691,9 +692,9 @@ TransferResult send_file_core(libusb_context* ctx,
         q.completed = false;
         q.in_flight = true;
 
-        fprintf(stderr, "[USB-DIAG] async_submit EP=0x%02x wire=%dB timeout=%ums\n",
-                usb_protocol::kEndpointDataOut, n,
-                static_cast<unsigned>(timeout_ms));
+        USB_DIAG("[USB-DIAG] async_submit EP=0x%02x wire=%dB timeout=%ums\n",
+                 usb_protocol::kEndpointDataOut, n,
+                 static_cast<unsigned>(timeout_ms));
         libusb_fill_bulk_transfer(
             q.xfr,
             handle,
@@ -704,8 +705,8 @@ TransferResult send_file_core(libusb_context* ctx,
             &q,
             static_cast<int>(timeout_ms));
         const int submit_rc = libusb_submit_transfer(q.xfr);
-        fprintf(stderr, "[USB-DIAG] async_submit rc=%d (%s)\n",
-                submit_rc, libusb_strerror(static_cast<libusb_error>(submit_rc)));
+        USB_DIAG("[USB-DIAG] async_submit rc=%d (%s)\n",
+                 submit_rc, libusb_strerror(static_cast<libusb_error>(submit_rc)));
         if (submit_rc != 0) {
             q.in_flight = false;
             error = true;
@@ -738,9 +739,9 @@ TransferResult send_file_core(libusb_context* ctx,
             --active;
 
             if (q.status != LIBUSB_TRANSFER_COMPLETED) {
-                fprintf(stderr, "[USB-DIAG] async_complete FAILED status=%d "
-                        "(0=ok,1=err,2=timeout,3=cancel,4=stall,5=nodev,6=overflow)\n",
-                        q.status);
+                USB_DIAG("[USB-DIAG] async_complete FAILED status=%d "
+                         "(0=ok,1=err,2=timeout,3=cancel,4=stall,5=nodev,6=overflow)\n",
+                         q.status);
                 error = true;
                 error_msg = "USB transfer failed, status=" + std::to_string(q.status);
                 break;
@@ -840,9 +841,8 @@ TransferResult receive_file_core(libusb_context* ctx,
 
         if (expected_frame_kind == usb_protocol::kFrameKindPayload
             && hdr.frame_kind == usb_protocol::kFrameKindSession) {
-            fprintf(stderr,
-                    "[USB-DIAG] stray session frame during payload wait (%llu B), skipping\n",
-                    static_cast<unsigned long long>(hdr.file_size));
+            USB_DIAG("[USB-DIAG] stray session frame during payload wait (%llu B), skipping\n",
+                     static_cast<unsigned long long>(hdr.file_size));
             if (!discard_incoming_bytes(handle, hdr.file_size, remaining_timeout_ms(header_deadline))) {
                 result.error_message = "Stray session frame read failed";
                 out_file.close();

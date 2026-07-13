@@ -32,11 +32,12 @@ public:
 
 private:
   bool child_exited(int* status_out) const;
-  static bool tunnel_ready(const TunnelConfig& cfg);
+  bool tunnel_ready(const TunnelConfig& cfg) const;
 
   mutable long pid_ = 0;
   mutable bool helper_managed_ = false;
   int port_ = 1;
+  std::vector<long> pids_at_start_;
 };
 
 std::string default_tunnel_bin();
@@ -45,9 +46,16 @@ struct TunnelRates {
   uint64_t up_bps = 0;
   uint64_t down_bps = 0;
   int display_port = 0;
+  long pid = 0;
   std::string serial;
   bool ok = false;
 };
+
+/** PIDs currently advertised in tunnel-*.stats (for start-wait guards). */
+std::vector<long> snapshot_stats_pids();
+
+/** True when stats show a new bridging pid not present in `before`. */
+bool stats_ready_new_pid(int prefer_port, const std::vector<long>& before, int* port_out = nullptr);
 
 /** Read /run/rocketbox/tunnel-<port>.stats written by rocketbox-tunnel. */
 TunnelRates read_tunnel_rates(int port);

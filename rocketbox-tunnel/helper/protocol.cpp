@@ -19,6 +19,7 @@ namespace tunnel_helper {
 bool send_command(const std::string& line, std::string& reply, std::string& error) {
   reply.clear();
 #if defined(_WIN32)
+  (void)WaitNamedPipeA(kDefaultSock, 500);
   HANDLE h = CreateFileA(kDefaultSock, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0,
                          nullptr);
   if (h == INVALID_HANDLE_VALUE) {

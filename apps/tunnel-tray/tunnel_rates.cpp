@@ -1,9 +1,11 @@
 #include "tunnel_proc.hpp"
 #include "platform/stats_paths.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace tunnel_tray {
 
@@ -19,12 +21,41 @@ TunnelRates read_tunnel_rates(int port) {
       r.down_bps = std::stoull(line.substr(9));
     } else if (line.compare(0, 13, "display_port=") == 0) {
       r.display_port = std::stoi(line.substr(13));
+    } else if (line.compare(0, 4, "pid=") == 0) {
+      r.pid = std::stol(line.substr(4));
     } else if (line.compare(0, 7, "serial=") == 0) {
       r.serial = line.substr(7);
     }
   }
   r.ok = true;
   return r;
+}
+
+std::vector<long> snapshot_stats_pids() {
+  std::vector<long> out;
+  for (int p = 1; p <= 4; ++p) {
+    const auto r = read_tunnel_rates(p);
+    if (r.ok && r.pid > 0) out.push_back(r.pid);
+  }
+  return out;
+}
+
+bool stats_ready_new_pid(int prefer_port, const std::vector<long>& before, int* port_out) {
+  auto is_new = [&](long pid) {
+    return pid > 0 && std::find(before.begin(), before.end(), pid) == before.end();
+  };
+  auto check = [&](int p) {
+    if (p < 1 || p > 4) return false;
+    const auto r = read_tunnel_rates(p);
+    if (!r.ok || !is_new(r.pid)) return false;
+    if (port_out) *port_out = p;
+    return true;
+  };
+  if (check(prefer_port)) return true;
+  if (prefer_port != 0) return false;
+  for (int p = 1; p <= 4; ++p)
+    if (check(p)) return true;
+  return false;
 }
 
 std::string format_rate(uint64_t bps) {

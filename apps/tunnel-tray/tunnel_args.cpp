@@ -6,7 +6,11 @@ namespace tunnel_tray {
 
 std::string build_tunnel_arg_tail(const TunnelConfig& cfg, const std::string& bin) {
   std::ostringstream oss;
-  oss << bin;
+  if (bin.find(' ') != std::string::npos) {
+    oss << '"' << bin << '"';
+  } else {
+    oss << bin;
+  }
   // USB: Port comes from cable serial unless disambiguating (--port).
   if (cfg.transport != "usb" || cfg.port > 0) {
     oss << " --port " << cfg.port;

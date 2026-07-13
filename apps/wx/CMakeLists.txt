@@ -34,6 +34,8 @@ if(APPLE)
 elseif(WIN32)
     # GUI subsystem: wxIMPLEMENT_APP supplies WinMain, not main().
     set_target_properties(rocketbox PROPERTIES WIN32_EXECUTABLE TRUE)
+    # Embed icon so Start Menu / Explorer / shortcuts show RocketBox branding.
+    target_sources(rocketbox PRIVATE "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")
 endif()
 
 target_include_directories(rocketbox PRIVATE

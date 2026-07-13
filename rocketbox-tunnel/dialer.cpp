@@ -26,6 +26,7 @@ CircuitDialer::CircuitDialer(rocketbox::RocketBoxTransport& transport, int local
             h(msg);
         }
     });
+    transport_.ensure_listening();
 }
 
 CircuitDialer::~CircuitDialer() { shutdown(); }

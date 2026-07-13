@@ -4,15 +4,6 @@
 #include <wx/string.h>
 
 namespace tunnel_tray {
-namespace {
-
-class PortData : public wxClientData {
-public:
-  explicit PortData(int p) : port(p) {}
-  int port = 0;
-};
-
-}  // namespace
 
 std::vector<UsbPortChoice> usb_port_choices() {
   std::vector<UsbPortChoice> out;
@@ -47,23 +38,27 @@ std::vector<UsbPortChoice> sim_port_choices() {
   return out;
 }
 
-int fill_usb_port_choice(wxChoice* choice, int preferred_port, bool enable) {
-  return fill_port_choice(choice, preferred_port, enable, true);
+int fill_usb_port_choice(wxChoice* choice, int preferred_port, bool enable,
+                         std::vector<int>* ports_out) {
+  return fill_port_choice(choice, preferred_port, enable, true, ports_out);
 }
 
-int fill_port_choice(wxChoice* choice, int preferred_port, bool enable, bool usb) {
+int fill_port_choice(wxChoice* choice, int preferred_port, bool enable, bool usb,
+                     std::vector<int>* ports_out) {
   choice->Clear();
+  if (ports_out) ports_out->clear();
   const auto ports = usb ? usb_port_choices() : sim_port_choices();
   if (ports.empty()) {
     choice->Append(wxT("No USB cable"));
+    if (ports_out) ports_out->push_back(0);
     choice->SetSelection(0);
     choice->Enable(false);
     return 0;
   }
   int sel = 0;
   for (size_t i = 0; i < ports.size(); ++i) {
-    choice->Append(wxString(ports[i].label.c_str(), wxConvUTF8),
-                   new PortData(ports[i].display_port));
+    choice->Append(wxString(ports[i].label.c_str(), wxConvUTF8));
+    if (ports_out) ports_out->push_back(ports[i].display_port);
     if (ports[i].display_port == preferred_port) sel = static_cast<int>(i);
   }
   if (usb && (preferred_port < 1 || preferred_port > 4)) {
@@ -77,16 +72,14 @@ int fill_port_choice(wxChoice* choice, int preferred_port, bool enable, bool usb
     if (n_avail == 1) sel = sole;
   }
   choice->SetSelection(sel);
-  // USB: only need a picker when multiple cables are present.
   choice->Enable(enable && (!usb || ports.size() > 1));
   return ports[static_cast<size_t>(sel)].display_port;
 }
 
-int selected_display_port(wxChoice* choice) {
+int selected_display_port(const wxChoice* choice, const std::vector<int>& ports) {
   const int idx = choice->GetSelection();
-  if (idx < 0) return 0;
-  auto* data = dynamic_cast<PortData*>(choice->GetClientObject(idx));
-  return data ? data->port : 0;
+  if (idx < 0 || static_cast<size_t>(idx) >= ports.size()) return 0;
+  return ports[static_cast<size_t>(idx)];
 }
 
 bool display_port_available(int display_port) {

@@ -5,19 +5,20 @@ set -euo pipefail
 BIN="${ROCKETBOX_TUNNEL_TRAY_PATH:-}"
 if [[ -z "$BIN" ]]; then
   HERE="$(cd "$(dirname "$0")" && pwd)"
+  ROOT="$(cd "$HERE/../.." && pwd)"
   for c in \
-    "$HERE/../build/apps/tunnel-tray/rocketbox-tunnel-tray" \
+    "$ROOT/build/apps/tunnel-tray/rocketbox-tunnel-tray" \
     "$HERE/rocketbox-tunnel-tray" \
-    "$HERE/../../build/apps/tunnel-tray/rocketbox-tunnel-tray"; do
+    /usr/bin/rocketbox-tunnel-tray; do
     if [[ -x "$c" ]]; then BIN="$c"; break; fi
   done
 fi
 if [[ -z "${BIN:-}" || ! -x "$BIN" ]]; then
-  echo "rocketbox-tunnel-tray not found" >&2
+  echo "rocketbox-tunnel-tray not found (build it, or set ROCKETBOX_TUNNEL_TRAY_PATH)" >&2
   exit 1
 fi
 
-# Pull env from a live desktop process when launched from a bare shell.
+# Pull env from a live desktop process when launched from a bare shell / IDE.
 if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
   for name in gnome-shell gsd-xsettings; do
     pid=$(pgrep -u "$USER" -n "$name" 2>/dev/null || true)

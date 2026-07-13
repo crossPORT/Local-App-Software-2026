@@ -25,7 +25,6 @@ if(WIN32)
     set(CPACK_GENERATOR "NSIS")
     set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${ROCKETBOX_RELEASE_TAG}-setup")
     set(CPACK_NSIS_EXECUTABLES_DIRECTORY "bin")
-    set(CPACK_PACKAGE_EXECUTABLES "RocketBox" "RocketBox App")
     set(_rb_nsis_icon "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-installer.ico")
     set(CPACK_NSIS_MUI_ICON "${_rb_nsis_icon}")
     set(CPACK_NSIS_MUI_UNIICON "${_rb_nsis_icon}")
@@ -34,6 +33,23 @@ if(WIN32)
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH OFF)
     set(CPACK_NSIS_COMPONENT_INSTALL ON)
+    # Custom shortcuts with rocketbox.ico (CPack PACKAGE_EXECUTABLES omits icon args).
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA "
+      CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\RocketBox App.lnk' '$INSTDIR\\\\bin\\\\RocketBox.exe' '' '$INSTDIR\\\\bin\\\\rocketbox.ico' 0
+      CreateShortCut '$DESKTOP\\\\RocketBox App.lnk' '$INSTDIR\\\\bin\\\\RocketBox.exe' '' '$INSTDIR\\\\bin\\\\rocketbox.ico' 0
+      IfFileExists '$INSTDIR\\\\bin\\\\rocketbox-tunnel-tray.exe' 0 skip_tray_sm
+        CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\RocketBox Tunnel Tray.lnk' '$INSTDIR\\\\bin\\\\rocketbox-tunnel-tray.exe' '' '$INSTDIR\\\\bin\\\\rocketbox.ico' 0
+      skip_tray_sm:")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "
+      Delete '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\RocketBox App.lnk'
+      Delete '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\RocketBox Tunnel Tray.lnk'
+      Delete '$DESKTOP\\\\RocketBox App.lnk'")
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+      IfFileExists '$INSTDIR\\\\bin\\\\rocketbox-tunnel-tray.exe' 0 skip_tray_startup
+        CreateShortCut '$SMSTARTUP\\\\RocketBox Tunnel Tray.lnk' '$INSTDIR\\\\bin\\\\rocketbox-tunnel-tray.exe' '--background' '$INSTDIR\\\\bin\\\\rocketbox.ico' 0
+      skip_tray_startup:")
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
+      "Delete '$SMSTARTUP\\\\RocketBox Tunnel Tray.lnk'")
 elseif(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
     set(CPACK_DMG_VOLUME_NAME "RocketBox")

@@ -1,4 +1,4 @@
-find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base)
+find_package(wxWidgets 3.2 REQUIRED COMPONENTS core base net)
 include(${wxWidgets_USE_FILE})
 
 set(_tray_gtk_libs "")
@@ -17,7 +17,10 @@ endif()
 
 add_executable(rocketbox-tunnel-tray
   main.cpp
+  session_dbus.cpp
   tray_icon.cpp
+  tray_icon_tick.cpp
+  tray_ipc.cpp
   listen_ports.cpp
   tray_settings.cpp
   tray_panel.cpp
@@ -33,7 +36,11 @@ add_executable(rocketbox-tunnel-tray
 )
 
 if(WIN32)
-  target_sources(rocketbox-tunnel-tray PRIVATE tunnel_proc_win.cpp socket_owners_win.cpp)
+  target_sources(rocketbox-tunnel-tray PRIVATE
+    tunnel_proc_win.cpp
+    helper_launch_win.cpp
+    socket_owners_win.cpp
+    "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")
   set_target_properties(rocketbox-tunnel-tray PROPERTIES WIN32_EXECUTABLE TRUE)
 else()
   target_sources(rocketbox-tunnel-tray PRIVATE tunnel_proc_linux.cpp socket_owners_linux.cpp)
@@ -60,10 +67,15 @@ target_compile_options(rocketbox-tunnel-tray PRIVATE ${wxWidgets_CXX_FLAGS} ${_t
 target_compile_features(rocketbox-tunnel-tray PRIVATE cxx_std_17)
 
 install(TARGETS rocketbox-tunnel-tray RUNTIME DESTINATION bin COMPONENT RocketBoxTunnelTray)
+if(WIN32)
+  install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico" DESTINATION bin
+          COMPONENT RocketBoxTunnelTray)
+endif()
 if(UNIX AND NOT APPLE)
   # Absolute /etc so DEB does not land under /usr/etc (prefix is /usr).
-  install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray.desktop
+  install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray-autostart.desktop
           DESTINATION /etc/xdg/autostart
+          RENAME rocketbox-tunnel-tray.desktop
           COMPONENT RocketBoxTunnelTray)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray.desktop
           DESTINATION share/applications

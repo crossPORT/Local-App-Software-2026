@@ -1,10 +1,12 @@
 [Desktop Entry]
 Type=Application
 Name=RocketBox Tunnel Tray
-Comment=Open tunnel controls (icon also stays in the system tray)
-Exec=rocketbox-tunnel-tray
+Comment=RocketBox Tunnel system tray (starts quietly at login)
+Exec=rocketbox-tunnel-tray --background
 Icon=rocketbox
 Terminal=false
 Categories=Network;System;Utility;
 Keywords=RocketBox;tunnel;USB;tray;
 StartupNotify=false
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

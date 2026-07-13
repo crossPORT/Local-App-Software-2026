@@ -1,5 +1,6 @@
 #include "usb_device_open.h"
 
+#include "usb_diag.h"
 #include "usb_protocol.h"
 #include "usb_transfer.h"
 
@@ -87,13 +88,13 @@ libusb_device_handle* open_device_by_index(libusb_context* ctx,
     }
 
     if (libusb_kernel_driver_active(handle, usb_protocol::kInterface) == 1) {
-        fprintf(stderr, "[USB-DIAG] detaching kernel driver on port %d\n", index);
+        USB_DIAG("[USB-DIAG] detaching kernel driver on port %d\n", index);
         libusb_detach_kernel_driver(handle, usb_protocol::kInterface);
     }
 
     int claim_rc = libusb_claim_interface(handle, usb_protocol::kInterface);
-    fprintf(stderr, "[USB-DIAG] claim_interface port=%d rc=%d (%s)\n",
-            index, claim_rc, libusb_strerror(static_cast<libusb_error>(claim_rc)));
+    USB_DIAG("[USB-DIAG] claim_interface port=%d rc=%d (%s)\n",
+             index, claim_rc, libusb_strerror(static_cast<libusb_error>(claim_rc)));
     if (claim_rc != LIBUSB_SUCCESS) {
         libusb_close(handle);
         if (error_out) {
@@ -104,9 +105,9 @@ libusb_device_handle* open_device_by_index(libusb_context* ctx,
 
     int ch_out = libusb_clear_halt(handle, usb_protocol::kEndpointDataOut);
     int ch_in = libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
-    fprintf(stderr, "[USB-DIAG] clear_halt port=%d EP_OUT=%d (%s) EP_IN=%d (%s)\n",
-            index, ch_out, libusb_strerror(static_cast<libusb_error>(ch_out)),
-            ch_in, libusb_strerror(static_cast<libusb_error>(ch_in)));
+    USB_DIAG("[USB-DIAG] clear_halt port=%d EP_OUT=%d (%s) EP_IN=%d (%s)\n",
+             index, ch_out, libusb_strerror(static_cast<libusb_error>(ch_out)),
+             ch_in, libusb_strerror(static_cast<libusb_error>(ch_in)));
 
     return handle;
 }

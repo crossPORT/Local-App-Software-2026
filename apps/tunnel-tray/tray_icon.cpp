@@ -1,24 +1,19 @@
 #include "tray_icon.hpp"
-#include "tray_icons.hpp"
-#include "tray_panel.hpp"
 #include "tray_settings.hpp"
 #include "tray_theme.hpp"
 #include "tunnel_log.hpp"
+#include "tunnel_log_ui.hpp"
 #include "usb_ports_ui.hpp"
+
 #include <wx/msgdlg.h>
 #include <wx/utils.h>
 
 namespace {
-constexpr uint64_t kPulseThresholdBps = 1000;
-wxString tooltip_for(int port, bool up) {
-  wxString tip = wxString::Format("RocketBox Tunnel - Port %d", port);
-  if (!up) return tip + " - stopped";
-  const auto rates = tunnel_tray::read_tunnel_rates(port);
-  if (!rates.ok || rates.up_bps + rates.down_bps == 0) return tip + " - idle";
-  return tip + wxString::Format(" - up %s down %s",
-                                tunnel_tray::format_rate(rates.up_bps).c_str(),
-                                tunnel_tray::format_rate(rates.down_bps).c_str());
-}
+enum {
+  ID_TRAY_ENABLE = wxID_HIGHEST + 1,
+  ID_TRAY_DISABLE,
+  ID_TRAY_LOG,
+};
 }  // namespace
 
 TunnelTrayIcon::TunnelTrayIcon() {
@@ -31,12 +26,100 @@ TunnelTrayIcon::TunnelTrayIcon() {
   tick_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_tick, this);
   pulse_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_pulse, this);
   Bind(wxEVT_TASKBAR_LEFT_DOWN, &TunnelTrayIcon::on_left_down, this);
+  Bind(wxEVT_MENU, &TunnelTrayIcon::on_menu, this);
   tick_.Start(1000);
   if (settings.enabled) set_enabled(true);
   refresh_icon();
 }
 
+TunnelTrayIcon::~TunnelTrayIcon() {
+  if (panel_) {
+    panel_->Destroy();
+    panel_.release();
+  }
+}
+
+void TunnelTrayIcon::ensure_panel() {
+  if (panel_) return;
+  panel_ = std::make_unique<tunnel_tray::TrayPanel>(
+      nullptr,
+      [this](bool enable) {
+        if (panel_) {
+          const auto c = panel_->controls();
+          port_ = c.port;
+          usb_ = c.usb;
+          expose_ = c.expose;
+        }
+        return set_enabled(enable);
+      },
+      [this]() {
+        if (panel_) {
+          const auto c = panel_->controls();
+          port_ = c.port;
+          usb_ = c.usb;
+          expose_ = c.expose;
+        }
+        apply_expose();
+      },
+      [this]() { quit_app(); });
+}
+
+wxMenu* TunnelTrayIcon::CreatePopupMenu() {
+  auto* m = new wxMenu();
+  m->Append(wxID_OPEN, wxT("Open control panel"));
+  if (proc_.running()) m->Append(ID_TRAY_DISABLE, wxT("Disable tunnel"));
+  else m->Append(ID_TRAY_ENABLE, wxT("Enable tunnel"));
+  m->Append(ID_TRAY_LOG, wxT("Open log"));
+  m->AppendSeparator();
+  m->Append(wxID_EXIT, wxT("Quit tray"));
+  return m;
+}
+
 void TunnelTrayIcon::on_left_down(wxTaskBarIconEvent&) { show_panel(); }
+
+void TunnelTrayIcon::on_menu(wxCommandEvent& ev) {
+  switch (ev.GetId()) {
+    case wxID_OPEN:
+      show_panel();
+      break;
+    case ID_TRAY_ENABLE:
+      set_enabled(true);
+      break;
+    case ID_TRAY_DISABLE:
+      set_enabled(false);
+      break;
+    case ID_TRAY_LOG:
+      open_log();
+      break;
+    case wxID_EXIT:
+      quit_app();
+      break;
+    default:
+      break;
+  }
+}
+
+void TunnelTrayIcon::open_log() { tunnel_tray::show_tunnel_log(nullptr); }
+
+void TunnelTrayIcon::quit_app() {
+  // Only stop the tunnel this tray started (pid / helper-managed).
+  proc_.stop();
+  persist_settings(false);
+  if (panel_) {
+    panel_->Destroy();
+    panel_.release();
+  }
+  RemoveIcon();
+  wxTheApp->ExitMainLoop();
+}
+
+tunnel_tray::TrayControls TunnelTrayIcon::controls_now() const {
+  tunnel_tray::TrayControls c;
+  c.port = port_;
+  c.usb = usb_;
+  c.expose = expose_;
+  return c;
+}
 
 tunnel_tray::TunnelConfig TunnelTrayIcon::config_from_ui() const {
   tunnel_tray::TunnelConfig cfg;
@@ -61,7 +144,7 @@ bool TunnelTrayIcon::set_enabled(bool want_on) {
       if (port_ < 1 || port_ > 4 || !tunnel_tray::display_port_available(port_)) {
         const int sole = tunnel_tray::sole_available_display_port();
         if (sole > 0) port_ = sole;
-        else port_ = 0;  // tunnel auto-detects single cable
+        else port_ = 0;
       }
     }
     std::string err;
@@ -93,6 +176,7 @@ bool TunnelTrayIcon::set_enabled(bool want_on) {
   }
   persist_settings(want_on);
   refresh_icon();
+  if (panel_ && panel_->is_shown()) panel_->sync_from_host(controls_now(), proc_.running());
   return true;
 }
 
@@ -109,69 +193,6 @@ void TunnelTrayIcon::apply_expose() {
 }
 
 void TunnelTrayIcon::show_panel() {
-  if (panel_open_) return;
-  panel_open_ = true;
-  tunnel_tray::TrayControls ctrls;
-  ctrls.port = port_;
-  ctrls.usb = usb_;
-  ctrls.expose = expose_;
-  const bool quit = tunnel_tray::show_tray_panel(
-      nullptr, ctrls, proc_.running(),
-      [this, &ctrls](bool enable) {
-        port_ = ctrls.port;
-        usb_ = ctrls.usb;
-        expose_ = ctrls.expose;
-        return set_enabled(enable);
-      },
-      [this, &ctrls]() {
-        expose_ = ctrls.expose;
-        apply_expose();
-      });
-  port_ = ctrls.port;
-  usb_ = ctrls.usb;
-  expose_ = ctrls.expose;
-  persist_settings(proc_.running());
-  panel_open_ = false;
-  if (quit) {
-    proc_.stop();
-    persist_settings(false);
-    wxTheApp->ExitMainLoop();
-  }
-  refresh_icon();
-}
-
-void TunnelTrayIcon::reload_icons() {
-  icon_normal_ = tunnel_tray::load_brand_icon();
-  icon_dim_ = tunnel_tray::make_dim_icon(icon_normal_);
-}
-
-void TunnelTrayIcon::on_tick(wxTimerEvent&) {
-  const bool dark = tunnel_tray::desktop_prefers_dark();
-  if (dark != dark_theme_) {
-    dark_theme_ = dark;
-    reload_icons();
-  }
-  traffic_ = false;
-  if (proc_.running()) {
-    const auto rates = tunnel_tray::read_tunnel_rates(port_);
-    if (rates.ok && rates.up_bps + rates.down_bps >= kPulseThresholdBps) traffic_ = true;
-  }
-  if (traffic_ && !pulse_.IsRunning()) {
-    pulse_hi_ = true;
-    pulse_.Start(220);
-  } else if (!traffic_ && pulse_.IsRunning()) {
-    pulse_.Stop();
-  }
-  refresh_icon();
-}
-
-void TunnelTrayIcon::on_pulse(wxTimerEvent&) {
-  pulse_hi_ = !pulse_hi_;
-  refresh_icon();
-}
-
-void TunnelTrayIcon::refresh_icon() {
-  const bool up = proc_.running();
-  const wxIcon& icon = !up ? icon_dim_ : (traffic_ && !pulse_hi_ ? icon_dim_ : icon_normal_);
-  SetIcon(icon, tooltip_for(port_, up));
+  ensure_panel();
+  panel_->show_raise(controls_now(), proc_.running());
 }

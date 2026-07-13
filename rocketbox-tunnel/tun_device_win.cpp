@@ -142,13 +142,15 @@ void TunDevice::interrupt() { close(); }
 
 std::vector<uint8_t> TunDevice::read_packet() {
   auto* c = ctx(win_);
-  if (!c || !c->session) return {};
+  if (!c || !c->session) {
+    Sleep(50);
+    return {};
+  }
   DWORD size = 0;
   BYTE* pkt = c->fns.ReceivePacket(c->session, &size);
   if (!pkt) {
-    if (GetLastError() == ERROR_NO_MORE_ITEMS) {
-      WaitForSingleObject(c->fns.GetReadWaitEvent(c->session), 100);
-    }
+    // Always wait — never busy-spin when the ring is empty or on other errors.
+    WaitForSingleObject(c->fns.GetReadWaitEvent(c->session), 250);
     return {};
   }
   std::vector<uint8_t> out(pkt, pkt + size);
