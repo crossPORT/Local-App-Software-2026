@@ -66,7 +66,7 @@ if(APPLE)
     else()
         message(WARNING "macOS: cmake/icons/rocketbox.icns missing; run scripts/generate-macos-icon.sh")
     endif()
-    install(TARGETS rocketbox BUNDLE DESTINATION .)
+    install(TARGETS rocketbox BUNDLE DESTINATION . COMPONENT RocketBoxApp)
     install(SCRIPT "${CMAKE_SOURCE_DIR}/cmake/macos_fixup_bundle.cmake")
 elseif(WIN32)
     include(${CMAKE_SOURCE_DIR}/cmake/rocketbox_windows_vcpkg.cmake)
@@ -82,7 +82,7 @@ elseif(WIN32)
     list(LENGTH _rb_runtime_dlls _rb_dll_count)
     message(STATUS "Windows: bundle ${_rb_dll_count} runtime DLL(s) from ${_rb_vcpkg_bin}")
 
-    install(TARGETS rocketbox RUNTIME DESTINATION bin)
+    install(TARGETS rocketbox RUNTIME DESTINATION bin COMPONENT RocketBoxApp)
     install(FILES ${_rb_runtime_dlls} DESTINATION bin)
     install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico" DESTINATION bin)
 
@@ -126,7 +126,7 @@ elseif(WIN32)
             PATTERN "*.cat"
             PATTERN "zadig-*.exe")
 else()
-    install(TARGETS rocketbox RUNTIME DESTINATION bin)
+    install(TARGETS rocketbox RUNTIME DESTINATION bin COMPONENT RocketBoxApp)
 
     install(FILES
         "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"

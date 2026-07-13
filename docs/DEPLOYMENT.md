@@ -75,7 +75,19 @@ The release workflow produces:
 | `.dmg` | macOS (arm64 from CI runner) |
 | `-setup.exe` | Windows (NSIS) |
 
-Installers are unsigned in v1. See [INSTALL.md](INSTALL.md) for end-user steps.
+Installers are unsigned in v1 (macOS ad-hoc codesign only). See [INSTALL.md](INSTALL.md).
+
+### Optional Tunnel component
+
+The same NSIS / DMG / DEB / AppImage pipelines can include:
+
+| Component | Default | Notes |
+|-----------|---------|--------|
+| RocketBox App | ON | Existing transfer app |
+| RocketBox Tunnel | OFF | CLI + helper; **cannot share a USB cable with the App** |
+| Tunnel Tray | ON with Tunnel | Uncheck for server-only; autostarts at login |
+
+Per-OS operator guides ship with Tunnel: [tunnel/linux.md](tunnel/linux.md), [tunnel/macos.md](tunnel/macos.md), [tunnel/windows.md](tunnel/windows.md).
 
 ## Local verification
 

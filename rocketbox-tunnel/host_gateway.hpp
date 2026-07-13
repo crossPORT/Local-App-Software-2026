@@ -1,5 +1,7 @@
 #pragma once
 
+#include "expose_spec.hpp"
+
 #include <string>
 #include <vector>
 
@@ -15,7 +17,7 @@ public:
   HostGateway(const HostGateway&) = delete;
   HostGateway& operator=(const HostGateway&) = delete;
 
-  void install(int local_port, const std::string& netns, const std::vector<int>& expose_ports);
+  void install(int local_port, const std::string& netns, const std::vector<ExposeRule>& expose);
   void remove();
 
   const std::string& host_veth() const { return host_veth_; }

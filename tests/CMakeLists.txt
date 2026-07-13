@@ -30,11 +30,12 @@ add_executable(unit-tests
     unit/test_tar_pack.cpp
     unit/test_session_rate_stats.cpp
     unit/test_port_util.cpp
+    unit/test_port_probe.cpp
 )
 target_include_directories(unit-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(unit-tests PRIVATE
     RB_TEST_FIXTURE_DIR="${RB_TEST_FIXTURE_DIR}")
-target_link_libraries(unit-tests PRIVATE rocketbox_session)
+target_link_libraries(unit-tests PRIVATE rocketbox_sdk)
 target_compile_features(unit-tests PRIVATE cxx_std_17)
 
 add_test(NAME unit-tests COMMAND unit-tests)

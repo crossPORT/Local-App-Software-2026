@@ -37,6 +37,8 @@ public:
     virtual int port_index() const = 0;
     /** Serial-derived leg 0–3 (announce / UI). Same as former fabric_leg(). */
     virtual int resolved_port_index() const { return port_index(); }
+    /** Silkscreen Port 1–4 from serial-derived leg. */
+    virtual int display_port() const { return resolved_port_index() + 1; }
     virtual std::string serial() const = 0;
     virtual std::string system_id() const = 0;
     virtual std::string describe_device() const = 0;

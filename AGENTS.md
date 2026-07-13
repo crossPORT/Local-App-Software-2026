@@ -59,6 +59,7 @@ All targets must compile:
 | `sdks/cpp/sim/` | In-process USB sim (`rocketbox_usb_sim`) for CTest / session |
 | `sdks/cpp/session/` | Shared session layer (`rocketbox_session`) |
 | `sdks/cpp/include/rocketbox/sdk.h` | Public C++ SDK (`RocketBoxTransport`) |
+| `sdks/cpp/include/rocketbox/port_probe.h` | List present USB ports (serial → silkscreen Port 1–4) |
 | `sdks/cpp/src/` | SDK backends (USB via session/core; sim via TCP :1772) |
 | `apps/wx/` | RocketBox App (desktop) — uses session directly |
 | `apps/web/` | RocketBox App (PWA) — USB via `@rocketbox/sdk` |
@@ -73,7 +74,7 @@ All targets must compile:
 
 1. **USB logic** in `sdks/cpp/core/` only — no wx/GTK in core
 2. **Session logic** in `sdks/cpp/session/` — no UI toolkit includes; orchestrator takes `RocketBoxTransport`
-3. **Public C++ API** in `rocketbox/sdk.h` + `rocketbox/session_orchestrator.h` — wx, tunnel, and CLI use this only
+3. **Public C++ API** in `rocketbox/sdk.h` + `rocketbox/port_probe.h` + `rocketbox/session_orchestrator.h` — wx, tunnel, and CLI use this only. USB open uses **libusb sort index**; silkscreen Port 1–4 comes from cable serial (`list_present_ports` / `display_port()`).
 4. **wx / tools** link `rocketbox_sdk` — do not construct `TransferController` in apps
 5. **TypeScript USB/wire** in `sdks/typescript/` — PWA does not implement WebUSB
 6. **One simulation product:** `simulated-hardware/`; in-process `sdks/cpp/sim` for CTest

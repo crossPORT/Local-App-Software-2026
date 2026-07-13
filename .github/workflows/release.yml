@@ -213,6 +213,10 @@ jobs:
         shell: pwsh
         run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
+      - name: Fetch Wintun
+        shell: pwsh
+        run: ./scripts/fetch-wintun.ps1 -DestDir "${{ github.workspace }}/third_party/wintun/bin"
+
       - name: Install vcpkg dependencies
         shell: pwsh
         env:
@@ -247,7 +251,9 @@ jobs:
             -DROCKETBOX_RELEASE_TAG="$env:ROCKETBOX_RELEASE_TAG"
 
       - name: Build
-        run: cmake --build build --config Release --target rocketbox --parallel
+        run: >
+          cmake --build build --config Release --parallel
+          --target rocketbox rocketbox-tunnel rocketbox-tunnel-helper rocketbox-tunnel-tray
 
       - name: Install and bundle DLLs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"

@@ -38,5 +38,15 @@ if ($AllDlls.Count -lt 10) {
     Write-Error "Expected at least 10 bundled DLLs in $Bin, found $($AllDlls.Count)"
 }
 
+$Tunnel = Join-Path $Bin "rocketbox-tunnel.exe"
+$Tray = Join-Path $Bin "rocketbox-tunnel-tray.exe"
+$Wintun = Join-Path $Bin "wintun.dll"
+foreach ($path in @($Tunnel, $Tray, $Wintun)) {
+    if (-not (Test-Path $path)) {
+        Write-Error "Missing Tunnel component file: $path"
+    }
+}
+
 Write-Host "Windows install looks self-contained ($($AllDlls.Count) DLL(s)):"
 $AllDlls | ForEach-Object { Write-Host "  $($_.Name)" }
+Write-Host "Tunnel: rocketbox-tunnel.exe + tray + wintun.dll present"

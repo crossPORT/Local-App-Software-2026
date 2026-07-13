@@ -79,6 +79,18 @@ chmod +x RocketBox-*-linux-x64.AppImage
 
 Install the udev rule manually (see above). The AppImage build includes `rocketbox.desktop` for its own launcher only.
 
+## Optional Tunnel (+ Tray)
+
+In the installer, enable **RocketBox Tunnel** (Tray is included by default; uncheck Tray for server-only).
+
+**App and Tunnel cannot use the same USB cable at the same time.**
+
+OS-specific config/run guides (also installed with the Tunnel component):
+
+- [tunnel/linux.md](tunnel/linux.md)
+- [tunnel/macos.md](tunnel/macos.md)
+- [tunnel/windows.md](tunnel/windows.md)
+
 ## RocketBox hardware and multiple cables
 
 - **RocketBox** USB device: vendor/product `1772:0006`

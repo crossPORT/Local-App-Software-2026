@@ -1,110 +1,177 @@
 #include "tray_icon.hpp"
-
-#include <wx/icon.h>
+#include "tray_icons.hpp"
+#include "tray_panel.hpp"
+#include "tray_settings.hpp"
+#include "tray_theme.hpp"
+#include "tunnel_log.hpp"
+#include "usb_ports_ui.hpp"
 #include <wx/msgdlg.h>
+#include <wx/utils.h>
 
 namespace {
-
-wxIcon make_dot_icon(unsigned char r, unsigned char g, unsigned char b) {
-  wxImage img(16, 16);
-  img.InitAlpha();
-  for (int y = 0; y < 16; ++y) {
-    for (int x = 0; x < 16; ++x) {
-      const int dx = x - 7;
-      const int dy = y - 7;
-      const bool on = dx * dx + dy * dy <= 36;
-      img.SetRGB(x, y, on ? r : 0, on ? g : 0, on ? b : 0);
-      img.SetAlpha(x, y, on ? 255 : 0);
-    }
-  }
-  wxIcon icon;
-  icon.CopyFromBitmap(wxBitmap(img));
-  return icon;
+constexpr uint64_t kPulseThresholdBps = 1000;
+wxString tooltip_for(int port, bool up) {
+  wxString tip = wxString::Format("RocketBox Tunnel - Port %d", port);
+  if (!up) return tip + " - stopped";
+  const auto rates = tunnel_tray::read_tunnel_rates(port);
+  if (!rates.ok || rates.up_bps + rates.down_bps == 0) return tip + " - idle";
+  return tip + wxString::Format(" - up %s down %s",
+                                tunnel_tray::format_rate(rates.up_bps).c_str(),
+                                tunnel_tray::format_rate(rates.down_bps).c_str());
 }
-
 }  // namespace
 
 TunnelTrayIcon::TunnelTrayIcon() {
-  timer_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_tick, this);
-  timer_.Start(1000);
+  const auto settings = tunnel_tray::load_tray_settings();
+  expose_ = settings.expose;
+  port_ = settings.port;
+  usb_ = settings.usb;
+  dark_theme_ = tunnel_tray::desktop_prefers_dark();
+  reload_icons();
+  tick_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_tick, this);
+  pulse_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_pulse, this);
+  Bind(wxEVT_TASKBAR_LEFT_DOWN, &TunnelTrayIcon::on_left_down, this);
+  tick_.Start(1000);
+  if (settings.enabled) set_enabled(true);
   refresh_icon();
 }
 
-wxMenu* TunnelTrayIcon::CreatePopupMenu() {
-  auto* menu = new wxMenu;
-  const bool up = proc_.running();
-  menu->Append(ID_START, "Start tunnel")->Enable(!up);
-  menu->Append(ID_STOP, "Stop tunnel")->Enable(up);
-  menu->AppendSeparator();
-
-  auto* ports = new wxMenu;
-  for (int p = 1; p <= 4; ++p) {
-    auto* item = ports->AppendRadioItem(ID_PORT_1 + (p - 1), wxString::Format("Port %d (10.64.0.%d)", p, p));
-    if (p == port_) item->Check();
-    item->Enable(!up);
-  }
-  menu->AppendSubMenu(ports, "USB port");
-
-  auto* trans = new wxMenu;
-  auto* usb = trans->AppendRadioItem(ID_TRANS_USB, "USB hardware");
-  auto* sim = trans->AppendRadioItem(ID_TRANS_SIM, "Simulation");
-  usb->Check(usb_);
-  sim->Check(!usb_);
-  usb->Enable(!up);
-  sim->Enable(!up);
-  menu->AppendSubMenu(trans, "Transport");
-
-  menu->AppendSeparator();
-  menu->Append(ID_QUIT, "Quit");
-
-  Bind(wxEVT_MENU, &TunnelTrayIcon::on_start, this, ID_START);
-  Bind(wxEVT_MENU, &TunnelTrayIcon::on_stop, this, ID_STOP);
-  Bind(wxEVT_MENU, &TunnelTrayIcon::on_quit, this, ID_QUIT);
-  Bind(wxEVT_MENU, &TunnelTrayIcon::on_port, this, ID_PORT_1, ID_PORT_4);
-  Bind(wxEVT_MENU, &TunnelTrayIcon::on_transport, this, ID_TRANS_USB, ID_TRANS_SIM);
-  return menu;
-}
+void TunnelTrayIcon::on_left_down(wxTaskBarIconEvent&) { show_panel(); }
 
 tunnel_tray::TunnelConfig TunnelTrayIcon::config_from_ui() const {
   tunnel_tray::TunnelConfig cfg;
   cfg.port = port_;
   cfg.transport = usb_ ? "usb" : "sim";
+  cfg.expose = expose_;
   return cfg;
 }
 
-void TunnelTrayIcon::on_start(wxCommandEvent&) {
+void TunnelTrayIcon::persist_settings(bool enabled) {
+  tunnel_tray::TraySettings s;
+  s.expose = expose_;
+  s.port = port_;
+  s.usb = usb_;
+  s.enabled = enabled;
+  tunnel_tray::save_tray_settings(s);
+}
+
+bool TunnelTrayIcon::set_enabled(bool want_on) {
+  if (want_on) {
+    if (usb_) {
+      if (port_ < 1 || port_ > 4 || !tunnel_tray::display_port_available(port_)) {
+        const int sole = tunnel_tray::sole_available_display_port();
+        if (sole > 0) port_ = sole;
+        else port_ = 0;  // tunnel auto-detects single cable
+      }
+    }
+    std::string err;
+    rocketbox_tunnel_log(std::string("[tray] enable ") + (usb_ ? "usb" : "sim") +
+                         (port_ ? " Port " + std::to_string(port_) : " (auto Port)"));
+    if (!proc_.start(config_from_ui(), err)) {
+      rocketbox_tunnel_log("[tray] enable failed: " + err);
+      wxMessageBox(err, "RocketBox Tunnel", wxOK | wxICON_ERROR);
+      persist_settings(false);
+      return false;
+    }
+    if (port_ <= 0) {
+      for (int p = 1; p <= 4; ++p) {
+        const auto rates = tunnel_tray::read_tunnel_rates(p);
+        if (rates.ok && rates.display_port > 0) {
+          port_ = rates.display_port;
+          break;
+        }
+        if (rates.ok) {
+          port_ = p;
+          break;
+        }
+      }
+    }
+    rocketbox_tunnel_log("[tray] tunnel running");
+  } else {
+    rocketbox_tunnel_log("[tray] disable");
+    proc_.stop();
+  }
+  persist_settings(want_on);
+  refresh_icon();
+  return true;
+}
+
+void TunnelTrayIcon::apply_expose() {
+  persist_settings(proc_.running());
+  if (!proc_.running()) return;
+  proc_.stop();
   std::string err;
   if (!proc_.start(config_from_ui(), err)) {
     wxMessageBox(err, "RocketBox Tunnel", wxOK | wxICON_ERROR);
+    persist_settings(false);
   }
   refresh_icon();
 }
 
-void TunnelTrayIcon::on_stop(wxCommandEvent&) {
-  proc_.stop();
+void TunnelTrayIcon::show_panel() {
+  if (panel_open_) return;
+  panel_open_ = true;
+  tunnel_tray::TrayControls ctrls;
+  ctrls.port = port_;
+  ctrls.usb = usb_;
+  ctrls.expose = expose_;
+  const bool quit = tunnel_tray::show_tray_panel(
+      nullptr, ctrls, proc_.running(),
+      [this, &ctrls](bool enable) {
+        port_ = ctrls.port;
+        usb_ = ctrls.usb;
+        expose_ = ctrls.expose;
+        return set_enabled(enable);
+      },
+      [this, &ctrls]() {
+        expose_ = ctrls.expose;
+        apply_expose();
+      });
+  port_ = ctrls.port;
+  usb_ = ctrls.usb;
+  expose_ = ctrls.expose;
+  persist_settings(proc_.running());
+  panel_open_ = false;
+  if (quit) {
+    proc_.stop();
+    persist_settings(false);
+    wxTheApp->ExitMainLoop();
+  }
   refresh_icon();
 }
 
-void TunnelTrayIcon::on_quit(wxCommandEvent&) {
-  proc_.stop();
-  wxTheApp->ExitMainLoop();
+void TunnelTrayIcon::reload_icons() {
+  icon_normal_ = tunnel_tray::load_brand_icon();
+  icon_dim_ = tunnel_tray::make_dim_icon(icon_normal_);
 }
 
-void TunnelTrayIcon::on_port(wxCommandEvent& ev) {
-  port_ = 1 + (ev.GetId() - ID_PORT_1);
+void TunnelTrayIcon::on_tick(wxTimerEvent&) {
+  const bool dark = tunnel_tray::desktop_prefers_dark();
+  if (dark != dark_theme_) {
+    dark_theme_ = dark;
+    reload_icons();
+  }
+  traffic_ = false;
+  if (proc_.running()) {
+    const auto rates = tunnel_tray::read_tunnel_rates(port_);
+    if (rates.ok && rates.up_bps + rates.down_bps >= kPulseThresholdBps) traffic_ = true;
+  }
+  if (traffic_ && !pulse_.IsRunning()) {
+    pulse_hi_ = true;
+    pulse_.Start(220);
+  } else if (!traffic_ && pulse_.IsRunning()) {
+    pulse_.Stop();
+  }
   refresh_icon();
 }
 
-void TunnelTrayIcon::on_transport(wxCommandEvent& ev) {
-  usb_ = (ev.GetId() == ID_TRANS_USB);
+void TunnelTrayIcon::on_pulse(wxTimerEvent&) {
+  pulse_hi_ = !pulse_hi_;
   refresh_icon();
 }
-
-void TunnelTrayIcon::on_tick(wxTimerEvent&) { refresh_icon(); }
 
 void TunnelTrayIcon::refresh_icon() {
   const bool up = proc_.running();
-  SetIcon(make_dot_icon(up ? 40 : 120, up ? 180 : 120, up ? 80 : 120),
-          wxString::Format("RocketBox Tunnel — port %d (%s) — %s", port_,
-                           usb_ ? "usb" : "sim", up ? "running" : "stopped"));
+  const wxIcon& icon = !up ? icon_dim_ : (traffic_ && !pulse_hi_ ? icon_dim_ : icon_normal_);
+  SetIcon(icon, tooltip_for(port_, up));
 }

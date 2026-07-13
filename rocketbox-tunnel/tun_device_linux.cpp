@@ -72,7 +72,7 @@ void TunDevice::configure_lan(const std::string& local_ip) {
 }
 
 void TunDevice::isolate_in_netns(const std::string& netns, const std::string& local_ip,
-                                 int local_port, const std::vector<int>& expose_ports) {
+                                 int local_port, const std::vector<ExposeRule>& expose) {
   if (fd_ < 0 || name_.empty()) {
     throw std::runtime_error("TUN not open");
   }
@@ -89,7 +89,7 @@ void TunDevice::isolate_in_netns(const std::string& netns, const std::string& lo
                " route replace 10.64.0.0/24 dev " + name_);
   netns_ = netns;
   gateway_ = std::make_unique<HostGateway>();
-  gateway_->install(local_port, netns, expose_ports);
+  gateway_->install(local_port, netns, expose);
 }
 
 void TunDevice::close() {

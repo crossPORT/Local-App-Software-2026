@@ -1,5 +1,6 @@
 #include "host_gateway.hpp"
 
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,6 +23,15 @@ std::string nx(const std::string& netns, const std::string& cmd) {
   return std::string(kIp) + " netns exec " + netns + " " + cmd;
 }
 
+void add_dnat(const std::string& netns, const std::string& tunnel_ip, const std::string& host_addr,
+              int port, const char* proto) {
+  const std::string ps = std::to_string(port);
+  const std::string base = std::string(" -d ") + tunnel_ip + " -p " + proto + " --dport " + ps +
+                           " -j DNAT --to-destination " + host_addr + ":" + ps;
+  run_or_throw(nx(netns, std::string(kIpt) + " -t nat -A PREROUTING" + base));
+  run_or_throw(nx(netns, std::string(kIpt) + " -t nat -A OUTPUT" + base));
+}
+
 }  // namespace
 
 HostGateway::~HostGateway() { remove(); }
@@ -34,8 +44,7 @@ void HostGateway::remove() {
     if (k == port_) {
       continue;
     }
-    run_ignore(std::string(kIp) + " route del 10.64.0." + std::to_string(k) +
-               "/32 2>/dev/null");
+    run_ignore(std::string(kIp) + " route del 10.64.0." + std::to_string(k) + "/32 2>/dev/null");
   }
   if (!host_veth_.empty()) {
     run_ignore(std::string(kIp) + " link del " + host_veth_ + " 2>/dev/null");
@@ -47,7 +56,7 @@ void HostGateway::remove() {
 }
 
 void HostGateway::install(int local_port, const std::string& netns,
-                          const std::vector<int>& expose_ports) {
+                          const std::vector<ExposeRule>& expose) {
   remove();
   port_ = local_port;
   netns_ = netns;
@@ -79,24 +88,16 @@ void HostGateway::install(int local_port, const std::string& netns,
                              " -j SNAT --to-source " + tunnel_ip));
   run_or_throw(nx(netns_, std::string(kIpt) + " -A FORWARD -j ACCEPT"));
 
-  // Allowlist only — empty means no host services on the fabric IP.
-  for (int p : expose_ports) {
-    if (p <= 0 || p > 65535) {
+  for (const ExposeRule& r : expose) {
+    if (r.port <= 0 || r.port > 65535) {
       continue;
     }
-    const std::string ps = std::to_string(p);
-    run_or_throw(nx(netns_, std::string(kIpt) + " -t nat -A PREROUTING -d " + tunnel_ip +
-                               " -p tcp --dport " + ps + " -j DNAT --to-destination " + host_addr +
-                               ":" + ps));
-    run_or_throw(nx(netns_, std::string(kIpt) + " -t nat -A PREROUTING -d " + tunnel_ip +
-                               " -p udp --dport " + ps + " -j DNAT --to-destination " + host_addr +
-                               ":" + ps));
-    run_or_throw(nx(netns_, std::string(kIpt) + " -t nat -A OUTPUT -d " + tunnel_ip +
-                               " -p tcp --dport " + ps + " -j DNAT --to-destination " + host_addr +
-                               ":" + ps));
-    run_or_throw(nx(netns_, std::string(kIpt) + " -t nat -A OUTPUT -d " + tunnel_ip +
-                               " -p udp --dport " + ps + " -j DNAT --to-destination " + host_addr +
-                               ":" + ps));
+    if (r.tcp) {
+      add_dnat(netns_, tunnel_ip, host_addr, r.port, "tcp");
+    }
+    if (r.udp) {
+      add_dnat(netns_, tunnel_ip, host_addr, r.port, "udp");
+    }
   }
 
   for (int k = 1; k <= 4; ++k) {

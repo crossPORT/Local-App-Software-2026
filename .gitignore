@@ -13,3 +13,5 @@
 *.user
 .DS_Store
 /Westcoast-0.01_release.zip
+third_party/wintun/bin/
+**/wintun.dll

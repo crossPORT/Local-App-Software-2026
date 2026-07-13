@@ -1,4 +1,6 @@
 #include "tunnel_proc.hpp"
+#include "platform/stats_paths.hpp"
+#include "tunnel_args.hpp"
 
 #include <cerrno>
 #include <csignal>
@@ -6,10 +8,13 @@
 #include <cstring>
 #include <sstream>
 #include <unistd.h>
+#include <vector>
 
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+#include "helper/protocol.hpp"
 
 namespace tunnel_tray {
 namespace {
@@ -49,10 +54,43 @@ std::string default_tunnel_bin() {
   return "rocketbox-tunnel";
 }
 
+bool TunnelProcess::child_exited(int* status_out) const {
+  if (pid_ <= 0) return true;
+  int status = 0;
+  const pid_t r = ::waitpid(static_cast<pid_t>(pid_), &status, WNOHANG);
+  if (r == static_cast<pid_t>(pid_)) {
+    pid_ = 0;
+    if (status_out) *status_out = status;
+    return true;
+  }
+  return false;
+}
+
+bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) {
+  auto stats_ok = [](int p) {
+    struct stat st {};
+    return p >= 1 && p <= 4 && ::stat(tunnel_stats_path(p).c_str(), &st) == 0;
+  };
+  if (cfg.use_netns && cfg.port >= 1) {
+    struct stat st {};
+    if (::stat(("/var/run/netns/rbns" + std::to_string(cfg.port)).c_str(), &st) == 0) return true;
+  }
+  if (stats_ok(cfg.port)) return true;
+  if (cfg.port != 0) return false;
+  for (int p = 1; p <= 4; ++p)
+    if (stats_ok(p)) return true;
+  return false;
+}
+
 bool TunnelProcess::running() const {
+  if (helper_managed_) {
+    struct stat st {};
+    return ::stat(tunnel_stats_path(port_).c_str(), &st) == 0;
+  }
   if (pid_ <= 0) return false;
+  if (child_exited(nullptr)) return false;
   if (::kill(static_cast<pid_t>(pid_), 0) == 0) return true;
-  return errno == EPERM;  // exists but not signalable (e.g. root via pkexec)
+  return errno == EPERM;
 }
 
 bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
@@ -60,17 +98,29 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
     error = "tunnel already running";
     return false;
   }
-
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
-  if (!file_executable(bin) && bin.find('/') != std::string::npos) {
-    error = "tunnel binary not found: " + bin;
+  const std::string tail = build_tunnel_arg_tail(cfg, bin);
+
+  std::string reply, herr;
+  if (tunnel_helper::send_command("START " + tail, reply, herr) && reply.rfind("OK", 0) == 0) {
+    helper_managed_ = true;
+    port_ = cfg.port;
+    for (int i = 0; i < 600; ++i) {
+      if (tunnel_ready(cfg)) return true;
+      ::usleep(100000);
+    }
+    (void)tunnel_helper::send_command("STOP", reply, herr);
+    helper_managed_ = false;
+    error = "helper started tunnel but it did not become ready";
     return false;
   }
 
   std::vector<std::string> args_store;
   args_store.push_back(bin);
-  args_store.push_back("--port");
-  args_store.push_back(std::to_string(cfg.port));
+  if (cfg.transport != "usb" || cfg.port > 0) {
+    args_store.push_back("--port");
+    args_store.push_back(std::to_string(cfg.port));
+  }
   args_store.push_back("--transport");
   args_store.push_back(cfg.transport);
   if (!cfg.iface.empty()) {
@@ -78,19 +128,17 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
     args_store.push_back(cfg.iface);
   }
   if (!cfg.use_netns) args_store.push_back("--no-netns");
-  if (!cfg.expose_ports.empty()) {
+  if (!cfg.expose.empty()) {
     std::ostringstream oss;
-    for (size_t i = 0; i < cfg.expose_ports.size(); ++i) {
+    for (size_t i = 0; i < cfg.expose.size(); ++i) {
       if (i) oss << ',';
-      oss << cfg.expose_ports[i];
+      oss << endpoint_token(cfg.expose[i]);
     }
     args_store.push_back("--expose");
     args_store.push_back(oss.str());
   }
 
-  // Elevate on Linux — TUN/netns need admin.
   const bool use_pkexec = (::geteuid() != 0) && file_executable("/usr/bin/pkexec");
-
   std::vector<char*> argv;
   std::string pkexec = "/usr/bin/pkexec";
   if (use_pkexec) argv.push_back(pkexec.data());
@@ -108,26 +156,41 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
     _exit(127);
   }
   pid_ = child;
-  return true;
+  port_ = cfg.port;
+  helper_managed_ = false;
+
+  for (int i = 0; i < 600; ++i) {
+    if (child_exited(nullptr)) {
+      error = "authorization cancelled or tunnel failed to start";
+      return false;
+    }
+    if (tunnel_ready(cfg)) return true;
+    ::usleep(100000);
+  }
+  error = "authorization cancelled or tunnel failed to start";
+  stop();
+  return false;
 }
 
 void TunnelProcess::stop() {
+  if (helper_managed_) {
+    std::string reply, herr;
+    (void)tunnel_helper::send_command("STOP", reply, herr);
+    helper_managed_ = false;
+    pid_ = 0;
+    return;
+  }
   if (pid_ <= 0) return;
   const pid_t p = static_cast<pid_t>(pid_);
   if (::kill(p, SIGTERM) != 0 && errno == EPERM && file_executable("/usr/bin/pkexec")) {
-    const std::string cmd = "/usr/bin/pkexec kill " + std::to_string(p);
-    (void)::system(cmd.c_str());
+    (void)::system(("/usr/bin/pkexec kill " + std::to_string(p)).c_str());
   }
   for (int i = 0; i < 50; ++i) {
-    int status = 0;
-    const pid_t r = ::waitpid(p, &status, WNOHANG);
-    if (r == p || (r < 0 && errno == ECHILD)) break;
+    if (::waitpid(p, nullptr, WNOHANG) == p) break;
     if (::kill(p, 0) != 0 && errno == ESRCH) break;
     ::usleep(100000);
   }
-  if (::kill(p, 0) == 0 || errno == EPERM) {
-    (void)::kill(p, SIGKILL);
-  }
+  if (::kill(p, 0) == 0 || errno == EPERM) (void)::kill(p, SIGKILL);
   (void)::waitpid(p, nullptr, WNOHANG);
   pid_ = 0;
 }

@@ -218,3 +218,6 @@ ctest --test-dir build -L hardware --output-on-failure
 | [AGENTS.md](../AGENTS.md) | Contributor conventions |
 | [simulated-hardware/README.md](../simulated-hardware/README.md) | Sim ports and Docker |
 | [rocketbox-tunnel/README.md](../rocketbox-tunnel/README.md) | Tunnel options |
+| [docs/tunnel/linux.md](tunnel/linux.md) | Linux tunnel operator guide |
+| [docs/tunnel/macos.md](tunnel/macos.md) | macOS tunnel operator guide |
+| [docs/tunnel/windows.md](tunnel/windows.md) | Windows tunnel operator guide |

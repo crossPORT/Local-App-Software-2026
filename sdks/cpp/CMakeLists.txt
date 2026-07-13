@@ -6,6 +6,7 @@ find_package(Threads REQUIRED)
 set(ROCKETBOX_SDK_SOURCES
     src/sdk.cpp
     src/sdk_defaults.cpp
+    src/port_probe.cpp
 )
 
 if (ROCKETBOX_BUILD_SIM)
@@ -29,6 +30,8 @@ target_include_directories(rocketbox_sdk
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/session
+        ${CMAKE_CURRENT_SOURCE_DIR}/core/include
 )
 
 target_link_libraries(rocketbox_sdk

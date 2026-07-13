@@ -1,42 +1,43 @@
 #pragma once
 
+#include "listen_ports.hpp"
 #include "tunnel_proc.hpp"
 
 #include <wx/taskbar.h>
 #include <wx/timer.h>
 #include <wx/wx.h>
 
+#include <vector>
+
 class TunnelTrayIcon : public wxTaskBarIcon {
 public:
   TunnelTrayIcon();
 
 protected:
-  wxMenu* CreatePopupMenu() override;
+  wxMenu* CreatePopupMenu() override { return nullptr; }
 
 private:
-  void on_start(wxCommandEvent&);
-  void on_stop(wxCommandEvent&);
-  void on_quit(wxCommandEvent&);
-  void on_port(wxCommandEvent&);
-  void on_transport(wxCommandEvent&);
+  void on_left_down(wxTaskBarIconEvent&);
   void on_tick(wxTimerEvent&);
+  void on_pulse(wxTimerEvent&);
   void refresh_icon();
+  void reload_icons();
+  void show_panel();
+  void persist_settings(bool enabled);
+  bool set_enabled(bool want_on);
+  void apply_expose();
   tunnel_tray::TunnelConfig config_from_ui() const;
 
   tunnel_tray::TunnelProcess proc_;
-  wxTimer timer_;
+  wxTimer tick_;
+  wxTimer pulse_;
+  wxIcon icon_normal_;
+  wxIcon icon_dim_;
+  bool pulse_hi_ = true;
+  bool traffic_ = false;
+  bool dark_theme_ = false;
+  bool panel_open_ = false;
   int port_ = 1;
   bool usb_ = true;
-};
-
-enum {
-  ID_START = 10001,
-  ID_STOP,
-  ID_QUIT,
-  ID_PORT_1,
-  ID_PORT_2,
-  ID_PORT_3,
-  ID_PORT_4,
-  ID_TRANS_USB,
-  ID_TRANS_SIM,
+  std::vector<tunnel_tray::Endpoint> expose_;
 };

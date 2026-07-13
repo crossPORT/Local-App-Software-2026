@@ -13,6 +13,16 @@ interface so ordinary TCP/UDP applications can use the cable as a private LAN.
 One live circuit at a time (dial-on-demand). Host services are **not**
 published on the RocketBox IP unless listed with `--expose`.
 
+## Operator guides (per OS)
+
+| OS | Guide |
+|----|--------|
+| Linux | [docs/tunnel/linux.md](../docs/tunnel/linux.md) |
+| macOS | [docs/tunnel/macos.md](../docs/tunnel/macos.md) |
+| Windows | [docs/tunnel/windows.md](../docs/tunnel/windows.md) |
+
+`--port N` is **silkscreen Port 1–4** (USB serial). App and Tunnel cannot share one cable.
+
 ## Requirements
 
 - Linux
@@ -53,7 +63,7 @@ sudo ./build/rocketbox-tunnel/rocketbox-tunnel --transport sim --port 3
 |--------|-------------|
 | `--port N` | Port 1–4 → `10.64.0.N` |
 | `--transport T` | `usb` (default) or `sim` |
-| `--expose P[,P…]` | Publish these host TCP/UDP ports on `10.64.0.N` (default: none) |
+| `--expose SPEC` | Publish host ports on `10.64.0.N`: `445` (TCP+UDP), `tcp:22`, `udp:53` (default: none) |
 | `--iface NAME` | TUN name (default `rbN`) |
 | `--no-netns` | Keep TUN in the host netns (same-host demos may short-circuit) |
 | `--ping M` | ICMP to peer port M over RocketBox, then exit |
@@ -67,7 +77,21 @@ cmake --build build --target rocketbox-tunnel-tray
 ./build/apps/tunnel-tray/rocketbox-tunnel-tray
 ```
 
-Tray menu: port, USB/sim transport, Start/Stop. Start uses `pkexec` when not root.
+Tray menu:
+
+Left-click the tray icon to open a modal control panel:
+
+- **Status** — On/Off
+- **Enable tunnel** — start/stop (`pkexec` when not root)
+- **Port** / **Transport** — locked while running
+- **Expose services** — checklist with Select all / Clear all / Apply expose
+  (persists in `~/.config/rocketbox/tunnel-tray.conf`; Apply restarts if running)
+- **Close** / **Quit**
+
+The RocketBox tray icon is dim when stopped, solid when idle, and pulses when traffic
+crosses ~1 KB/s. Hover the icon for ↑ upstream / ↓ downstream rates (from
+`/run/rocketbox/tunnel-N.stats`).
+
 Override the helper path with `ROCKETBOX_TUNNEL_PATH`.
 
 ## Notes

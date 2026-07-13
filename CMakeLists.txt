@@ -33,9 +33,7 @@ if(BUILD_WX_GUI)
     find_package(wxWidgets 3.2 QUIET COMPONENTS core base)
     if(wxWidgets_FOUND)
         add_subdirectory(apps/wx)
-        if(TARGET rocketbox-tunnel)
-            add_subdirectory(apps/tunnel-tray)
-        endif()
+        add_subdirectory(apps/tunnel-tray)
     else()
         message(WARNING
             "wxWidgets 3.2+ not found — desktop GUI not built.\n"

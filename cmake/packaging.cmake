@@ -1,13 +1,25 @@
-# CPack configuration for RocketBox wx desktop app.
-# Included from apps/wx/CMakeLists.txt when the GUI target exists.
+# CPack for RocketBox App + optional Tunnel (+ Tray). Extends existing generators.
 
 set(CPACK_PACKAGE_NAME "RocketBox")
 set(CPACK_PACKAGE_VENDOR "crossPORT")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "RocketBox App - file transfer for RocketBox hardware")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+  "RocketBox App and optional Tunnel. App and Tunnel cannot share one USB cable.")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "RocketBox")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_CONTACT "support@crossport.io")
+
+set(CPACK_COMPONENTS_ALL RocketBoxApp RocketBoxTunnel RocketBoxTunnelTray)
+set(CPACK_COMPONENT_ROCKETBOXAPP_DISPLAY_NAME "RocketBox App")
+set(CPACK_COMPONENT_ROCKETBOXAPP_DESCRIPTION "File transfer for RocketBox hardware")
+set(CPACK_COMPONENT_ROCKETBOXTUNNEL_DISPLAY_NAME "RocketBox Tunnel")
+set(CPACK_COMPONENT_ROCKETBOXTUNNEL_DESCRIPTION
+  "IP tunnel over USB. Cannot use the same USB cable as RocketBox App at the same time.")
+set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DISPLAY_NAME "Tunnel Tray")
+set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DESCRIPTION
+  "System tray control for Tunnel (uncheck for server-only). Autostarts at login.")
+set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DEPENDS RocketBoxTunnel)
+set(CPACK_COMPONENT_ROCKETBOXAPP_REQUIRED ON)
 
 if(WIN32)
     set(CPACK_GENERATOR "NSIS")
@@ -17,13 +29,14 @@ if(WIN32)
     set(_rb_nsis_icon "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-installer.ico")
     set(CPACK_NSIS_MUI_ICON "${_rb_nsis_icon}")
     set(CPACK_NSIS_MUI_UNIICON "${_rb_nsis_icon}")
-    set(CPACK_NSIS_DISPLAY_NAME "RocketBox App")
-    set(CPACK_NSIS_PACKAGE_NAME "RocketBox App")
+    set(CPACK_NSIS_DISPLAY_NAME "RocketBox")
+    set(CPACK_NSIS_PACKAGE_NAME "RocketBox")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH OFF)
+    set(CPACK_NSIS_COMPONENT_INSTALL ON)
 elseif(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
-    set(CPACK_DMG_VOLUME_NAME "RocketBox App")
+    set(CPACK_DMG_VOLUME_NAME "RocketBox")
     set(CPACK_DMG_FORMAT "UDZO")
 else()
     set(CPACK_GENERATOR "DEB")
@@ -32,6 +45,7 @@ else()
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libwxgtk3.2-1t64 | libwxgtk3.2-1, libusb-1.0-0")
     set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+    set(CPACK_DEB_COMPONENT_INSTALL ON)
 endif()
 
 include(CPack)

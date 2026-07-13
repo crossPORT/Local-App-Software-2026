@@ -18,9 +18,9 @@ public:
 
   void open(const std::string& iface_name);
   void configure_lan(const std::string& local_ip);
-  /** Netns + host gateway. expose_ports = TCP/UDP allowlist published on fabric IP. */
+  /** Netns + host gateway. expose = allowlist published on fabric IP. */
   void isolate_in_netns(const std::string& netns, const std::string& local_ip, int local_port,
-                        const std::vector<int>& expose_ports);
+                        const std::vector<ExposeRule>& expose);
   void close();
   void interrupt();
 
@@ -33,6 +33,7 @@ public:
 
 private:
   int fd_ = -1;
+  void* win_ = nullptr;  // WinTunCtx* on Windows
   std::string name_;
   std::string netns_;
   std::unique_ptr<HostGateway> gateway_;

@@ -46,7 +46,9 @@ git clone https://github.com/microsoft/vcpkg.git
 .\vcpkg\vcpkg install
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build build --config Release --target rocketbox
+cmake --build build --config Release --parallel `
+  --target rocketbox rocketbox-tunnel rocketbox-tunnel-helper rocketbox-tunnel-tray
+.\scripts\fetch-wintun.ps1 -DestDir build\wintun
 ```
 
 ### Package locally (NSIS)
@@ -54,7 +56,9 @@ cmake --build build --config Release --target rocketbox
 Install [NSIS](https://nsis.sourceforge.io/), then:
 
 ```powershell
+.\scripts\fetch-wintun.ps1 -DestDir build\wintun
 cmake --install build --prefix build/install
+Copy-Item build\wintun\wintun.dll build\install\bin\
 cd build
 cpack -G NSIS -C Release
 ```
