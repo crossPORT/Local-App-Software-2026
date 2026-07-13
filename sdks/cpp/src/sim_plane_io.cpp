@@ -2,17 +2,16 @@
 
 #include <cstring>
 #include <stdexcept>
-#include <unistd.h>
 
 namespace rocketbox {
 namespace detail {
 
 namespace {
 
-bool read_all(int fd, uint8_t* buf, size_t len, const std::atomic<bool>& stop) {
+bool read_all(rb_sock_t fd, uint8_t* buf, size_t len, const std::atomic<bool>& stop) {
     size_t total = 0;
     while (total < len && !stop) {
-        ssize_t n = ::read(fd, buf + total, len - total);
+        const int n = rb_sock_read(fd, buf + total, len - total);
         if (n <= 0) {
             return false;
         }
@@ -24,10 +23,10 @@ bool read_all(int fd, uint8_t* buf, size_t len, const std::atomic<bool>& stop) {
 }  // namespace
 
 void SimPlane::write_raw(const std::vector<uint8_t>& packet) {
-    if (fd_ < 0) {
+    if (fd_ == RB_SOCK_INVALID) {
         throw std::runtime_error("sim disconnected");
     }
-    if (::write(fd_, packet.data(), packet.size()) <= 0) {
+    if (rb_sock_write(fd_, packet.data(), packet.size()) <= 0) {
         throw std::runtime_error("sim write failed");
     }
 }
@@ -70,9 +69,9 @@ void SimPlane::push_inbound(std::vector<uint8_t> data) {
 }
 
 void SimPlane::listen_loop() {
-    while (!stop_ && fd_ >= 0) {
+    while (!stop_ && fd_ != RB_SOCK_INVALID) {
         uint8_t ep = 0;
-        if (::read(fd_, &ep, 1) <= 0) {
+        if (rb_sock_read(fd_, &ep, 1) <= 0) {
             break;
         }
         if (ep == 0x02) {

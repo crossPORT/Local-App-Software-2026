@@ -1,10 +1,5 @@
 #include "sim_plane.hpp"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <chrono>
 #include <stdexcept>
 
@@ -23,17 +18,8 @@ void SimPlane::connect() {
     if (connected_) {
         return;
     }
-    fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd_ < 0) {
-        throw std::runtime_error("sim socket failed");
-    }
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(1772);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    if (::connect(fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(fd_);
-        fd_ = -1;
+    fd_ = rb_connect_loopback(1772);
+    if (fd_ == RB_SOCK_INVALID) {
         throw std::runtime_error("could not connect to simulated-hardware :1772");
     }
     connected_ = true;
@@ -43,10 +29,9 @@ void SimPlane::connect() {
 
 void SimPlane::disconnect() {
     stop_ = true;
-    if (fd_ >= 0) {
-        ::shutdown(fd_, SHUT_RDWR);
-        ::close(fd_);
-        fd_ = -1;
+    if (fd_ != RB_SOCK_INVALID) {
+        rb_sock_shutdown(fd_);
+        rb_sock_close(fd_);
     }
     if (thread_.joinable()) {
         thread_.join();

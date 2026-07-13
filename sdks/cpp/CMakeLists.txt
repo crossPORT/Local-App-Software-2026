@@ -13,6 +13,7 @@ if (ROCKETBOX_BUILD_SIM)
     list(APPEND ROCKETBOX_SDK_SOURCES
         src/sim_plane.cpp
         src/sim_plane_io.cpp
+        src/sim_net.cpp
     )
 endif()
 
@@ -42,6 +43,9 @@ target_link_libraries(rocketbox_sdk
 
 if (ROCKETBOX_BUILD_SIM)
     target_compile_definitions(rocketbox_sdk PUBLIC ROCKETBOX_SIM_SUPPORT=1)
+    if (WIN32)
+        target_link_libraries(rocketbox_sdk PRIVATE ws2_32)
+    endif()
 endif()
 
 if (ROCKETBOX_BUILD_USB)

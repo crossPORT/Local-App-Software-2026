@@ -2,6 +2,7 @@
 
 #include "rocketbox/sdk.h"
 #include "rocketbox_frame.hpp"
+#include "sim_net.hpp"
 
 #include <atomic>
 #include <functional>
@@ -54,7 +55,7 @@ private:
     void push_inbound(std::vector<uint8_t> data);
 
     int display_port_;
-    int fd_ = -1;
+    rb_sock_t fd_ = RB_SOCK_INVALID;
     int switch_dest_ = 0;
     std::atomic<bool> connected_{false};
     std::atomic<bool> stop_{false};
