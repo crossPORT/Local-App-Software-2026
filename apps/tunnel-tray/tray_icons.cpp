@@ -2,6 +2,7 @@
 
 #include "tray_theme.hpp"
 
+#include <wx/bitmap.h>
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
 
