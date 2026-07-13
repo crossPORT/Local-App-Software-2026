@@ -12,6 +12,7 @@
 class TunnelTrayIcon : public wxTaskBarIcon {
 public:
   TunnelTrayIcon();
+  void show_panel();
 
 protected:
   wxMenu* CreatePopupMenu() override { return nullptr; }
@@ -22,7 +23,6 @@ private:
   void on_pulse(wxTimerEvent&);
   void refresh_icon();
   void reload_icons();
-  void show_panel();
   void persist_settings(bool enabled);
   bool set_enabled(bool want_on);
   void apply_expose();

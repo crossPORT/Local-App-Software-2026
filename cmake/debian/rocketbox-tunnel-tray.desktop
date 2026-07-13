@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=RocketBox Tunnel
-Comment=RocketBox USB IP tunnel tray
+Name=RocketBox Tunnel Tray
+Comment=Open tunnel controls (icon also stays in the system tray)
 Exec=rocketbox-tunnel-tray
 Icon=rocketbox
 Terminal=false
 Categories=Network;System;Utility;
-Keywords=RocketBox;tunnel;USB;
+Keywords=RocketBox;tunnel;USB;tray;
 StartupNotify=false
 X-GNOME-Autostart-enabled=true
