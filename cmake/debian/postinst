@@ -1,5 +1,5 @@
 #!/bin/sh
-# Optional udev rule install after deb package install.
+# Optional udev + autostart install after deb package install.
 set -e
 for RULE in 99-rocketbox-usb.rules 99-sls-fabric-usb.rules; do
   RULE_SRC="/usr/share/rocketbox/$RULE"
@@ -10,6 +10,14 @@ for RULE in 99-rocketbox-usb.rules 99-sls-fabric-usb.rules; do
 done
 udevadm control --reload-rules 2>/dev/null || true
 udevadm trigger 2>/dev/null || true
+
+AUTO_SRC="/usr/share/rocketbox/rocketbox-tunnel-tray-autostart.desktop"
+AUTO_DST="/etc/xdg/autostart/rocketbox-tunnel-tray.desktop"
+if [ -f "$AUTO_SRC" ]; then
+  mkdir -p /etc/xdg/autostart
+  cp "$AUTO_SRC" "$AUTO_DST"
+fi
+
 # Refresh desktop/icon caches when present (tray/app menu + Icon=rocketbox).
 update-desktop-database /usr/share/applications 2>/dev/null || true
 gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true

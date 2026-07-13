@@ -72,10 +72,11 @@ if(WIN32)
           COMPONENT RocketBoxTunnelTray)
 endif()
 if(UNIX AND NOT APPLE)
-  # Absolute /etc so DEB does not land under /usr/etc (prefix is /usr).
+  # Ship autostart under share/; postinst copies to /etc/xdg/autostart (same as udev).
+  # Never DESTINATION /etc — cmake --install --prefix staging cannot write there.
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray-autostart.desktop
-          DESTINATION /etc/xdg/autostart
-          RENAME rocketbox-tunnel-tray.desktop
+          DESTINATION share/rocketbox
+          RENAME rocketbox-tunnel-tray-autostart.desktop
           COMPONENT RocketBoxTunnelTray)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/rocketbox-tunnel-tray.desktop
           DESTINATION share/applications
