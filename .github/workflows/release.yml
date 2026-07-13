@@ -191,8 +191,11 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ env.RELEASE_TAG }}"
-          $version = $tag -replace '^v',''
-          if ([string]::IsNullOrWhiteSpace($version)) { $version = $tag }
+          $raw = $tag -replace '^v',''
+          if ([string]::IsNullOrWhiteSpace($raw)) { $raw = $tag }
+          # CMake project(VERSION) needs numeric X.Y.Z (strip -tunnel etc.).
+          if ($raw -match '^(\d+(?:\.\d+){0,2})') { $version = $Matches[1] }
+          else { $version = "0.1.0" }
           "ROCKETBOX_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "ROCKETBOX_RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Using ROCKETBOX_RELEASE_TAG=$tag ROCKETBOX_VERSION=$version"
