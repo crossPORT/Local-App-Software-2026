@@ -833,10 +833,10 @@ TransferResult receive_file_core(libusb_context* ctx,
             break;
         }
         if (std::memcmp(hdr.magic, usb_protocol::kHeaderMagic, 8) != 0) {
-            result.error_message = "Bad magic bytes in header";
-            out_file.close();
-            close_device(handle);
-            return result;
+            // Endpoint may be mid-frame after a timeout/cancel — flush and retry.
+            USB_DIAG("[USB-DIAG] bad magic on header read; clear_halt IN and resync\n");
+            (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
+            continue;
         }
 
         if (expected_frame_kind == usb_protocol::kFrameKindPayload

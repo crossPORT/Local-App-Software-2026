@@ -103,12 +103,8 @@ libusb_device_handle* open_device_by_index(libusb_context* ctx,
         return nullptr;
     }
 
-    int ch_out = libusb_clear_halt(handle, usb_protocol::kEndpointDataOut);
-    int ch_in = libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
-    USB_DIAG("[USB-DIAG] clear_halt port=%d EP_OUT=%d (%s) EP_IN=%d (%s)\n",
-             index, ch_out, libusb_strerror(static_cast<libusb_error>(ch_out)),
-             ch_in, libusb_strerror(static_cast<libusb_error>(ch_in)));
-
+    // Do not clear_halt on every open — tunnel listen/send reopen often; clearing
+    // IN/OUT mid-stream causes "Bad magic bytes" desync on the peer.
     return handle;
 }
 
