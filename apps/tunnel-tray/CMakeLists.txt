@@ -25,6 +25,7 @@ add_executable(rocketbox-tunnel-tray
   listen_ports.cpp
   tray_settings.cpp
   tray_panel.cpp
+  tray_panel_build.cpp
   tray_icons.cpp
   tray_theme.cpp
   tunnel_rates.cpp
