@@ -18,7 +18,7 @@ PeerConfig make_peer(const std::string& name, const std::string& team,
 
 }  // namespace
 
-FABRIC_TEST(roster_seed_and_find) {
+RB_TEST(roster_seed_and_find) {
     PeerRoster roster;
     roster.seed_from_config({
         make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1),
@@ -44,13 +44,13 @@ FABRIC_TEST(roster_seed_and_find) {
     CHECK(!roster.find_by_name("Nobody").has_value());
 }
 
-FABRIC_TEST(roster_seed_skips_unnamed) {
+RB_TEST(roster_seed_skips_unnamed) {
     PeerRoster roster;
     roster.seed_from_config({make_peer("", "X", ReceiveStatus::Open, 2)});
     CHECK_EQ(roster.peers().size(), static_cast<size_t>(0));
 }
 
-FABRIC_TEST(roster_touch_updates_existing) {
+RB_TEST(roster_touch_updates_existing) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1)});
@@ -65,7 +65,7 @@ FABRIC_TEST(roster_touch_updates_existing) {
     }
 }
 
-FABRIC_TEST(roster_touch_adds_new) {
+RB_TEST(roster_touch_adds_new) {
     PeerRoster roster;
     roster.touch_peer("Walk-Up", "Guest", ReceiveStatus::Open, 3);
     auto p = roster.find_by_port(3);
@@ -75,7 +75,7 @@ FABRIC_TEST(roster_touch_adds_new) {
     }
 }
 
-FABRIC_TEST(roster_touch_same_port_different_name_updates_entry) {
+RB_TEST(roster_touch_same_port_different_name_updates_entry) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("CAD-Workstation", "CAD", ReceiveStatus::AskFirst, 0)});
@@ -95,7 +95,7 @@ FABRIC_TEST(roster_touch_same_port_different_name_updates_entry) {
     CHECK(roster.find_by_name("Alice").has_value());
 }
 
-FABRIC_TEST(roster_touch_updates_port_on_name_match) {
+RB_TEST(roster_touch_updates_port_on_name_match) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1)});
@@ -109,7 +109,7 @@ FABRIC_TEST(roster_touch_updates_port_on_name_match) {
     }
 }
 
-FABRIC_TEST(roster_set_online) {
+RB_TEST(roster_set_online) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1)});
@@ -121,7 +121,7 @@ FABRIC_TEST(roster_set_online) {
     }
 }
 
-FABRIC_TEST(roster_touch_presence_marks_online) {
+RB_TEST(roster_touch_presence_marks_online) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("CAD-Workstation", "CAD", ReceiveStatus::AskFirst, 0)});
@@ -133,7 +133,7 @@ FABRIC_TEST(roster_touch_presence_marks_online) {
     }
 }
 
-FABRIC_TEST(roster_recent_peer_stays_online_within_window) {
+RB_TEST(roster_recent_peer_stays_online_within_window) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1)});
@@ -147,7 +147,7 @@ FABRIC_TEST(roster_recent_peer_stays_online_within_window) {
     }
 }
 
-FABRIC_TEST(roster_set_all_peers_offline_clears_presence) {
+RB_TEST(roster_set_all_peers_offline_clears_presence) {
     PeerRoster roster;
     roster.seed_from_config({
         make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1),
@@ -165,7 +165,7 @@ FABRIC_TEST(roster_set_all_peers_offline_clears_presence) {
     }
 }
 
-FABRIC_TEST(roster_duplicate_names_with_instances) {
+RB_TEST(roster_duplicate_names_with_instances) {
     PeerRoster roster;
     roster.touch_peer("Sally", "Creative", ReceiveStatus::Open, 1, "phone");
     roster.touch_peer("Sally", "CAD", ReceiveStatus::AskFirst, 0, "laptop");
@@ -174,7 +174,7 @@ FABRIC_TEST(roster_duplicate_names_with_instances) {
     CHECK(roster.find_by_id("i:laptop").has_value());
 }
 
-FABRIC_TEST(roster_mark_stale_peers_offline) {
+RB_TEST(roster_mark_stale_peers_offline) {
     PeerRoster roster;
     roster.seed_from_config(
         {make_peer("Creative-Desk", "Creative", ReceiveStatus::Open, 1)});

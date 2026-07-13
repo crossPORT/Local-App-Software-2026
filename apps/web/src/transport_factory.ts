@@ -5,25 +5,25 @@ import {
   hasSavedSerial,
   type RocketBoxTransport,
 } from '@rocketbox/sdk';
-import { fabricPortFromUrl, fabricSimEnabled } from './sim_flags';
+import { portFromUrl, simEnabled } from './sim_flags';
 
 /** PWA captures ?simulate= / ?port= and asks the SDK for a transport. */
 export function createTransportSession(): RocketBoxTransport {
   return createRocketBoxTransport({
-    simulate: fabricSimEnabled(),
-    port: fabricPortFromUrl(),
+    simulate: simEnabled(),
+    port: portFromUrl(),
   });
 }
 
 export async function countTransportDevices(): Promise<number> {
-  if (fabricSimEnabled()) {
+  if (simEnabled()) {
     return 4;
   }
   return countDevices();
 }
 
 export function transportHasSavedSerial(): boolean {
-  if (fabricSimEnabled()) {
+  if (simEnabled()) {
     return false;
   }
   return hasSavedSerial();

@@ -1,6 +1,6 @@
 import { getEventLogLevel, readEventLogLines, subscribeEventLog } from './event_log';
 
-const SHIP_ENDPOINT = '/__booth/log';
+const SHIP_ENDPOINT = '/__rocketbox/log';
 const INTERVAL_MS = 2000;
 
 /**
@@ -37,7 +37,7 @@ let started = false;
 
 /**
  * Start periodic shipping of booth log lines to the dev server's
- * `/__booth/log` endpoint so an operator/agent can watch all devices centrally.
+ * `/__rocketbox/log` endpoint so an operator/agent can watch all devices centrally.
  * Idempotent and safe to call in any environment (no-ops without window/fetch).
  */
 export function startEventLogShipper(): void {

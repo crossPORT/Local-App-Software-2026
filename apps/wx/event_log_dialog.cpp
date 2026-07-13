@@ -1,7 +1,7 @@
 #include "event_log_dialog.h"
 
-#include "booth_log.h"
-#include "fabric_port.h"
+#include "event_log.h"
+#include "port_util.h"
 
 #include <sstream>
 #include <wx/clipbrd.h>
@@ -123,10 +123,10 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
 }
 
 void EventLogDialog::ReloadLog() {
-    const std::string path = booth_log_path();
+    const std::string path = event_log_path();
     path_label_->SetLabel("Log file: " + path);
 
-    std::string text = read_booth_log_tail(500);
+    std::string text = read_event_log_tail(500);
     if (port_filter_->GetValue()) {
         text = filter_log_for_port(text, port_index_);
     }
@@ -151,8 +151,8 @@ void EventLogDialog::OnClear(wxCommandEvent&) {
                                     wxYES_NO | wxICON_QUESTION,
                                     this);
     if (answer == wxYES) {
-        booth_log_clear();
-        booth_log(port_index_, "log_cleared", "from Event Log dialog");
+        event_log_clear();
+        event_log(port_index_, "log_cleared", "from Event Log dialog");
         ReloadLog();
     }
 }

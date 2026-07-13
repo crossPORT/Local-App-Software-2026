@@ -11,7 +11,7 @@ namespace {
 
 // Writes a config to a unique temp path and returns it.
 std::string write_conf(const std::string& body) {
-    char tmpl[] = "/tmp/slsfabric-test-conf-XXXXXX";
+    char tmpl[] = "/tmp/rocketbox-test-conf-XXXXXX";
     const int fd = mkstemp(tmpl);
     if (fd < 0) {
         return {};
@@ -25,7 +25,7 @@ std::string write_conf(const std::string& body) {
 
 }  // namespace
 
-FABRIC_TEST(identity_basic_fields) {
+RB_TEST(identity_basic_fields) {
     const std::string path = write_conf(
         "display_name=CAD-Workstation\n"
         "team=CAD\n"
@@ -43,24 +43,24 @@ FABRIC_TEST(identity_basic_fields) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(identity_tuning_keys_parsed) {
+RB_TEST(identity_tuning_keys_parsed) {
     const std::string path = write_conf(
         "display_name=Node\n"
         "transfer_timeout_ms=5000\n"
         "usb_inflight_mb=64\n"
-        "booth_display_mib_s=7168\n"
-        "booth_display_jitter_pct=3\n");
+        "display_rate_mib_s=7168\n"
+        "display_rate_jitter_pct=3\n");
 
     IdentityProfile p;
     CHECK(load_identity_profile(0, path, p));
     CHECK_EQ(p.transfer_timeout_ms, 5000);
     CHECK_EQ(p.usb_inflight_mb, 64);
-    CHECK(p.booth_display_mib_s > 7167.0 && p.booth_display_mib_s < 7169.0);
-    CHECK(p.booth_display_jitter_pct > 2.9 && p.booth_display_jitter_pct < 3.1);
+    CHECK(p.display_rate_mib_s > 7167.0 && p.display_rate_mib_s < 7169.0);
+    CHECK(p.display_rate_jitter_pct > 2.9 && p.display_rate_jitter_pct < 3.1);
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(identity_bad_tuning_values_fall_back_to_zero) {
+RB_TEST(identity_bad_tuning_values_fall_back_to_zero) {
     const std::string path = write_conf(
         "display_name=Node\n"
         "transfer_timeout_ms=notanumber\n"
@@ -73,7 +73,7 @@ FABRIC_TEST(identity_bad_tuning_values_fall_back_to_zero) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(identity_port_section_overrides_global) {
+RB_TEST(identity_port_section_overrides_global) {
     const std::string path = write_conf(
         "display_name=Global\n"
         "transfer_timeout_ms=1000\n"
@@ -93,7 +93,7 @@ FABRIC_TEST(identity_port_section_overrides_global) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(identity_peers_loaded) {
+RB_TEST(identity_peers_loaded) {
     const std::string path = write_conf(
         "display_name=CAD-Workstation\n"
         "team=CAD\n"
@@ -115,7 +115,7 @@ FABRIC_TEST(identity_peers_loaded) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(identity_default_receive_folder) {
+RB_TEST(identity_default_receive_folder) {
     const std::string path = write_conf("display_name=NoFolder\n");
     IdentityProfile p;
     CHECK(load_identity_profile(0, path, p));
@@ -123,7 +123,7 @@ FABRIC_TEST(identity_default_receive_folder) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(receive_status_string_round_trip) {
+RB_TEST(receive_status_string_round_trip) {
     CHECK(receive_status_from_string("open") == ReceiveStatus::Open);
     CHECK(receive_status_from_string("ask_first") == ReceiveStatus::AskFirst);
     CHECK(receive_status_from_string("busy") == ReceiveStatus::Busy);

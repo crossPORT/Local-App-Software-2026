@@ -9,11 +9,11 @@ export interface RosterSlot {
 /** Three fixed remote-leg slots; missing peers are null (grey in UI). */
 export function rosterSlots(
   peers: PeerEntry[],
-  fabricConnected: boolean,
+  usbConnected: boolean,
   _self: Pick<IdentityProfile, 'display_name'>,
   localLeg: number,
 ): RosterSlot[] {
-  if (!fabricConnected || localLeg < 0) {
+  if (!usbConnected || localLeg < 0) {
     return [];
   }
   return remotePortIndexes(localLeg).map((leg) => {

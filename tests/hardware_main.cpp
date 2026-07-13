@@ -16,15 +16,15 @@ int main(int argc, char** argv) {
         return kSkipExitCode;
     }
 
-    const int devices = count_fabric_devices(g_hw_ctx);
+    const int devices = count_rocketbox_devices(g_hw_ctx);
     if (devices < 2) {
-        std::cerr << "SKIP: hardware tests need 2 fabric devices (found "
+        std::cerr << "SKIP: hardware tests need 2 RocketBox devices (found "
                   << devices << "). Plug in both USB cables.\n";
         libusb_exit(g_hw_ctx);
         return kSkipExitCode;
     }
 
-    const int rc = fabric_test::run_all(argc, argv);
+    const int rc = rb_test::run_all(argc, argv);
     libusb_exit(g_hw_ctx);
     return rc;
 }

@@ -17,10 +17,10 @@ std::string read_file(const std::string& path) {
 
 }  // namespace
 
-FABRIC_TEST(integration_announce_peer_visible) {
+RB_TEST(integration_announce_peer_visible) {
     integration::SimFabricScope sim;
-    const std::string alice_dir = integration::make_temp_dir("slsfabric-alice-");
-    const std::string bob_dir = integration::make_temp_dir("slsfabric-bob-");
+    const std::string alice_dir = integration::make_temp_dir("rocketbox-alice-");
+    const std::string bob_dir = integration::make_temp_dir("rocketbox-bob-");
     CHECK(!alice_dir.empty());
     CHECK(!bob_dir.empty());
 
@@ -38,10 +38,10 @@ FABRIC_TEST(integration_announce_peer_visible) {
     bob.stop();
 }
 
-FABRIC_TEST(integration_handshake_open_auto_accept) {
+RB_TEST(integration_handshake_open_auto_accept) {
     integration::SimFabricScope sim;
-    const std::string alice_dir = integration::make_temp_dir("slsfabric-alice-");
-    const std::string bob_dir = integration::make_temp_dir("slsfabric-bob-");
+    const std::string alice_dir = integration::make_temp_dir("rocketbox-alice-");
+    const std::string bob_dir = integration::make_temp_dir("rocketbox-bob-");
     CHECK(!alice_dir.empty());
     CHECK(!bob_dir.empty());
 
@@ -71,10 +71,10 @@ FABRIC_TEST(integration_handshake_open_auto_accept) {
     std::remove(src.c_str());
 }
 
-FABRIC_TEST(integration_handshake_wx_sender_alice_to_bob) {
+RB_TEST(integration_handshake_wx_sender_alice_to_bob) {
     integration::SimFabricScope sim;
-    const std::string alice_dir = integration::make_temp_dir("slsfabric-alice-");
-    const std::string bob_dir = integration::make_temp_dir("slsfabric-bob-");
+    const std::string alice_dir = integration::make_temp_dir("rocketbox-alice-");
+    const std::string bob_dir = integration::make_temp_dir("rocketbox-bob-");
     CHECK(!alice_dir.empty());
     CHECK(!bob_dir.empty());
 
@@ -104,10 +104,10 @@ FABRIC_TEST(integration_handshake_wx_sender_alice_to_bob) {
     std::remove(src.c_str());
 }
 
-FABRIC_TEST(integration_handshake_bidirectional) {
+RB_TEST(integration_handshake_bidirectional) {
     integration::SimFabricScope sim;
-    const std::string alice_dir = integration::make_temp_dir("slsfabric-alice-");
-    const std::string bob_dir = integration::make_temp_dir("slsfabric-bob-");
+    const std::string alice_dir = integration::make_temp_dir("rocketbox-alice-");
+    const std::string bob_dir = integration::make_temp_dir("rocketbox-bob-");
     CHECK(!alice_dir.empty());
     CHECK(!bob_dir.empty());
 
@@ -152,10 +152,10 @@ FABRIC_TEST(integration_handshake_bidirectional) {
     std::remove(src_b.c_str());
 }
 
-FABRIC_TEST(integration_handshake_decline) {
+RB_TEST(integration_handshake_decline) {
     integration::SimFabricScope sim;
-    const std::string alice_dir = integration::make_temp_dir("slsfabric-alice-");
-    const std::string bob_dir = integration::make_temp_dir("slsfabric-bob-");
+    const std::string alice_dir = integration::make_temp_dir("rocketbox-alice-");
+    const std::string bob_dir = integration::make_temp_dir("rocketbox-bob-");
     CHECK(!alice_dir.empty());
     CHECK(!bob_dir.empty());
 

@@ -17,16 +17,16 @@ public:
     void SetActionHandlers(std::function<void()> on_connect, std::function<void()> on_disconnect);
     void SetLayoutChangedHandler(std::function<void()> on_layout_changed);
 
-    void ApplyState(bool fabric_connected,
-                    int fabric_port_index,
-                    int fabric_devices_seen,
-                    const std::string& fabric_device_label,
+    void ApplyState(bool usb_connected,
+                    int usb_port_index,
+                    int devices_seen,
+                    const std::string& device_label,
                     bool busy,
                     double live_mbps,
-                    double booth_display_mib_s,
+                    double display_rate_mib_s,
                     double result_mbps,
                     int64_t last_announce_ms,
-                    uint32_t fabric_activity_seq,
+                    uint32_t usb_activity_seq,
                     const std::string& status_message,
                     const std::string& error_message);
 
@@ -53,11 +53,11 @@ private:
     SessionRateTracker rate_tracker_;
 
     void RelayoutAncestors();
-    void SyncConnectActions(bool fabric_connected);
+    void SyncConnectActions(bool usb_connected);
     void SyncActivityMonitor(bool show,
-                             uint32_t fabric_activity_seq,
+                             uint32_t usb_activity_seq,
                              double live_mbps,
                              double result_mbps,
-                             double booth_display_mib_s);
+                             double display_rate_mib_s);
     void SyncPanelMinSize();
 };

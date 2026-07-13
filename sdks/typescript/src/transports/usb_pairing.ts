@@ -42,7 +42,7 @@ export function clearSavedUsbPairing(): void {
   clearSavedSerial();
 }
 
-export function isFabricDevice(device: USBDevice): boolean {
+export function isRocketBoxDevice(device: USBDevice): boolean {
   return device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID;
 }
 
@@ -74,5 +74,5 @@ export async function countDevices(): Promise<number> {
   if (!navigator.usb) {
     return 0;
   }
-  return (await navigator.usb.getDevices()).filter(isFabricDevice).length;
+  return (await navigator.usb.getDevices()).filter(isRocketBoxDevice).length;
 }

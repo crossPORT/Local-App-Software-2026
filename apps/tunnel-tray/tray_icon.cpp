@@ -43,7 +43,7 @@ wxMenu* TunnelTrayIcon::CreatePopupMenu() {
     if (p == port_) item->Check();
     item->Enable(!up);
   }
-  menu->AppendSubMenu(ports, "Fabric port");
+  menu->AppendSubMenu(ports, "USB port");
 
   auto* trans = new wxMenu;
   auto* usb = trans->AppendRadioItem(ID_TRANS_USB, "USB hardware");

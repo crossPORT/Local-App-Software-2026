@@ -8,7 +8,7 @@ import { PeerRow } from './PeerRow';
 
 interface RosterPanelProps {
   peers: PeerEntry[];
-  fabricConnected: boolean;
+  usbConnected: boolean;
   identityConfigured: boolean;
   identityDisplayName: string;
   localLeg: number;
@@ -26,8 +26,8 @@ interface RosterPanelProps {
   onRequestReleaseLink?: (peer: PeerEntry) => void;
 }
 
-function rosterEmptyMessage(fabricConnected: boolean, identityConfigured: boolean): string {
-  if (!fabricConnected) {
+function rosterEmptyMessage(usbConnected: boolean, identityConfigured: boolean): string {
+  if (!usbConnected) {
     return identityConfigured
       ? 'Connect USB to discover other stations'
       : 'Set your name in Settings, then connect USB';
@@ -46,7 +46,7 @@ function useTickSeconds(): number {
 
 export function RosterPanel({
   peers,
-  fabricConnected,
+  usbConnected,
   identityConfigured,
   identityDisplayName,
   localLeg,
@@ -66,12 +66,12 @@ export function RosterPanel({
   const now = useTickSeconds();
   const slots = rosterSlots(
     peers,
-    fabricConnected,
+    usbConnected,
     { display_name: identityDisplayName },
     localLeg,
   );
   const onlinePeers = slots.flatMap((slot) => (slot.peer ? [slot.peer] : []));
-  const empty = rosterEmptyMessage(fabricConnected, identityConfigured);
+  const empty = rosterEmptyMessage(usbConnected, identityConfigured);
   const intervalMs = (announceIntervalSec ?? 10) * 1000;
   const nextAnnounceIn =
     lastAnnounceMs > 0 ? Math.max(0, intervalMs - (now - lastAnnounceMs)) : 0;
@@ -84,7 +84,7 @@ export function RosterPanel({
         style={{ color: theme.accent, display: 'flex', justifyContent: 'space-between' }}
       >
         <span>Connected peers</span>
-        {fabricConnected && lastAnnounceMs > 0 && (
+        {usbConnected && lastAnnounceMs > 0 && (
           <span
             style={{
               fontSize: '0.75rem',

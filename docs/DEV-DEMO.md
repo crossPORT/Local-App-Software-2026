@@ -6,14 +6,13 @@ One place to clone the repo, understand the main sections, and run/test against 
 
 | Path | What it is | Sim | Real USB |
 |------|------------|-----|----------|
-| `simulated-hardware/` | Crossport stand-in (TCP **1772** + WebSocket **1773** + dashboard) | Yes | — |
+| `simulated-hardware/` | RocketBox sim (TCP **1772** + WebSocket **1773** + dashboard) | Yes | — |
 | `apps/web/` | RocketBox App PWA (UI; USB via SDK) | `?simulate=1` → SDK | SDK WebUSB |
 | `apps/wx/` | RocketBox App desktop (wxWidgets) | No | libusb |
 | `sdks/typescript/` | TS SDK: `createRocketBoxTransport`, ROCKETBX + session codecs | WS 1773 | WebUSB |
-| `sdks/cpp/` | C++ Session/Connection + sim/USB transports | TCP 1772 | libusb |
-| `fabric-tunnel/` | Fabric ↔ host IP bridge | `--transport sim` | `--transport usb` |
-| `core/` + `lib/session/` | Native USB engine + session orchestration (wx / CLIs) | — | Yes |
-| `tools/` | `usb-probe`, `booth-cli`, loopback, … | — | Mostly USB |
+| `sdks/cpp/` | C++ SDK + core + session (`create_rocketbox_transport`) | TCP 1772 | libusb |
+| `rocketbox-tunnel/` | RocketBox ↔ host IP bridge | `--transport sim` | `--transport usb` |
+| `tools/` | `usb-probe`, `rocketbox-cli`, loopback, … | — | Mostly USB |
 | `tests/` | CTest unit + integration; web vitest | Some | Hardware labels |
 
 **Rule of thumb:** PWA captures `?simulate=` / `?port=` and calls `@rocketbox/sdk` `createRocketBoxTransport` — all WebUSB/ROCKETBX/sim I/O is in the SDK. The **wx desktop app talks to real USB only** today.
@@ -55,7 +54,7 @@ npm start
 
 | Port | Clients |
 |------|---------|
-| **1772/tcp** | C++ SDK, fabric-tunnel (`--transport sim`) |
+| **1772/tcp** | C++ SDK, rocketbox-tunnel (`--transport sim`) |
 | **1773** | PWA WebSocket sim + live dashboard |
 
 Dashboard: [http://localhost:1773/](http://localhost:1773/)
@@ -72,7 +71,7 @@ npm ci
 npm run dev
 ```
 
-Open **two** browser windows (or profiles), one per fabric port:
+Open **two** browser windows (or profiles), one per port:
 
 | Window | URL |
 |--------|-----|
@@ -91,7 +90,7 @@ Query flags:
 | Param | Meaning |
 |-------|---------|
 | `simulate=1` | PWA passes `simulate` to SDK → `SimTransport` → `ws://localhost:1773?port=N` |
-| `port=1..4` | Fabric port (default `1`); PWA passes through to SDK |
+| `port=1..4` | Port 1–4 (default `1`); PWA passes through to SDK |
 
 ---
 
@@ -107,7 +106,7 @@ cd apps/web && npm ci && npm run dev
 ```
 
 4. **Connect USB** → browser WebUSB picker (handled by `@rocketbox/sdk`, not PWA-local USB code).
-5. Second laptop/cable = second peer (or a second port if the fabric exposes multiple).
+5. Second laptop/cable = second peer (or a second port if multiple ports are cabled).
 
 WebUSB requires **HTTPS** (or localhost). `file://` will not work. The PWA must not implement WebUSB itself — see [apps/web/AGENTS.md](../apps/web/AGENTS.md).
 
@@ -125,7 +124,7 @@ cmake --build build -j
 Two windows on one PC (two cables / ports):
 
 ```bash
-./scripts/launch-booth.sh
+./scripts/launch-booth.sh   # convenience launcher (two windows)
 # or:
 ./build/apps/wx/RocketBox --port 0 &
 ./build/apps/wx/RocketBox --port 1 &
@@ -137,7 +136,7 @@ There is **no** `--transport sim` on wx today — use the PWA or SDKs for simula
 
 ---
 
-## 5. C++ SDK / fabric-tunnel against the simulator
+## 5. C++ SDK / rocketbox-tunnel against the simulator
 
 Build (sim support is on by default in `sdks/cpp`):
 
@@ -150,11 +149,11 @@ With `simulated-hardware` already running:
 
 ```bash
 # Example: two tunnel instances on sim ports 3 and 4
-sudo ./build/fabric-tunnel/rocketbox-tunnel --transport sim --port 4 --expose 8081
-sudo ./build/fabric-tunnel/rocketbox-tunnel --transport sim --port 3
+sudo ./build/rocketbox-tunnel/rocketbox-tunnel --transport sim --port 4 --expose 8081
+sudo ./build/rocketbox-tunnel/rocketbox-tunnel --transport sim --port 3
 ```
 
-Real hardware: omit `--transport sim` (USB is the default). See [fabric-tunnel/README.md](../fabric-tunnel/README.md).
+Real hardware: omit `--transport sim` (USB is the default). See [rocketbox-tunnel/README.md](../rocketbox-tunnel/README.md).
 
 ---
 
@@ -186,7 +185,7 @@ Start the sim daemon before SDK integration tests that attach with `TransportTyp
 
 - [ ] udev (Linux) or WinUSB (Windows) applied; device enumerates
 - [ ] wx **and/or** PWA (no `simulate`) connect to `1772:0006`
-- [ ] Two peers on the fabric exchange a file
+- [ ] Two peers exchange a file
 - [ ] Disconnect / replug recovers cleanly
 
 ### Hardware CTest (needs cables)
@@ -218,4 +217,4 @@ ctest --test-dir build -L hardware --output-on-failure
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Layering and runtime graphs |
 | [AGENTS.md](../AGENTS.md) | Contributor conventions |
 | [simulated-hardware/README.md](../simulated-hardware/README.md) | Sim ports and Docker |
-| [fabric-tunnel/README.md](../fabric-tunnel/README.md) | Tunnel options |
+| [rocketbox-tunnel/README.md](../rocketbox-tunnel/README.md) | Tunnel options |

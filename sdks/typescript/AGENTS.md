@@ -20,7 +20,6 @@ Same as root [AGENTS.md](../../AGENTS.md): **RocketBox**, **port**, **session**,
 
 Prefer `createRocketBoxTransport`. ATTACH is not the real HW contract.
 
-## Newcomer flow
 
 ```mermaid
 flowchart TD
@@ -62,7 +61,7 @@ WebUSB (`navigator.usb`, `transferIn` / `transferOut`, `claimInterface`) belongs
 
 - No UI / React / Vite imports
 - Every source file ≤200 lines
-- Gate: `scripts/check-single-ts-usb.sh`
+- Gate: layout enforced by tests / review (no second USB stack in PWA)
 
 ## Tests
 

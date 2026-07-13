@@ -39,8 +39,8 @@ std::string default_tunnel_bin() {
     const std::string dir = dirname_of(self);
     const std::string candidates[] = {
         dir + "/rocketbox-tunnel",
-        dirname_of(dir) + "/fabric-tunnel/rocketbox-tunnel",
-        dirname_of(dirname_of(dir)) + "/fabric-tunnel/rocketbox-tunnel",
+        dirname_of(dir) + "/rocketbox-tunnel/rocketbox-tunnel",
+        dirname_of(dirname_of(dir)) + "/rocketbox-tunnel/rocketbox-tunnel",
     };
     for (const auto& path : candidates) {
       if (file_executable(path)) return path;

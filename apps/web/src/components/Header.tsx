@@ -15,11 +15,10 @@ export function Header({
   onOpenSettings,
   onAnnounce,
 }: HeaderProps) {
-  const led = deriveLinkLed(state.usbConnected, state.fabricConnected, state.busy);
+  const led = deriveLinkLed(state.usbConnected, state.busy);
   const status = statusLine(
     state.usbConnected,
-    state.fabricConnected,
-    state.fabricDevicesSeen,
+    state.devicesSeen,
     state.portIndex,
     state.busy,
     state.waitingForPartner,

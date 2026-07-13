@@ -31,8 +31,8 @@ public:
 
     void UpdateRoster(const std::vector<PeerEntry>& peers,
                       const IdentityProfile& self,
-                      bool fabric_connected,
-                      int fabric_devices_seen,
+                      bool usb_connected,
+                      int devices_seen,
                       int port_index,
                       bool transfer_busy = false,
                       int64_t last_announce_ms = 0,
@@ -65,7 +65,7 @@ private:
     bool LayoutNeedsRebuild(const std::vector<std::string>& slot_signature) const;
 
     struct RosterLayoutKey {
-        bool fabric_connected = false;
+        bool usb_connected = false;
         int local_leg = -1;
         std::vector<std::string> slot_signature;
     };
@@ -85,8 +85,8 @@ private:
     std::vector<PeerDropZonePanel*> drop_zones_;
     std::vector<PeerEntry> peers_;
     IdentityProfile self_;
-    bool fabric_connected_ = false;
-    int fabric_devices_seen_ = 0;
+    bool usb_connected_ = false;
+    int devices_seen_ = 0;
     int port_index_ = 0;
     bool transfer_busy_ = false;
     std::string transfer_status_;

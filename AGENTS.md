@@ -15,7 +15,7 @@ Use only these product nouns in APIs, tools, and docs:
 
 EP4 control verb: **switch** — link this port to dest 1–4, or dest 0 to clear. (`switch_port_core`, `usb-switch`, TS `writeSwitch` / `switchPort`).
 
-Not public product nouns (do not invent new ones; prefer the table above): ~~crossbar~~, ~~Mode 11~~, ~~IntelliConnex~~, ~~booth~~ (demo leftover), ~~fabric~~ (legacy mesh prefix in some symbols — do not grow).
+Not public product nouns (do not invent new ones; prefer the table above): ~~crossbar~~, ~~Mode 11~~, ~~IntelliConnex~~, ~~booth~~, ~~fabric~~, ~~Attach~~ (not the HW contract).
 
 Wire magic **ROCKETBX** stays as the on-wire header constant only.
 
@@ -25,17 +25,17 @@ Wire magic **ROCKETBX** stays as the on-wire header constant only.
 2. **[docs/DEV-DEMO.md](docs/DEV-DEMO.md)** — run/test with **simulated hardware** or **real USB** (PWA, wx, tunnel)
 3. **[sdks/typescript/AGENTS.md](sdks/typescript/AGENTS.md)** — when touching `@rocketbox/sdk` / WebUSB / wire
 4. **[apps/web/AGENTS.md](apps/web/AGENTS.md)** — when touching the PWA (UI only; USB via SDK)
-5. **[protocols/session.md](protocols/session.md)** — session handshake best practices (no-buffer fabric, timing, listener rules)
-6. **[protocols/file-transfer.md](protocols/file-transfer.md)** — ROCKETBX payload best practices (send/receive, mutex, staging)
-7. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
-8. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, release installers, PWA zip on tags
+5. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `sdks/cpp/core/`)
+6. **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — CI, release installers, PWA zip on tags
 
 ## 30-second context
 
-- **This repo:** CMake monorepo — `core/` engine + `lib/session/` shared logic + `apps/wx/` desktop + `apps/web/` PWA + `sdks/typescript/` + `tools/` CLIs
-- **Engine:** `core/src/usb_transfer_core.cpp` — async send, ring-buffer receive, `ROCKETBX` header, two-port loopback
-- **TypeScript SDK:** `@rocketbox/sdk` in `sdks/typescript` — PWA uses `createRocketBoxTransport`; no USB in `apps/web`
-- **HW USB messaging:** ROCKETBX on data EPs + **switch** on EP4 (TS working reference; C++ mirrors). Announce leaves last probe dest (no idle dest=0 clear — that tears offer circuits). If already switched to a peer, announce holds that link. Idle inbound announce aims at that peer (`circuit_listen`) so offers can land. Transfer ends with dest=0. Session ATTACH is not the HW contract.
+- **This repo:** CMake monorepo — one native engine under `sdks/cpp/` (`core` + `sim` + `session` + public `rocketbox_sdk`) + `apps/wx/` + `apps/web/` + `sdks/typescript/` + `tools/` + `rocketbox-tunnel/`
+- **Engine:** `sdks/cpp/core` — async send, ring-buffer receive, `ROCKETBX` header; session orchestration in `sdks/cpp/session`
+- **C++ SDK:** `create_rocketbox_transport(usb|sim, port)` → `RocketBoxTransport`; apps use `SessionOrchestrator` on that transport (`rocketbox/session_orchestrator.h`). No Attach.
+- **TypeScript SDK:** `@rocketbox/sdk` — PWA uses `createRocketBoxTransport`
+- **Simulation:** product device is `simulated-hardware/` (TCP 1772 + WS 1773); in-process lib is `sdks/cpp/sim`
+- **HW USB:** ROCKETBX on data EPs + **switch** on EP4. Session ATTACH is not the HW contract.
 - **Do not** start the GUI server for the user; they run binaries themselves
 
 ## Build (always verify changes)
@@ -47,104 +47,47 @@ cmake --build build -j
 
 All targets must compile:
 
-- `fabric_usb_core`, `rocketbox_session` (static libs)
-- `rocketbox` → **RocketBox** (wx desktop), `usb-probe`, `usb-loopback-test`, `usb-switch`
+- `rocketbox_usb_core`, `rocketbox_usb_sim`, `rocketbox_session`, `rocketbox_sdk`
+- `rocketbox` → **RocketBox** (wx), `usb-probe`, `usb-loopback-test`, `usb-switch`, `rocketbox-cli`, `session-test`
+- `rocketbox-tunnel` (Linux)
 
 ## File map
 
 | Path | Role |
 |------|------|
-| `core/include/usb_protocol.h` | VID/PID, endpoints, header constants, chunk size |
-| `core/include/usb_transfer.h` | Public core API: `TransferResult`, `*_core()` functions |
-| `core/src/usb_transfer_core.cpp` | USB transfer engine |
-| `lib/session/` | Shared session layer (`transfer_orchestrator`, `session_listener`, `TransferController`, …) |
-| `apps/wx/` | RocketBox App (desktop UI) — roster, send-to-peer, accept/reject |
-| `apps/web/` | RocketBox App (PWA) — UI + orchestrator; USB via `@rocketbox/sdk` |
-| `sdks/typescript/` | `@rocketbox/sdk` — WebUSB, ROCKETBX, sim, `createRocketBoxTransport` |
-| `tools/usb_probe.cpp` | Enumerate devices/endpoints (no full transfer) |
-| `tools/usb_loopback_test.cpp` | Two-port file loopback |
-| `tools/booth_cli.cpp` | Headless session CLI (links `rocketbox_session`) |
-| `scripts/setup-usb-access.sh` | Installs udev rule (needs sudo) |
-| `99-sls-fabric-usb.rules` | udev: MODE 0666 for 1772:0006 |
-| `tests/` | Automated suites: `unit-tests` (no hardware) + `hardware-tests` (needs cables) via CTest |
+| `sdks/cpp/core/` | USB engine (`rocketbox_usb_core`) |
+| `sdks/cpp/sim/` | In-process USB sim (`rocketbox_usb_sim`) for CTest / session |
+| `sdks/cpp/session/` | Shared session layer (`rocketbox_session`) |
+| `sdks/cpp/include/rocketbox/sdk.h` | Public C++ SDK (`RocketBoxTransport`) |
+| `sdks/cpp/src/` | SDK backends (USB via session/core; sim via TCP :1772) |
+| `apps/wx/` | RocketBox App (desktop) — uses session directly |
+| `apps/web/` | RocketBox App (PWA) — USB via `@rocketbox/sdk` |
+| `sdks/typescript/` | `@rocketbox/sdk` |
+| `rocketbox-tunnel/` | TUN ↔ RocketBox (uses C++ SDK only) |
+| `simulated-hardware/` | Sole simulation device |
+| `tools/` | `usb-probe`, `rocketbox-cli`, … |
+| `99-rocketbox-usb.rules` | udev: MODE 0666 for 1772:0006 |
+| `tests/` | CTest unit + integration + hardware |
 
 ## Layering rules
 
-1. **USB logic lives in `core/` only** (native) — no wx/GTK in core, no `stdio` menu loops in core
-2. **Session logic lives in `lib/session/`** — handshake, roster, orchestration; no UI toolkit includes
-3. **UI lives in `apps/wx/`** — wxWidgets only; marshal worker/orchestrator updates via `wxTheApp->CallAfter`
-4. **TypeScript USB/wire lives in `sdks/typescript/` (`@rocketbox/sdk`)** — `createRocketBoxTransport` / `RocketBoxTransport`; no UI imports; PWA does not implement WebUSB
-5. **Web UI lives in `apps/web/`** — PWA; call `@rocketbox/sdk` for transport/wire; keep orchestrator parity with `lib/session/` via golden fixtures + vitest
-6. **Raw USB tools link `fabric_usb_core` only** — e.g. `usb-probe`, `usb-loopback-test`
-7. **Session tools link `rocketbox_session`** — e.g. `booth-cli`, `fabric-session-test`
-8. **New native apps** → `apps/<name>/` linking `rocketbox_session` and/or `fabric_usb_core`
-
-## wx integration
-
-- Send/receive via `TransferController` → `*_core()` on a **worker thread**
-- **`port_index`:** CLI `--port N` (`apps/wx/main.cpp`), or **Connect USB** picker when multiple fabric devices are connected (`fabric_device_picker.cpp`); passed into `TransferOrchestrator` / `TransferController`
-- **Progress:** worker callback → `wxTheApp->CallAfter` before touching widgets
-- **Errors:** show `TransferResult.error_message` verbatim; core does not throw
-- **libusb:** one `libusb_context*` for app lifetime (`TransferController` ctor/dtor)
-
-Authoritative API: `core/include/usb_transfer.h`.
-
-## Public core API
-
-Declared in `core/include/usb_transfer.h`:
-
-```cpp
-TransferResult send_file_core(ctx, path, port_index, progress_cb);
-TransferResult receive_file_core(ctx, out_path, port_index, progress_cb);
-TransferResult loopback_transfer_core(ctx, path, send_port, recv_port, progress_cb);
-int count_fabric_devices(ctx);
-```
-
-`TransferResult` carries `ok`, byte counts, timing, `mbps`, and `error_message`. GUI and tools consume this struct directly — do not parse log strings.
+1. **USB logic** in `sdks/cpp/core/` only — no wx/GTK in core
+2. **Session logic** in `sdks/cpp/session/` — no UI toolkit includes; orchestrator takes `RocketBoxTransport`
+3. **Public C++ API** in `rocketbox/sdk.h` + `rocketbox/session_orchestrator.h` — wx, tunnel, and CLI use this only
+4. **wx / tools** link `rocketbox_sdk` — do not construct `TransferController` in apps
+5. **TypeScript USB/wire** in `sdks/typescript/` — PWA does not implement WebUSB
+6. **One simulation product:** `simulated-hardware/`; in-process `sdks/cpp/sim` for CTest
 
 ## Testing
 
-Automated suites live in `tests/` and run via CTest (dependency-free framework, no GoogleTest). Keep the **core/session logic covered here** so GUI work stays stable.
-
 ```bash
-ctest --test-dir build -L unit          # pure logic, NO hardware — run in CI / before commits
-ctest --test-dir build -L integration   # fabric_sim + TransferOrchestrator handshake (no USB)
-ctest --test-dir build -L hardware      # real fabric transfers; auto-skips (code 77) if <2 devices
-ctest --test-dir build                  # everything
+ctest --test-dir build -L unit
+ctest --test-dir build -L integration
+cd apps/web && npm test
 ```
-
-- `unit-tests` — session message format, **golden session fixtures** (`tests/fixtures/session/`), meta/path-traversal safety, identity + session config parsing, peer roster, session role, core tuning (payload timeout, in-flight depth math/clamp, usbfs detection), **inbound receive partial-file cleanup** (`receive_payload`), fabric_sim transport. Add a unit test for any new pure logic.
-- `integration-tests` — **full announce + offer/accept/ready + payload** over in-process `fabric_sim` with two `TransferOrchestrator` instances (ports 0↔1). Catches handshake timing, roster, auto-accept, and decline paths. Run after changing `transfer_orchestrator.cpp` or `session_listener.cpp`.
-- `hardware-tests` — round-trip integrity across sizes incl. chunk boundaries and a payload that exceeds the usbfs pool (proves the in-flight auto-clamp).
-- **PWA:** `cd apps/web && npm test` — vitest unit tests for session codec, handshake timing, config, roster, format helpers (golden fixtures shared with C++).
-- Run a subset by substring: `./build/tests/unit-tests inflight` or `./build/tests/integration-tests handshake`
-
-Manual hardware diagnostics (with cables):
-
-```bash
-./build/tools/usb-probe                    # expect 1+ devices when cable plugged in
-./build/tools/usb-loopback-test /tmp/foo.bin   # needs 2 cables, ports 0 and 1
-```
-
-Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
-
-## Priority open work
-
-1. **Hardware validation** — run `usb-probe`, `usb-loopback-test`, and RocketBox App (wx) against real RocketBox hardware
 
 ## Conventions
 
-- C++17, minimal diffs, match existing naming (`snake_case` functions, `TransferResult`, `usb_protocol::` constants)
-- Comments only for non-obvious protocol/hardware behavior
-- Update [docs/PROTOCOL.md](docs/PROTOCOL.md) when changing wire format
-- Update this file’s “Priority open work” when major items complete
-
-## Common mistakes to avoid
-
-See also **[protocols/session.md](protocols/session.md)** and **[protocols/file-transfer.md](protocols/file-transfer.md)** for handshake timing and payload sequencing.
-
-- Putting GUI toolkit includes in `core/`
-- Implementing WebUSB / ROCKETBX / codecs in `apps/web` (use `@rocketbox/sdk`)
-- Changing header magic/endpoints without coordinating with the FPGA team
-- Using sync bulk transfers for large file payload (regresses throughput and large-file correctness)
-- Assuming port index equals physical port label — always use libusb enumeration order
+- C++17, minimal diffs, match existing naming
+- Dual-read for one release: `~/.config/rocketbox/` then `~/.config/sls-fabric/`; `ROCKETBOX_LOG` then `SLSFABRIC_LOG`; session inbox accepts `.rocketbox-session/` and `.fabric-session/`
+- Update this file when major layout items complete

@@ -1,12 +1,20 @@
 #include "rocketbox/sdk.h"
-#include "session_impl.hpp"
+#include "sim_plane.hpp"
+#include "usb_plane.hpp"
+
+#include <stdexcept>
 
 namespace rocketbox {
 
-std::unique_ptr<Session> Attach(TransportType transport, int port) {
-    auto session = std::make_unique<detail::SessionImpl>(transport, port);
-    session->init();
-    return session;
+std::unique_ptr<RocketBoxTransport> create_rocketbox_transport(TransportMode mode,
+                                                               int display_port) {
+    if (mode == TransportMode::Sim) {
+        return std::make_unique<detail::SimPlane>(display_port);
+    }
+    if (mode == TransportMode::Usb) {
+        return std::make_unique<detail::UsbPlane>(display_port);
+    }
+    throw std::runtime_error("unknown transport mode");
 }
 
 }  // namespace rocketbox

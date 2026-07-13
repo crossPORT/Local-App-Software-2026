@@ -1,6 +1,6 @@
 # RocketBox App
 
-**USB file transfer for co-located teams** — plug laptops into **RocketBox** hardware (the USB switched fabric). No IP addresses, no accounts, no IT firewall changes. Connect the cable, open **RocketBox App**, and send files.
+**USB file transfer for co-located teams** — plug laptops into **RocketBox** hardware (USB switched ports). No IP addresses, no accounts, no IT firewall changes. Connect the cable, open **RocketBox App**, and send files.
 
 [![CI](https://github.com/crossPORT/Local-App-Software-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/crossPORT/Local-App-Software-2026/actions/workflows/ci.yml)
 
@@ -8,14 +8,14 @@
 
 | Name | What it is |
 |------|------------|
-| **RocketBox** | The hardware — USB fabric device (vendor/product **1772:0006**) and cables |
+| **RocketBox** | The hardware — USB device (vendor/product **1772:0006**) and cables |
 | **RocketBox App** | The software — desktop and web apps that talk to RocketBox hardware |
 
 Release installers and the Linux binary are named `RocketBox` / `RocketBox-*` for packaging; this document uses **RocketBox App** for the software.
 
 ## What it is
 
-**RocketBox App** is the end-user software for RocketBox hardware. Each participant runs the app on their laptop with a RocketBox USB cable attached. The app discovers peers on the fabric, negotiates a session, and transfers files directly over USB — not over the corporate network.
+**RocketBox App** is the end-user software for RocketBox hardware. Each participant runs the app on their laptop with a RocketBox USB cable attached. The app discovers peers on the shared ports, negotiates a session, and transfers files directly over USB — not over the corporate network.
 
 **RocketBox hardware:** one USB connection per laptop in normal use. With two RocketBox cables on one PC, launch RocketBox App twice — each window binds to one cable (see [Using RocketBox App](#using-rocketbox-app)).
 
@@ -48,11 +48,11 @@ On **Linux only**, the operating system blocks apps and browsers from opening Ro
 
 **What to do:**
 
-1. **If you installed the `.deb` package** — the post-install script copies the rule when `/etc/udev/rules.d/99-sls-fabric-usb.rules` is not already present. **Unplug and replug the USB cable once** after install.
+1. **If you installed the `.deb` package** — the post-install script copies the rule when `/etc/udev/rules.d/99-rocketbox-usb.rules` is not already present. **Unplug and replug the USB cable once** after install.
 2. **If you use the AppImage, or the rule was not installed** — run once (requires admin password):
 
    ```bash
-   sudo cp /usr/share/rocketbox/99-sls-fabric-usb.rules /etc/udev/rules.d/
+   sudo cp /usr/share/rocketbox/99-rocketbox-usb.rules /etc/udev/rules.d/
    sudo udevadm control --reload-rules && sudo udevadm trigger
    ```
 
@@ -62,11 +62,11 @@ On **Linux only**, the operating system blocks apps and browsers from opening Ro
    ./scripts/setup-usb-access.sh
    ```
 
-   The rule file is also at the repo root as `99-sls-fabric-usb.rules`.
+   The rule file is also at the repo root as `99-rocketbox-usb.rules`.
 
 3. **Unplug and replug the RocketBox USB cable** after installing the rule.
 
-The rule file (`99-sls-fabric-usb.rules`) grants access to RocketBox hardware (`1772:0006`) without running the app as root. The same rule is required for the **web PWA on Linux** — Chrome/Edge use the same USB permissions.
+The rule file (`99-rocketbox-usb.rules`) grants access to RocketBox hardware (`1772:0006`) without running the app as root. The same rule is required for the **web PWA on Linux** — Chrome/Edge use the same USB permissions.
 
 ---
 
@@ -110,7 +110,7 @@ chmod +x RocketBox-*-linux-x64.AppImage
 ./RocketBox-*-linux-x64.AppImage
 ```
 
-You must install the [USB access rule](#linux-usb-access-rule-required-one-time) manually when using AppImage. The bundled rule lives inside the AppImage at `usr/share/rocketbox/99-sls-fabric-usb.rules`, or use the repo file / `scripts/setup-usb-access.sh` from a checkout.
+You must install the [USB access rule](#linux-usb-access-rule-required-one-time) manually when using AppImage. The bundled rule lives inside the AppImage at `usr/share/rocketbox/99-rocketbox-usb.rules`, or use the repo file / `scripts/setup-usb-access.sh` from a checkout.
 
 ### Web app (PWA)
 
@@ -120,16 +120,16 @@ You must install the [USB access rule](#linux-usb-access-rule-required-one-time)
 4. On **Linux**, install the [USB access rule](#linux-usb-access-rule-required-one-time) first.
 5. Connect the RocketBox USB cable. When prompted, allow the browser to access the device.
 
-Configure booth identity (display name, port) in the in-app **Settings** — settings are stored in the browser.
+Configure session identity (display name, port) in the in-app **Settings** — settings are stored in the browser.
 
 ---
 
 ## Using RocketBox App
 
 1. **Connect** the RocketBox USB cable to the laptop before or after launching the app.
-2. **Wait for discovery** — peers on the same fabric appear in the roster when their session is active.
+2. **Wait for discovery** — peers on the same RocketBox appear in the roster when their session is active.
 3. **Send a file** — choose a recipient and file; progress is shown until complete.
-4. **Two RocketBox cables on one machine** — launch RocketBox App twice. With two devices connected, the second launch shows a **Connect USB** dialog to pick a cable. To skip the dialog, pass `--port 0` and `--port 1`. Optional `--config` loads booth identity from a file (samples in `demo-config/`).
+4. **Two RocketBox cables on one machine** — launch RocketBox App twice. With two devices connected, the second launch shows a **Connect USB** dialog to pick a cable. To skip the dialog, pass `--port 0` and `--port 1`. Optional `--config` loads session identity from a file (samples in `demo-config/`).
 
 If RocketBox hardware is not detected: confirm the cable is seated, no other program has exclusive USB access, and on Linux that the udev rule is installed and the cable was replugged.
 
@@ -137,7 +137,7 @@ If RocketBox hardware is not detected: confirm the cable is seated, no other pro
 
 ## Trade-show / demo setups
 
-Optional sample identity configs for booth setups live in `demo-config/`. They are **not** loaded automatically.
+Optional sample identity configs for demo setups live in `demo-config/`. They are **not** loaded automatically.
 
 - **Desktop:** launch with `--config path/to/file.conf` (and `--port N` when using `shared.conf` with `[port0]` / `[port1]` sections). Settings edits apply in memory; they are written back to disk only when the app was started with `--config`.
 - **PWA:** set display name, team, and receive folder in **Settings** (stored in the browser).
@@ -146,7 +146,7 @@ Optional sample identity configs for booth setups live in `demo-config/`. They a
 
 ## For developers and contributors
 
-This repository is a monorepo: shared USB engine (`core/`), session logic (`lib/session/`), desktop app (`apps/wx/`), web PWA (`apps/web/`), simulated hardware, SDKs, and CLI tools.
+This repository is a monorepo: shared USB engine (`sdks/cpp/core/`), session logic (`sdks/cpp/session/`), public C++ SDK (`sdks/cpp/include/rocketbox/sdk.h`), desktop app (`apps/wx/`), web PWA (`apps/web/`), simulated hardware, TypeScript SDK, tunnel, and CLI tools.
 
 **Start here for clone → sim → PWA → native:** [docs/DEV-DEMO.md](docs/DEV-DEMO.md) (simulation device **and** real RocketBox hardware).
 
@@ -187,7 +187,7 @@ ctest --test-dir build -L unit --output-on-failure
 cd apps/web && npm test
 ```
 
-See [docs/DEV-DEMO.md](docs/DEV-DEMO.md) for the full matrix (tunnel, hardware CTest, booth scripts).
+See [docs/DEV-DEMO.md](docs/DEV-DEMO.md) for the full matrix (tunnel, hardware CTest, demo scripts).
 
 ## License
 

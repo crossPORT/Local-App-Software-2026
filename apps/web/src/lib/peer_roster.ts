@@ -190,8 +190,8 @@ export class PeerRoster {
     return undefined;
   }
 
-  visiblePeers(fabricConnected: boolean): PeerEntry[] {
-    if (!fabricConnected) {
+  visiblePeers(usbConnected: boolean): PeerEntry[] {
+    if (!usbConnected) {
       return [];
     }
     const byPort = new Map<number, PeerEntry>();

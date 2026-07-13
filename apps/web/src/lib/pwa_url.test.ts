@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  boothOriginFromIp,
+  devOriginFromIp,
   buildPwaAppUrl,
   isLocalHostname,
   resolvePwaAppUrl,
@@ -17,8 +17,8 @@ describe('pwa_url', () => {
     expect(buildPwaAppUrl('https://192.168.1.5:8080')).toBe('https://192.168.1.5:8080/app');
   });
 
-  it('builds booth origin from LAN IP', () => {
-    expect(boothOriginFromIp('10.0.0.8', 8080)).toBe('https://10.0.0.8:8080');
+  it('builds dev origin from LAN IP', () => {
+    expect(devOriginFromIp('10.0.0.8', 8080)).toBe('https://10.0.0.8:8080');
   });
 
   it('prefers saved origin when hostname is localhost', () => {

@@ -22,7 +22,7 @@ constexpr int kRecvPort = 0;
 constexpr int kSendPort = 1;
 
 std::string make_random_file(std::size_t size) {
-    char tmpl[] = "/tmp/slsfabric-hwtest-XXXXXX";
+    char tmpl[] = "/tmp/rocketbox-hwtest-XXXXXX";
     const int fd = mkstemp(tmpl);
     if (fd < 0) {
         return {};
@@ -114,28 +114,28 @@ bool round_trip(std::size_t size, std::string* detail) {
 
 }  // namespace
 
-FABRIC_TEST(hw_round_trip_tiny) {
+RB_TEST(hw_round_trip_tiny) {
     std::string detail;
     const bool ok = round_trip(4096, &detail);
     if (!ok) std::cerr << "    " << detail << "\n";
     CHECK(ok);
 }
 
-FABRIC_TEST(hw_round_trip_one_mb) {
+RB_TEST(hw_round_trip_one_mb) {
     std::string detail;
     const bool ok = round_trip(1024 * 1024, &detail);
     if (!ok) std::cerr << "    " << detail << "\n";
     CHECK(ok);
 }
 
-FABRIC_TEST(hw_round_trip_chunk_boundary) {
+RB_TEST(hw_round_trip_chunk_boundary) {
     std::string detail;
     const bool ok = round_trip(usb_protocol::kChunkSize, &detail);
     if (!ok) std::cerr << "    " << detail << "\n";
     CHECK(ok);
 }
 
-FABRIC_TEST(hw_round_trip_chunk_boundary_plus_one) {
+RB_TEST(hw_round_trip_chunk_boundary_plus_one) {
     std::string detail;
     const bool ok = round_trip(usb_protocol::kChunkSize + 7, &detail);
     if (!ok) std::cerr << "    " << detail << "\n";
@@ -144,7 +144,7 @@ FABRIC_TEST(hw_round_trip_chunk_boundary_plus_one) {
 
 // Exceeds the default 16 MB usbfs pool many times over: proves the in-flight
 // auto-clamp keeps large transfers working (no LIBUSB_ERROR_NO_MEM / hang).
-FABRIC_TEST(hw_round_trip_exceeds_usbfs_limit) {
+RB_TEST(hw_round_trip_exceeds_usbfs_limit) {
     std::string detail;
     const bool ok = round_trip(64ull * 1024 * 1024, &detail);
     if (!ok) std::cerr << "    " << detail << "\n";

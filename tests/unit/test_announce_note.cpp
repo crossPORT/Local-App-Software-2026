@@ -2,7 +2,7 @@
 
 #include "announce_note.h"
 
-FABRIC_TEST(announce_note_round_trip) {
+RB_TEST(announce_note_round_trip) {
     const std::string note = build_announce_note(1, ReceiveStatus::Open);
     CHECK_STREQ(note, "port=2;receive=open");
 
@@ -13,7 +13,7 @@ FABRIC_TEST(announce_note_round_trip) {
     CHECK(status == ReceiveStatus::Open);
 }
 
-FABRIC_TEST(announce_note_parses_instance) {
+RB_TEST(announce_note_parses_instance) {
     const std::string note = build_announce_note(0, ReceiveStatus::AskFirst, "abc123");
     CHECK(note.find("instance=abc123") != std::string::npos);
 
@@ -25,13 +25,13 @@ FABRIC_TEST(announce_note_parses_instance) {
     CHECK_STREQ(instance.c_str(), "abc123");
 }
 
-FABRIC_TEST(announce_note_resolve_remote_port) {
-    CHECK_EQ(resolve_remote_fabric_port(0, 0), -1);
-    CHECK_EQ(resolve_remote_fabric_port(1, 1), -1);
-    CHECK_EQ(resolve_remote_fabric_port(0, 1), 1);
+RB_TEST(announce_note_resolve_remote_port) {
+    CHECK_EQ(resolve_remote_port(0, 0), -1);
+    CHECK_EQ(resolve_remote_port(1, 1), -1);
+    CHECK_EQ(resolve_remote_port(0, 1), 1);
 }
 
-FABRIC_TEST(announce_note_defaults_when_missing) {
+RB_TEST(announce_note_defaults_when_missing) {
     int port = 0;
     ReceiveStatus status = ReceiveStatus::Open;
     CHECK(parse_announce_note("", 1, &port, &status, nullptr));
@@ -39,7 +39,7 @@ FABRIC_TEST(announce_note_defaults_when_missing) {
     CHECK(status == ReceiveStatus::AskFirst);
 }
 
-FABRIC_TEST(announce_note_parses_receive_only) {
+RB_TEST(announce_note_parses_receive_only) {
     int port = 2;
     ReceiveStatus status = ReceiveStatus::AskFirst;
     CHECK(parse_announce_note("receive=busy", 2, &port, &status, nullptr));
@@ -47,7 +47,7 @@ FABRIC_TEST(announce_note_parses_receive_only) {
     CHECK(status == ReceiveStatus::Busy);
 }
 
-FABRIC_TEST(announce_note_parses_legacy_zero_based_wire_port) {
+RB_TEST(announce_note_parses_legacy_zero_based_wire_port) {
     int port = -1;
     ReceiveStatus status = ReceiveStatus::AskFirst;
     CHECK(parse_announce_note("port=0;receive=open", 1, &port, &status, nullptr));

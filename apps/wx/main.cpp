@@ -12,7 +12,7 @@ public:
         wxCmdLineParser parser;
         parser.AddOption("c", "config", "Identity config file",
                          wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);
-        parser.AddOption("p", "port", "Fabric USB port index (0 or 1 when two cables on one PC)",
+        parser.AddOption("p", "port", "USB port index (0 or 1 when two cables on one PC)",
                          wxCMD_LINE_VAL_NUMBER, wxCMD_LINE_PARAM_OPTIONAL);
         parser.SetCmdLine(wxApp::argc, wxApp::argv);
         if (parser.Parse(false) != 0) {

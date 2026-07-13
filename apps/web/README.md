@@ -58,5 +58,4 @@ If you are modifying or debugging the transfer behavior, here are the key integr
 * **Settings Dialog UI:** `apps/web/src/components/SettingsDialog.tsx`
   Renders the dropdown select component letting users save their preference to `localStorage`.
 
-* **SDK Implementation (Sim):** `apps/web/sim/fabric_sim_session.ts`
-  Method `getChunkSizeStrategy()` dynamically retrieves this setting from local storage and translates it into physical slicing constraints in `sendBytes` to faithfully mimic hardware buffer behavior.
+* **SDK Implementation:** `@rocketbox/sdk` — WebUSB send/recv in `sdks/typescript/src/transports/` (`data_send.ts`, `data_recv.ts`). PWA stores `usb_read_buffer_size` in identity (`types.ts` / Settings); I/O lives in the SDK, not under `apps/web`.

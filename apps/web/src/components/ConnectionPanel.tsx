@@ -29,12 +29,12 @@ export function ConnectionPanel({
   disconnectedHint = 'Plug in your USB cable, then click Connect USB below.',
   children,
 }: ConnectionPanelProps) {
-  const connected = state.usbConnected && state.fabricConnected;
+  const connected = state.usbConnected;
   const chartMbps =
     state.busy && !isOutboundHandshakeWait(state.statusMessage)
       ? effectiveDisplayMbps(
-          Math.max(state.fabricActivityMbps, state.liveMbps),
-          state.boothDisplayMibS,
+          Math.max(state.usbActivityMbps, state.liveMbps),
+          state.displayRateMibS,
           true,
           state.bytesDone,
         )
@@ -42,8 +42,8 @@ export function ConnectionPanel({
   const scaleFloorMbps =
     state.busy &&
     !isOutboundHandshakeWait(state.statusMessage) &&
-    state.identity.booth_display_mib_s > 0
-      ? Math.max(state.boothDisplayMibS, state.identity.booth_display_mib_s)
+    state.identity.display_rate_mib_s > 0
+      ? Math.max(state.displayRateMibS, state.identity.display_rate_mib_s)
       : chartMbps > 0
         ? chartMbps
         : 0;
@@ -58,16 +58,16 @@ export function ConnectionPanel({
           <div className="connection-device" style={{ color: theme.text }}>
             {usbDescription || 'USB cable connected'}
           </div>
-          {state.fabricDevicesSeen > 1 && (
+          {state.devicesSeen > 1 && (
             <div className="connection-meta" style={{ color: theme.muted }}>
-              {deviceMetaLine(state.fabricDevicesSeen, true)}
+              {deviceMetaLine(state.devicesSeen, true)}
             </div>
           )}
           <ActivityMonitor
             visible
             compact
             persistHistory
-            sessionPulse={state.fabricActivitySeq}
+            sessionPulse={state.usbActivitySeq}
             transferMbps={chartMbps}
             resultMbps={state.resultMbps}
             scaleFloorMbps={scaleFloorMbps}
@@ -75,7 +75,7 @@ export function ConnectionPanel({
         </>
       ) : (
         <p className="connection-hint" style={{ color: theme.muted }}>
-          {state.fabricDevicesSeen > 0
+          {state.devicesSeen > 0
             ? 'USB cable detected — click Connect USB and pick it in the browser dialog.'
             : disconnectedHint}
         </p>

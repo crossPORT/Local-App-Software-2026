@@ -47,19 +47,19 @@ Release CI builds on `macos-latest` (Apple Silicon). No udev rule is required on
 The **RocketBox** hardware (`1772:0006`) needs a udev rule on Linux for RocketBox App and for Chrome/Edge WebUSB.
 
 **`.deb` install:** `cmake/debian/postinst` copies
-`/usr/share/rocketbox/99-sls-fabric-usb.rules` → `/etc/udev/rules.d/` when that destination file does not exist yet. Unplug and replug the cable once.
+`/usr/share/rocketbox/99-rocketbox-usb.rules` → `/etc/udev/rules.d/` when that destination file does not exist yet. Unplug and replug the cable once.
 
 **Manual install** (AppImage, or if the rule was not installed):
 
 ```bash
-sudo cp /usr/share/rocketbox/99-sls-fabric-usb.rules /etc/udev/rules.d/
+sudo cp /usr/share/rocketbox/99-rocketbox-usb.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 From a source checkout: `./scripts/setup-usb-access.sh` (installs the repo-root rule file).
 
 AppImage users without a `.deb` install: use the repo rule file, the helper script, or extract
-`usr/share/rocketbox/99-sls-fabric-usb.rules` from the AppImage bundle.
+`usr/share/rocketbox/99-rocketbox-usb.rules` from the AppImage bundle.
 
 ### Debian package (recommended on Ubuntu/Debian)
 

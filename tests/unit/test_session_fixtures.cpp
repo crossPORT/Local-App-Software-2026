@@ -1,28 +1,28 @@
 #include "test_util.h"
 
-#include "fabric_session_message.h"
+#include "session_message.h"
 
 #include <fstream>
 #include <sstream>
 #include <string>
 
-#ifndef FABRIC_TEST_FIXTURE_DIR
-#define FABRIC_TEST_FIXTURE_DIR "tests/fixtures"
+#ifndef RB_TEST_FIXTURE_DIR
+#define RB_TEST_FIXTURE_DIR "tests/fixtures"
 #endif
 
 namespace {
 
 std::string fixture_path(const std::string& name) {
     std::ostringstream out;
-    out << FABRIC_TEST_FIXTURE_DIR << "/session/" << name;
+    out << RB_TEST_FIXTURE_DIR << "/session/" << name;
     return out.str();
 }
 
 }  // namespace
 
-FABRIC_TEST(session_fixture_offer_round_trip) {
+RB_TEST(session_fixture_offer_round_trip) {
     const std::string path = fixture_path("offer.sample.msg");
-    FabricSessionMessage got{};
+    SessionMessage got{};
     CHECK(read_session_file(path, got));
     CHECK(got.kind == SessionMessageKind::Offer);
     CHECK_STREQ(got.from_name, "Bob");

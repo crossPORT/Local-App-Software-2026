@@ -2,7 +2,7 @@ import {
   clearSavedUsbPairing,
   findPairedDevice,
   hasSavedSerial,
-  isFabricDevice,
+  isRocketBoxDevice,
 } from './usb_pairing';
 import { INTERFACE_NUMBER } from './usb_ids';
 
@@ -13,7 +13,7 @@ export async function resolvePairedUsbDevice(): Promise<USBDevice> {
   if (!hasSavedSerial()) {
     throw new Error('No saved cable for this window — click Connect USB');
   }
-  const devices = (await navigator.usb.getDevices()).filter(isFabricDevice);
+  const devices = (await navigator.usb.getDevices()).filter(isRocketBoxDevice);
   const device = findPairedDevice(devices);
   if (!device) {
     clearSavedUsbPairing();

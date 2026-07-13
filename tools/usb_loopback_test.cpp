@@ -15,8 +15,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const int devices = count_fabric_devices(ctx);
-    std::cout << "fabric devices: " << devices << '\n';
+    const int devices = count_rocketbox_devices(ctx);
+    std::cout << "RocketBox devices: " << devices << '\n';
     if (devices < 2) {
         std::cerr << "Need 2 cables from this PC to two CON ports\n";
         libusb_exit(ctx);

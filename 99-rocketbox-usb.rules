@@ -1,0 +1,2 @@
+# RocketBox hardware (1772:0006) — allows libusb / WebUSB access without root
+SUBSYSTEM=="usb", ATTR{idVendor}=="1772", ATTR{idProduct}=="0006", MODE="0666"

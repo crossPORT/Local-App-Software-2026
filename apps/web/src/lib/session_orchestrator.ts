@@ -96,7 +96,7 @@ export class SessionOrchestrator {
   private readonly instanceId = makeInstanceId();
   private presenceTimer: number | null = null;
   private retransmitTimer: number | null = null;
-  private fabricActivitySeq = 0;
+  private usbActivitySeq = 0;
   private readonly completedSessionIds = new Set<string>();
 
   private addCompletedSession(id: string): void {
@@ -367,8 +367,8 @@ export class SessionOrchestrator {
         liveMbps: 0,
         peakMbps: 0,
         resultMbps: 0,
-        boothDisplayMibS: 0,
-        fabricActivityMbps: 0,
+        displayRateMibS: 0,
+        usbActivityMbps: 0,
       });
     }, TRANSFER_DONE_DISMISS_MS);
   }
@@ -395,11 +395,11 @@ export class SessionOrchestrator {
       statusMessage: ok ? message : '',
       errorMessage: ok ? '' : error,
       liveMbps: 0,
-      fabricActivityMbps: 0,
+      usbActivityMbps: 0,
       notification: ok ? message : '',
       peakMbps: ok ? (speeds?.peak ?? 0) : 0,
       resultMbps: ok ? (speeds?.result ?? 0) : 0,
-      boothDisplayMibS: 0,
+      displayRateMibS: 0,
     });
     if (ok && isTransferCompleteMessage(message)) {
       this.scheduleDismissTransfer();
@@ -424,14 +424,14 @@ export class SessionOrchestrator {
     this.publishRoster();
   }
 
-  private boothDisplayRate(identity: IdentityProfile): number {
-    const base = identity.booth_display_mib_s;
-    return base > 0 ? rollDisplayMibS(base, identity.booth_display_jitter_pct) : 0;
+  private displayRateValue(identity: IdentityProfile): number {
+    const base = identity.display_rate_mib_s;
+    return base > 0 ? rollDisplayMibS(base, identity.display_rate_jitter_pct) : 0;
   }
 
   private bumpSessionActivity(): void {
-    this.fabricActivitySeq += 1;
-    this.callbacks.patch({ fabricActivitySeq: this.fabricActivitySeq });
+    this.usbActivitySeq += 1;
+    this.callbacks.patch({ usbActivitySeq: this.usbActivitySeq });
   }
 
   private setLinkUi(linkState: LinkUiState, linkedPort: number): void {
@@ -502,7 +502,7 @@ export class SessionOrchestrator {
   private patchTransferProgress(partial: Partial<AppUiState>): void {
     const live = partial.liveMbps ?? 0;
     if (live > 0) {
-      this.callbacks.patch({ ...partial, fabricActivityMbps: live });
+      this.callbacks.patch({ ...partial, usbActivityMbps: live });
       return;
     }
     this.callbacks.patch(partial);
@@ -910,7 +910,7 @@ export class SessionOrchestrator {
 
   private async runInboundAccept(offer: SessionMessage, fromDialog: boolean): Promise<void> {
     const identity = this.callbacks.getIdentity();
-    const boothDisplayRate = this.boothDisplayRate(identity);
+    const displayRateValue = this.displayRateValue(identity);
     this.cancelDismissTimer();
     this.busy = true;
     this.pendingInbound = offer;
@@ -926,7 +926,7 @@ export class SessionOrchestrator {
       peakMbps: 0,
       resultMbps: 0,
       liveMbps: 0,
-      boothDisplayMibS: boothDisplayRate,
+      displayRateMibS: displayRateValue,
       statusMessage: fromDialog ? 'Receiving…' : `Waiting for ${offer.from_name} to send…`,
       errorMessage: '',
     });
@@ -954,8 +954,8 @@ export class SessionOrchestrator {
             bytesDone: done,
             bytesTotal: total,
             liveMbps:
-              boothDisplayRate > 0 && done > 0 ? boothDisplayRate : measured,
-            ...(boothDisplayRate > 0 && done > 0 ? { peakMbps: boothDisplayRate } : {}),
+              displayRateValue > 0 && done > 0 ? displayRateValue : measured,
+            ...(displayRateValue > 0 && done > 0 ? { peakMbps: displayRateValue } : {}),
           });
         },
       );
@@ -968,14 +968,14 @@ export class SessionOrchestrator {
 
       const elapsed = (performance.now() - t0) / 1000;
       const resultMbps =
-        boothDisplayRate > 0 ? boothDisplayRate : data.length / (1024 * 1024) / Math.max(elapsed, 0.001);
+        displayRateValue > 0 ? displayRateValue : data.length / (1024 * 1024) / Math.max(elapsed, 0.001);
       const saveName = offer.payload_name || filename;
       this.callbacks.downloadPayload(data, saveName);
       this.finishTransfer(
         true,
         formatTransferDoneMessage(false, resultMbps),
         '',
-        { peak: boothDisplayRate > 0 ? boothDisplayRate : resultMbps, result: resultMbps },
+        { peak: displayRateValue > 0 ? displayRateValue : resultMbps, result: resultMbps },
       );
     } catch (err) {
       // Always finish — skipping left sticky switch + "Receiving…" forever.
@@ -1102,7 +1102,7 @@ export class SessionOrchestrator {
 
     const identity = this.callbacks.getIdentity();
     const payload = await readFilePayload(file);
-    const boothDisplayRate = this.boothDisplayRate(identity);
+    const displayRateValue = this.displayRateValue(identity);
 
     this.pauseListener();
     await sleep(50);
@@ -1137,7 +1137,7 @@ export class SessionOrchestrator {
       peakMbps: 0,
       resultMbps: 0,
       liveMbps: 0,
-      boothDisplayMibS: 0,
+      displayRateMibS: 0,
       statusMessage: `Sending offer to ${peerName}…`,
       selectedPeer: peerId,
     });
@@ -1227,21 +1227,21 @@ export class SessionOrchestrator {
             bytesDone: done,
             bytesTotal: total,
             liveMbps:
-              boothDisplayRate > 0 && done > 0 ? boothDisplayRate : measured,
-            ...(boothDisplayRate > 0 && done > 0 ? { peakMbps: boothDisplayRate } : {}),
+              displayRateValue > 0 && done > 0 ? displayRateValue : measured,
+            ...(displayRateValue > 0 && done > 0 ? { peakMbps: displayRateValue } : {}),
           });
         },
         file.name,
       );
       const elapsed = (performance.now() - t0) / 1000;
       const resultMbps =
-        boothDisplayRate > 0 ? boothDisplayRate : payload.length / (1024 * 1024) / Math.max(elapsed, 0.001);
+        displayRateValue > 0 ? displayRateValue : payload.length / (1024 * 1024) / Math.max(elapsed, 0.001);
       this.finishTransfer(
         true,
         formatTransferDoneMessage(true, resultMbps),
         '',
         {
-          peak: boothDisplayRate > 0 ? boothDisplayRate : resultMbps,
+          peak: displayRateValue > 0 ? displayRateValue : resultMbps,
           result: resultMbps,
         },
       );

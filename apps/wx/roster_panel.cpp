@@ -1,6 +1,6 @@
 #include "roster_panel.h"
 
-#include "fabric_port.h"
+#include "port_util.h"
 #include "link_status.h"
 
 #include <algorithm>
@@ -60,10 +60,10 @@ int64_t steady_now_ms() {
 }
 
 std::vector<PeerEntry> visible_peers(const std::vector<PeerEntry>& peers,
-                                     bool fabric_connected,
+                                     bool usb_connected,
                                      const IdentityProfile& self,
                                      int local_leg) {
-    if (!fabric_connected || local_leg < 0) {
+    if (!usb_connected || local_leg < 0) {
         return {};
     }
     std::vector<PeerEntry> online;
@@ -85,14 +85,14 @@ struct RosterSlot {
 };
 
 std::vector<RosterSlot> roster_slots(const std::vector<PeerEntry>& peers,
-                                     bool fabric_connected,
+                                     bool usb_connected,
                                      const IdentityProfile& self,
                                      int local_leg) {
     std::vector<RosterSlot> slots;
-    if (!fabric_connected || local_leg < 0) {
+    if (!usb_connected || local_leg < 0) {
         return slots;
     }
-    for (int leg : remote_fabric_legs(local_leg)) {
+    for (int leg : remote_port_indexes(local_leg)) {
         RosterSlot slot{leg, std::nullopt};
         for (const PeerEntry& peer : peers) {
             if (peer.online && peer.port_index == leg && peer.display_name != self.display_name) {
@@ -650,8 +650,8 @@ void RosterPanel::SyncPeersContainerHeight() {
 
 void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
                                const IdentityProfile& self,
-                               bool fabric_connected,
-                               int fabric_devices_seen,
+                               bool usb_connected,
+                               int devices_seen,
                                int port_index,
                                bool transfer_busy,
                                int64_t last_announce_ms,
@@ -662,8 +662,8 @@ void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
         linked_display_port != linked_display_port_ || link_icon != link_icon_;
     peers_ = peers;
     self_ = self;
-    fabric_connected_ = fabric_connected;
-    fabric_devices_seen_ = fabric_devices_seen;
+    usb_connected_ = usb_connected;
+    devices_seen_ = devices_seen;
     port_index_ = port_index;
     transfer_busy_ = transfer_busy;
     transfer_status_ = transfer_status;
@@ -673,25 +673,25 @@ void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
 
     const std::vector<std::string> slot_signature = SlotSignature();
     if (LayoutNeedsRebuild(slot_signature) || linked_changed) {
-        layout_key_.fabric_connected = fabric_connected_;
+        layout_key_.usb_connected = usb_connected_;
         layout_key_.local_leg = port_index_;
         layout_key_.slot_signature = slot_signature;
         RebuildList();
         return;
     }
 
-    if (!fabric_connected_) {
+    if (!usb_connected_) {
         UpdateEmptyState();
     }
     RefreshCountdowns();
 }
 
 std::vector<std::string> RosterPanel::SlotSignature() const {
-    return roster_slot_signature(roster_slots(peers_, fabric_connected_, self_, port_index_));
+    return roster_slot_signature(roster_slots(peers_, usb_connected_, self_, port_index_));
 }
 
 bool RosterPanel::LayoutNeedsRebuild(const std::vector<std::string>& slot_signature) const {
-    return layout_key_.fabric_connected != fabric_connected_
+    return layout_key_.usb_connected != usb_connected_
         || layout_key_.local_leg != port_index_
         || layout_key_.slot_signature != slot_signature;
 }
@@ -708,7 +708,7 @@ std::string RosterPanel::PeerSublineText(const PeerEntry& peer) const {
 }
 
 std::string RosterPanel::AnnounceLabelText() const {
-    if (!fabric_connected_ || last_announce_ms_ <= 0) {
+    if (!usb_connected_ || last_announce_ms_ <= 0) {
         return {};
     }
     const int64_t remaining_ms = next_announce_in_ms(last_announce_ms_, steady_now_ms());
@@ -722,7 +722,7 @@ void RosterPanel::UpdateEmptyState() {
     const bool identity_configured = !self_.display_name.empty();
     const bool show_settings_action = !identity_configured && static_cast<bool>(on_open_settings_);
 
-    if (!fabric_connected_) {
+    if (!usb_connected_) {
         peers_empty_label_->SetLabel(identity_configured
                                          ? "Connect USB to discover other stations"
                                          : "Set your name in Settings, then connect USB");
@@ -751,7 +751,7 @@ void RosterPanel::RebuildList() {
     }
 
     const std::vector<RosterSlot> slots =
-        roster_slots(peers_, fabric_connected_, self_, port_index_);
+        roster_slots(peers_, usb_connected_, self_, port_index_);
 
     if (slots.empty()) {
         selected_peer_.clear();

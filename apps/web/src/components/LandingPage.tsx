@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { fetchBoothNetworkInfo } from '../lib/booth_network';
+import { fetchBoothNetworkInfo } from '../lib/dev_network';
 import {
-  boothOriginFromIp,
+  devOriginFromIp,
   buildPwaAppUrl,
   isLocalHostname,
-  readSavedBoothOrigin,
+  readSavedDevOrigin,
   resolvePwaAppUrl,
-  saveBoothOrigin,
+  saveDevOrigin,
 } from '../lib/pwa_url';
 import { theme } from '../lib/theme';
 
@@ -29,7 +29,7 @@ export function LandingPage() {
       }
       setLanIps(info.ips);
       setPort(String(info.port));
-      const saved = readSavedBoothOrigin();
+      const saved = readSavedDevOrigin();
       if (saved) {
         setPwaUrl(buildPwaAppUrl(saved));
         return;
@@ -37,7 +37,7 @@ export function LandingPage() {
       const first = info.ips[0];
       if (first) {
         setSelectedIp(first);
-        const origin = boothOriginFromIp(first, info.port, info.protocol);
+        const origin = devOriginFromIp(first, info.port, info.protocol);
         setPwaUrl(buildPwaAppUrl(origin));
       }
     })();
@@ -60,8 +60,8 @@ export function LandingPage() {
       return;
     }
     const protocol = window.isSecureContext ? 'https:' : window.location.protocol;
-    const origin = boothOriginFromIp(selectedIp, port, protocol);
-    saveBoothOrigin(origin);
+    const origin = devOriginFromIp(selectedIp, port, protocol);
+    saveDevOrigin(origin);
     setPwaUrl(buildPwaAppUrl(origin));
     setLocalhostWarning(false);
   }, [port, selectedIp]);
@@ -93,7 +93,7 @@ export function LandingPage() {
 
         {localhostWarning && (
           <div className="landing-warning" style={{ borderColor: theme.warn, color: theme.warn }}>
-            <strong>Phones cannot use localhost.</strong> Pick your booth PC&apos;s LAN address below so
+            <strong>Phones cannot use localhost.</strong> Pick this PC&apos;s LAN address below so
             the QR code works on other devices.
           </div>
         )}

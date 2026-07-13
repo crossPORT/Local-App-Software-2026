@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { boothDisplayPresetLabel, receiveStatusToString } from '../lib/config';
+import { displayRatePresetLabel, receiveStatusToString } from '../lib/config';
 import { getEventLogLevel, setEventLogLevel, type EventLogLevel } from '../lib/event_log';
 import { theme } from '../lib/theme';
 import type { IdentityProfile, ReceiveStatus } from '../lib/types';
@@ -12,7 +12,7 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: SettingsDialogProps) {
-  const [boothDisplayEnabled, setBoothDisplayEnabled] = useState(identity.booth_display_enabled);
+  const [displayRateEnabled, setDisplayRateEnabled] = useState(identity.display_rate_enabled);
   const [debugLogLevel, setDebugLogLevel] = useState<EventLogLevel>(() => getEventLogLevel());
   const [usbReadBufferSize, setUsbReadBufferSize] = useState(identity.usb_read_buffer_size ?? '256kb');
   const [error, setError] = useState('');
@@ -31,7 +31,7 @@ export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: Se
       display_name,
       team: String(data.get('team') ?? '').trim(),
       receive_status: String(data.get('receive_status') ?? 'ask_first') as ReceiveStatus,
-      booth_display_enabled: boothDisplayEnabled,
+      display_rate_enabled: displayRateEnabled,
       peers: [],
       usb_read_buffer_size: usbReadBufferSize,
       announce_interval_sec: parseInt(String(data.get('announce_interval_sec') ?? '30'), 10) || 30,
@@ -113,14 +113,14 @@ export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: Se
             <label className="settings-toggle-label">
               <input
                 type="checkbox"
-                checked={boothDisplayEnabled}
-                onChange={(e) => setBoothDisplayEnabled(e.target.checked)}
+                checked={displayRateEnabled}
+                onChange={(e) => setDisplayRateEnabled(e.target.checked)}
               />
-              <span>Booth display speed</span>
+              <span>Display rate</span>
             </label>
             <p className="settings-hint" style={{ color: theme.muted }}>
-              {boothDisplayEnabled
-                ? `Transfer speeds use ${boothDisplayPresetLabel()} during active transfers.`
+              {displayRateEnabled
+                ? `Transfer speeds use ${displayRatePresetLabel()} during active transfers.`
                 : 'Transfer speeds reflect measured USB throughput.'}
             </p>
           </div>

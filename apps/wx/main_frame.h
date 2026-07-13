@@ -2,7 +2,8 @@
 
 #include "connection_panel.h"
 #include "identity_profile.h"
-#include "transfer_orchestrator.h"
+
+#include <rocketbox/session_orchestrator.h>
 
 #include <memory>
 #include <optional>
@@ -49,18 +50,18 @@ private:
     void OnAnnounceLedClick();
     void OnConnectUsb();
     void OnDisconnectUsb();
-    int CountFabricDevices() const;
+    int CountRocketBoxDevices() const;
     void BuildMenuBar();
     void OnFirstShow(wxShowEvent& event);
     void OnClose(wxCloseEvent& event);
     bool StartOrchestrator();
-    int ResolveFabricPortIndex();
+    int ResolvePortIndex();
 
     int cli_port_index_ = -1;
     int port_index_ = -1;
     int content_width_ = 560;
-    bool fabric_connected_ = false;
-    int last_fabric_devices_seen_ = 0;
+    bool usb_connected_ = false;
+    int last_devices_seen_ = 0;
     std::string config_path_;
     IdentityProfile identity_;
 
@@ -75,7 +76,7 @@ private:
     wxTimer* shutdown_poll_timer_ = nullptr;
     LinkLed link_led_ = LinkLed::Offline;
     bool led_pulse_on_ = false;
-    std::unique_ptr<TransferOrchestrator> orchestrator_;
+    std::unique_ptr<SessionOrchestrator> orchestrator_;
     std::string selected_peer_;
     std::optional<std::string> shown_offer_id_;
     bool orchestrator_started_ = false;

@@ -1,6 +1,6 @@
 #include "settings_dialog.h"
 
-#include "booth_display.h"
+#include "display_rate.h"
 #include "platform_util.h"
 
 #include <algorithm>
@@ -130,21 +130,21 @@ SettingsDialog::SettingsDialog(wxWindow* parent,
     folder_row->Add(browse_folder, 0, wxALIGN_CENTER_VERTICAL);
     root->Add(folder_row, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-    booth_display_check_ = new wxCheckBox(panel, wxID_ANY, "Booth display speed");
-    booth_display_check_->SetValue(profile.booth_display_mib_s > 0.0);
-    booth_display_check_->SetForegroundColour(kText);
-    booth_display_check_->SetBackgroundColour(kBg);
-    root->Add(booth_display_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
+    display_rate_check_ = new wxCheckBox(panel, wxID_ANY, "Display rate");
+    display_rate_check_->SetValue(profile.display_rate_mib_s > 0.0);
+    display_rate_check_->SetForegroundColour(kText);
+    display_rate_check_->SetBackgroundColour(kBg);
+    root->Add(display_rate_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
 
-    std::ostringstream booth_msg;
-    booth_msg.setf(std::ios::fixed);
-    booth_msg.precision(0);
-    booth_msg << "When enabled, transfer speeds use ~" << (kBoothDisplayPresetMibS / 1024.0)
-              << " GiB/s (+/- " << kBoothDisplayPresetJitterPct
+    std::ostringstream rate_msg;
+    rate_msg.setf(std::ios::fixed);
+    rate_msg.precision(0);
+    rate_msg << "When enabled, transfer speeds use ~" << (kDisplayRatePresetMibS / 1024.0)
+              << " GiB/s (+/- " << kDisplayRatePresetJitterPct
               << "%) during active transfers.";
-    auto* booth_hint = MakeLabel(panel, wxString::FromUTF8(booth_msg.str().c_str()), kMuted);
-    booth_hint->Wrap(kWrapWidth);
-    root->Add(booth_hint, 0, wxLEFT | wxRIGHT, 10);
+    auto* rate_hint = MakeLabel(panel, wxString::FromUTF8(rate_msg.str().c_str()), kMuted);
+    rate_hint->Wrap(kWrapWidth);
+    root->Add(rate_hint, 0, wxLEFT | wxRIGHT, 10);
 
     auto* tune_hint = MakeLabel(
         panel,
@@ -229,12 +229,12 @@ void SettingsDialog::OnSave(wxCommandEvent&) {
                               : receive_sel == 2 ? ReceiveStatus::Busy
                                                  : ReceiveStatus::AskFirst;
     profile_.receive_folder = folder_field_->GetValue().ToStdString();
-    if (booth_display_check_->GetValue()) {
-        profile_.booth_display_mib_s = kBoothDisplayPresetMibS;
-        profile_.booth_display_jitter_pct = kBoothDisplayPresetJitterPct;
+    if (display_rate_check_->GetValue()) {
+        profile_.display_rate_mib_s = kDisplayRatePresetMibS;
+        profile_.display_rate_jitter_pct = kDisplayRatePresetJitterPct;
     } else {
-        profile_.booth_display_mib_s = 0.0;
-        profile_.booth_display_jitter_pct = 0.0;
+        profile_.display_rate_mib_s = 0.0;
+        profile_.display_rate_jitter_pct = 0.0;
     }
     if (profile_.config_path.empty()) {
         profile_.config_path = platform::default_identity_config_path();

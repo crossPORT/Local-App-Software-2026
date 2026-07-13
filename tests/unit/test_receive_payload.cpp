@@ -12,7 +12,7 @@
 namespace {
 
 std::string temp_dir() {
-    return (std::filesystem::temp_directory_path() / "slsfabric-receive-payload-test")
+    return (std::filesystem::temp_directory_path() / "rocketbox-receive-payload-test")
         .string();
 }
 
@@ -39,18 +39,18 @@ TransferResult ok_usb(uint64_t bytes) {
 
 }  // namespace
 
-FABRIC_TEST(inbound_payload_path_builds_under_receive_folder) {
+RB_TEST(inbound_payload_path_builds_under_receive_folder) {
     CHECK_STREQ(build_inbound_payload_path("/inbox", "model.stl"), "/inbox/model.stl");
     CHECK_STREQ(build_inbound_payload_path("/inbox/", "model.stl"), "/inbox/model.stl");
     CHECK_STREQ(build_inbound_payload_path("/inbox", ""), "/inbox/incoming.bin");
 }
 
-FABRIC_TEST(should_remove_partial_only_on_failed_receive) {
+RB_TEST(should_remove_partial_only_on_failed_receive) {
     CHECK(should_remove_partial_after_receive(failed_usb("USB receive failed, status=2")));
     CHECK(!should_remove_partial_after_receive(ok_usb(1024)));
 }
 
-FABRIC_TEST(cleanup_missing_file_is_noop) {
+RB_TEST(cleanup_missing_file_is_noop) {
     const std::string path = temp_dir() + "/does-not-exist.bin";
     std::filesystem::remove_all(temp_dir());
 
@@ -61,7 +61,7 @@ FABRIC_TEST(cleanup_missing_file_is_noop) {
     CHECK(!std::filesystem::exists(path));
 }
 
-FABRIC_TEST(cleanup_removes_empty_partial_file) {
+RB_TEST(cleanup_removes_empty_partial_file) {
     std::filesystem::remove_all(temp_dir());
     std::filesystem::create_directories(temp_dir());
     const std::string path = temp_dir() + "/empty.bin";
@@ -77,7 +77,7 @@ FABRIC_TEST(cleanup_removes_empty_partial_file) {
     std::filesystem::remove_all(temp_dir());
 }
 
-FABRIC_TEST(cleanup_removes_nonempty_partial_file) {
+RB_TEST(cleanup_removes_nonempty_partial_file) {
     std::filesystem::remove_all(temp_dir());
     std::filesystem::create_directories(temp_dir());
     const std::string path = temp_dir() + "/partial.bin";
@@ -94,7 +94,7 @@ FABRIC_TEST(cleanup_removes_nonempty_partial_file) {
     std::filesystem::remove_all(temp_dir());
 }
 
-FABRIC_TEST(handle_failed_inbound_receive_cleans_and_preserves_error) {
+RB_TEST(handle_failed_inbound_receive_cleans_and_preserves_error) {
     std::filesystem::remove_all(temp_dir());
     std::filesystem::create_directories(temp_dir());
     const std::string path = temp_dir() + "/aborted.bin";
@@ -110,7 +110,7 @@ FABRIC_TEST(handle_failed_inbound_receive_cleans_and_preserves_error) {
     std::filesystem::remove_all(temp_dir());
 }
 
-FABRIC_TEST(handle_failed_inbound_receive_skips_cleanup_on_success) {
+RB_TEST(handle_failed_inbound_receive_skips_cleanup_on_success) {
     std::filesystem::remove_all(temp_dir());
     std::filesystem::create_directories(temp_dir());
     const std::string path = temp_dir() + "/complete.bin";

@@ -2,7 +2,7 @@
 
 #include "test_util.h"
 
-FABRIC_TEST(handshake_timing_defaults) {
+RB_TEST(handshake_timing_defaults) {
     IdentityProfile profile;
     profile.display_name = "Alice";
     const HandshakeTiming timing = handshake_timing_from_identity(profile);
@@ -15,7 +15,7 @@ FABRIC_TEST(handshake_timing_defaults) {
     CHECK_EQ(timing.payload_header_timeout_ms, 15000u);
 }
 
-FABRIC_TEST(handshake_timing_from_config) {
+RB_TEST(handshake_timing_from_config) {
     IdentityProfile profile;
     profile.display_name = "Bob";
     profile.accept_ready_gap_ms = 200;
@@ -34,7 +34,7 @@ FABRIC_TEST(handshake_timing_from_config) {
     CHECK_EQ(timing.payload_header_timeout_ms, 12000u);
 }
 
-FABRIC_TEST(handshake_reply_delay_defaults_to_double_gap) {
+RB_TEST(handshake_reply_delay_defaults_to_double_gap) {
     IdentityProfile profile;
     profile.accept_ready_gap_ms = 250;
     const HandshakeTiming timing = handshake_timing_from_identity(profile);

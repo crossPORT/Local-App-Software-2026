@@ -1,13 +1,13 @@
 import type { IdentityProfile, PeerConfig, ReceiveStatus } from './types';
 
-/** Internal preset used when booth display speed is enabled — not editable in UI. */
-export const BOOTH_DISPLAY_PRESET = {
-  booth_display_mib_s: 7168,
-  booth_display_jitter_pct: 3,
+/** Internal preset used when display rate is enabled — not editable in UI. */
+export const DISPLAY_RATE_PRESET = {
+  display_rate_mib_s: 7168,
+  display_rate_jitter_pct: 3,
 } as const;
 
-export function isBoothDisplayDisabledInUrl(): boolean {
-  return new URLSearchParams(window.location.search).get('booth_display') === '0';
+export function isDisplayRateDisabledInUrl(): boolean {
+  return new URLSearchParams(window.location.search).get('display_rate') === '0';
 }
 
 function trim(value: string): string {
@@ -73,11 +73,11 @@ function applyIdentityKey(cfg: Partial<IdentityProfile>, key: string, value: str
     case 'payload_header_timeout_ms':
       cfg.payload_header_timeout_ms = Math.max(0, Number.parseInt(value, 10) || 0);
       break;
-    case 'booth_display_mib_s':
-      cfg.booth_display_mib_s = Math.max(0, Number.parseFloat(value) || 0);
+    case 'display_rate_mib_s':
+      cfg.display_rate_mib_s = Math.max(0, Number.parseFloat(value) || 0);
       break;
-    case 'booth_display_jitter_pct':
-      cfg.booth_display_jitter_pct = Math.max(0, Number.parseFloat(value) || 0);
+    case 'display_rate_jitter_pct':
+      cfg.display_rate_jitter_pct = Math.max(0, Number.parseFloat(value) || 0);
       break;
     default:
       break;
@@ -118,9 +118,9 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
     ready_timeout_sec: 0,
     session_header_timeout_ms: 0,
     payload_header_timeout_ms: 0,
-    booth_display_mib_s: 0,
-    booth_display_jitter_pct: 0,
-    booth_display_enabled: true,
+    display_rate_mib_s: 0,
+    display_rate_jitter_pct: 0,
+    display_rate_enabled: true,
     peers: [],
   };
   const portCfg: Partial<IdentityProfile> = { peers: [] };
@@ -195,16 +195,16 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
       portCfg.session_header_timeout_ms || global.session_header_timeout_ms || 0,
     payload_header_timeout_ms:
       portCfg.payload_header_timeout_ms || global.payload_header_timeout_ms || 0,
-    booth_display_mib_s:
-      (portCfg.booth_display_mib_s ?? 0) > 0
-        ? (portCfg.booth_display_mib_s ?? 0)
-        : (global.booth_display_mib_s ?? 0),
-    booth_display_jitter_pct:
-      (portCfg.booth_display_jitter_pct ?? 0) > 0
-        ? (portCfg.booth_display_jitter_pct ?? 0)
-        : (global.booth_display_jitter_pct ?? 0),
-    booth_display_enabled:
-      (portCfg.booth_display_mib_s ?? 0) > 0 || (global.booth_display_mib_s ?? 0) > 0,
+    display_rate_mib_s:
+      (portCfg.display_rate_mib_s ?? 0) > 0
+        ? (portCfg.display_rate_mib_s ?? 0)
+        : (global.display_rate_mib_s ?? 0),
+    display_rate_jitter_pct:
+      (portCfg.display_rate_jitter_pct ?? 0) > 0
+        ? (portCfg.display_rate_jitter_pct ?? 0)
+        : (global.display_rate_jitter_pct ?? 0),
+    display_rate_enabled:
+      (portCfg.display_rate_mib_s ?? 0) > 0 || (global.display_rate_mib_s ?? 0) > 0,
     peers: global.peers ?? [],
     config_path: configPath,
     usb_read_buffer_size: portCfg.usb_read_buffer_size || global.usb_read_buffer_size || '256kb',
@@ -244,9 +244,9 @@ export function defaultIdentityProfile(portIndex: number): IdentityProfile {
     ready_timeout_sec: 0,
     session_header_timeout_ms: 0,
     payload_header_timeout_ms: 0,
-    booth_display_mib_s: 0,
-    booth_display_jitter_pct: 0,
-    booth_display_enabled: true,
+    display_rate_mib_s: 0,
+    display_rate_jitter_pct: 0,
+    display_rate_enabled: true,
     peers: [],
     config_path: `local:port${portIndex}`,
     usb_read_buffer_size: '256kb',
@@ -279,7 +279,7 @@ function normalizeIdentity(raw: Partial<IdentityProfile>, portIndex: number): Id
     role: trim(raw.role ?? defaults.role),
     receive_status: raw.receive_status ?? defaults.receive_status,
     receive_folder: trim(raw.receive_folder ?? defaults.receive_folder),
-    booth_display_enabled: raw.booth_display_enabled ?? defaults.booth_display_enabled,
+    display_rate_enabled: raw.display_rate_enabled ?? defaults.display_rate_enabled,
     peers: (raw.peers ?? [])
       .map((peer) => normalizePeer(peer))
       .filter((peer): peer is PeerConfig => peer != null),
@@ -301,32 +301,32 @@ export function loadIdentityProfile(portIndex: number): IdentityProfile {
   }
 }
 
-export function isBoothDisplayEnabled(profile: IdentityProfile): boolean {
-  return profile.booth_display_enabled;
+export function isDisplayRateEnabled(profile: IdentityProfile): boolean {
+  return profile.display_rate_enabled;
 }
 
-export function boothDisplayPresetLabel(): string {
-  const gib = BOOTH_DISPLAY_PRESET.booth_display_mib_s / 1024;
-  const pct = BOOTH_DISPLAY_PRESET.booth_display_jitter_pct;
+export function displayRatePresetLabel(): string {
+  const gib = DISPLAY_RATE_PRESET.display_rate_mib_s / 1024;
+  const pct = DISPLAY_RATE_PRESET.display_rate_jitter_pct;
   return `~${Math.round(gib)} GiB/s (±${pct}%)`;
 }
 
-/** Apply internal preset rates when booth display speed is on; otherwise use measured speeds only. */
+/** Apply internal preset rates when display rate is on; otherwise use measured speeds only. */
 export function applyBoothDisplaySettings(
   profile: IdentityProfile,
   portIndex: number,
 ): IdentityProfile {
-  if (isBoothDisplayDisabledInUrl() || !profile.booth_display_enabled) {
+  if (isDisplayRateDisabledInUrl() || !profile.display_rate_enabled) {
     return normalizeIdentity(
-      { ...profile, booth_display_mib_s: 0, booth_display_jitter_pct: 0 },
+      { ...profile, display_rate_mib_s: 0, display_rate_jitter_pct: 0 },
       portIndex,
     );
   }
   return normalizeIdentity(
     {
       ...profile,
-      booth_display_mib_s: BOOTH_DISPLAY_PRESET.booth_display_mib_s,
-      booth_display_jitter_pct: BOOTH_DISPLAY_PRESET.booth_display_jitter_pct,
+      display_rate_mib_s: DISPLAY_RATE_PRESET.display_rate_mib_s,
+      display_rate_jitter_pct: DISPLAY_RATE_PRESET.display_rate_jitter_pct,
     },
     portIndex,
   );
@@ -336,11 +336,11 @@ export function applyBoothDisplaySettings(
 export async function loadIdentityProfileAsync(portIndex: number): Promise<IdentityProfile> {
   const stored = loadIdentityProfile(portIndex);
   let merged = normalizeIdentity(
-    { ...stored, booth_display_mib_s: 0, booth_display_jitter_pct: 0 },
+    { ...stored, display_rate_mib_s: 0, display_rate_jitter_pct: 0 },
     portIndex,
   );
-  if (isBoothDisplayDisabledInUrl()) {
-    merged = { ...merged, booth_display_enabled: false };
+  if (isDisplayRateDisabledInUrl()) {
+    merged = { ...merged, display_rate_enabled: false };
   }
   return applyBoothDisplaySettings(merged, portIndex);
 }
@@ -349,8 +349,8 @@ export function saveIdentityProfile(portIndex: number, identity: IdentityProfile
   const normalized = normalizeIdentity(
     {
       ...identity,
-      booth_display_mib_s: 0,
-      booth_display_jitter_pct: 0,
+      display_rate_mib_s: 0,
+      display_rate_jitter_pct: 0,
     },
     portIndex,
   );

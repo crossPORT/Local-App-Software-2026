@@ -1,8 +1,8 @@
 #pragma once
 
-#include "fabric_sim.h"
+#include "rocketbox_sim.h"
 #include "identity_profile.h"
-#include "transfer_orchestrator.h"
+#include <rocketbox/session_orchestrator.h>
 
 #include <chrono>
 #include <cstdio>
@@ -16,19 +16,19 @@
 #include <unistd.h>
 #include <vector>
 
-// Helpers for in-process TransferOrchestrator tests over fabric_sim (two ports).
+// Helpers for in-process TransferOrchestrator tests over rocketbox_sim (two ports).
 
 namespace integration {
 
 class SimFabricScope {
 public:
     SimFabricScope() {
-        fabric_sim_set_enabled(true);
-        fabric_sim_reset();
+        rocketbox_sim_set_enabled(true);
+        rocketbox_sim_reset();
     }
     ~SimFabricScope() {
-        fabric_sim_set_enabled(false);
-        fabric_sim_reset();
+        rocketbox_sim_set_enabled(false);
+        rocketbox_sim_reset();
     }
 };
 
@@ -54,7 +54,7 @@ inline IdentityProfile make_identity(const std::string& display_name,
 }
 
 inline std::string write_temp_file(const std::string& contents) {
-    char path_template[] = "/tmp/slsfabric-int-XXXXXX";
+    char path_template[] = "/tmp/rocketbox-int-XXXXXX";
     const int fd = mkstemp(path_template);
     if (fd < 0) {
         return {};
@@ -71,8 +71,8 @@ inline std::string write_temp_file(const std::string& contents) {
 class TrackedOrchestrator {
 public:
     TrackedOrchestrator(int port_index, IdentityProfile identity)
-        : orchestrator_(std::make_unique<TransferOrchestrator>(
-              port_index,
+        : orchestrator_(std::make_unique<SessionOrchestrator>(
+              rocketbox::make_shared_transport(rocketbox::TransportMode::Usb, port_index),
               std::move(identity),
               [this](const OrchestratorUiState& state) {
                   std::lock_guard<std::mutex> lock(mutex_);
@@ -88,7 +88,7 @@ public:
         orchestrator_->stop();
     }
 
-    TransferOrchestrator& orchestrator() {
+    SessionOrchestrator& orchestrator() {
         return *orchestrator_;
     }
 
@@ -135,7 +135,7 @@ public:
 private:
     mutable std::mutex mutex_;
     OrchestratorUiState state_{};
-    std::unique_ptr<TransferOrchestrator> orchestrator_;
+    std::unique_ptr<SessionOrchestrator> orchestrator_;
 };
 
 }  // namespace integration

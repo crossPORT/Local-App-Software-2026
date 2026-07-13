@@ -1,6 +1,6 @@
 /** URL-only demo flags — no USB/WS I/O. */
 
-export function fabricSimEnabled(): boolean {
+export function simEnabled(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
@@ -8,7 +8,7 @@ export function fabricSimEnabled(): boolean {
   return value === '1' || value === 'true';
 }
 
-export function fabricPortFromUrl(): number {
+export function portFromUrl(): number {
   if (typeof window === 'undefined') {
     return 1;
   }

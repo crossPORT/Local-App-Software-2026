@@ -1,6 +1,6 @@
 #include "connection_panel.h"
 
-#include "fabric_port.h"
+#include "port_util.h"
 #include "link_status.h"
 #include "session_rate_stats.h"
 #include "speed_monitor.h"
@@ -175,10 +175,10 @@ void ConnectionPanel::SetLayoutChangedHandler(std::function<void()> on_layout_ch
 }
 
 void ConnectionPanel::SyncActivityMonitor(bool show,
-                                          uint32_t fabric_activity_seq,
+                                          uint32_t usb_activity_seq,
                                           double live_mbps,
                                           double result_mbps,
-                                          double booth_display_mib_s) {
+                                          double display_rate_mib_s) {
     if (!activity_monitor_ || !activity_monitor_item_ || !root_sizer_) {
         return;
     }
@@ -200,8 +200,8 @@ void ConnectionPanel::SyncActivityMonitor(bool show,
 
     const bool has_live = live_mbps > 0.0;
     const double scale_floor =
-        has_live && booth_display_mib_s > 0.0
-            ? std::max(live_mbps, booth_display_mib_s)
+        has_live && display_rate_mib_s > 0.0
+            ? std::max(live_mbps, display_rate_mib_s)
             : (has_live ? live_mbps : 0.0);
 
     activity_monitor_->Show(true);
@@ -210,12 +210,12 @@ void ConnectionPanel::SyncActivityMonitor(bool show,
     activity_monitor_->SetScaleFloor(scale_floor);
     activity_monitor_->EnsureChart();
 
-    if (fabric_activity_seq > last_activity_seq_) {
-        const uint32_t delta = fabric_activity_seq - last_activity_seq_;
+    if (usb_activity_seq > last_activity_seq_) {
+        const uint32_t delta = usb_activity_seq - last_activity_seq_;
         for (uint32_t i = 0; i < delta; ++i) {
             activity_monitor_->PushSessionPulse();
         }
-        last_activity_seq_ = fabric_activity_seq;
+        last_activity_seq_ = usb_activity_seq;
     }
 
     if (has_live) {
@@ -244,11 +244,11 @@ void ConnectionPanel::SyncPanelMinSize() {
     SetMinSize(wxSize(-1, min.GetHeight()));
 }
 
-void ConnectionPanel::SyncConnectActions(bool fabric_connected) {
+void ConnectionPanel::SyncConnectActions(bool usb_connected) {
     if (!connect_btn_ || !disconnect_btn_ || !connect_item_ || !disconnect_item_) {
         return;
     }
-    if (fabric_connected) {
+    if (usb_connected) {
         connect_btn_->Hide();
         connect_item_->Show(false);
         disconnect_btn_->Show();
@@ -280,34 +280,34 @@ void ConnectionPanel::RelayoutAncestors() {
     }
 }
 
-void ConnectionPanel::ApplyState(bool fabric_connected,
-                                 int fabric_port_index,
-                                 int fabric_devices_seen,
-                                 const std::string& fabric_device_label,
+void ConnectionPanel::ApplyState(bool usb_connected,
+                                 int usb_port_index,
+                                 int devices_seen,
+                                 const std::string& device_label,
                                  bool busy,
                                  double live_mbps,
-                                 double booth_display_mib_s,
+                                 double display_rate_mib_s,
                                  double result_mbps,
                                  int64_t last_announce_ms,
-                                 uint32_t fabric_activity_seq,
+                                 uint32_t usb_activity_seq,
                                  const std::string& status_message,
                                  const std::string& error_message) {
     (void)last_announce_ms;
     (void)status_message;
     (void)error_message;
 
-    std::string device_label = fabric_device_label;
-    if (fabric_connected && device_label.empty() && fabric_port_index >= 0) {
-        device_label = format_fabric_port_label(fabric_port_index);
+    std::string label = device_label;
+    if (usb_connected && label.empty() && usb_port_index >= 0) {
+        label = format_port_label(usb_port_index);
     }
 
     bool show_connected = false;
-    if (fabric_connected && !device_label.empty()) {
+    if (usb_connected && !label.empty()) {
         hint_label_->Hide();
-        device_label_->SetLabel(wxString::FromUTF8(device_label.c_str()));
+        device_label_->SetLabel(wxString::FromUTF8(label.c_str()));
         device_label_->Show();
         show_connected = true;
-        const std::string multi_meta = multi_device_meta_line(fabric_devices_seen, true);
+        const std::string multi_meta = multi_device_meta_line(devices_seen, true);
         if (multi_meta.empty()) {
             meta_label_->Hide();
         } else {
@@ -315,12 +315,12 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
             meta_label_->Show();
         }
         warn_label_->Hide();
-    } else if (fabric_devices_seen > 0) {
+    } else if (devices_seen > 0) {
         hint_label_->SetLabel(
             "USB cable detected — click Connect USB and pick it in the USB dialog.");
         hint_label_->Show();
         device_label_->Hide();
-        const std::string multi_meta = multi_device_meta_line(fabric_devices_seen, false);
+        const std::string multi_meta = multi_device_meta_line(devices_seen, false);
         if (multi_meta.empty()) {
             meta_label_->Hide();
         } else {
@@ -337,14 +337,14 @@ void ConnectionPanel::ApplyState(bool fabric_connected,
     }
 
     const double chart_mbps =
-        busy && live_mbps <= 0.0 && booth_display_mib_s > 0.0 ? booth_display_mib_s
+        busy && live_mbps <= 0.0 && display_rate_mib_s > 0.0 ? display_rate_mib_s
                                                                 : live_mbps;
 
     SyncActivityMonitor(show_connected,
-                        fabric_activity_seq,
+                        usb_activity_seq,
                         chart_mbps,
                         result_mbps,
-                        booth_display_mib_s);
+                        display_rate_mib_s);
     SyncConnectActions(show_connected);
 
     error_label_->Hide();

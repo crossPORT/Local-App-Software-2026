@@ -29,9 +29,9 @@ export interface IdentityProfile {
   ready_timeout_sec: number;
   session_header_timeout_ms: number;
   payload_header_timeout_ms: number;
-  booth_display_mib_s: number;
-  booth_display_jitter_pct: number;
-  booth_display_enabled: boolean;
+  display_rate_mib_s: number;
+  display_rate_jitter_pct: number;
+  display_rate_enabled: boolean;
   peers: PeerConfig[];
   config_path: string;
   usb_read_buffer_size?: string;
@@ -58,8 +58,7 @@ export interface AppUiState {
   roster: PeerEntry[];
   portIndex: number;
   usbConnected: boolean;
-  fabricConnected: boolean;
-  fabricDevicesSeen: number;
+  devicesSeen: number;
   /** True when this origin has a remembered cable serial in sessionStorage. */
   hasSavedCable: boolean;
   busy: boolean;
@@ -71,11 +70,11 @@ export interface AppUiState {
   bytesDone: number;
   bytesTotal: number;
   liveMbps: number;
-  fabricActivityMbps: number;
-  fabricActivitySeq: number;
+  usbActivityMbps: number;
+  usbActivitySeq: number;
   peakMbps: number;
   resultMbps: number;
-  boothDisplayMibS: number;
+  displayRateMibS: number;
   transferLabel: string;
   selectedPeer: string;
   lastAnnounceMs: number;
@@ -90,8 +89,7 @@ export const initialUiState = (identity: IdentityProfile, portIndex: number): Ap
   roster: [],
   portIndex,
   usbConnected: false,
-  fabricConnected: false,
-  fabricDevicesSeen: 0,
+  devicesSeen: 0,
   hasSavedCable: false,
   busy: false,
   waitingForPartner: false,
@@ -102,11 +100,11 @@ export const initialUiState = (identity: IdentityProfile, portIndex: number): Ap
   bytesDone: 0,
   bytesTotal: 0,
   liveMbps: 0,
-  fabricActivityMbps: 0,
-  fabricActivitySeq: 0,
+  usbActivityMbps: 0,
+  usbActivitySeq: 0,
   peakMbps: 0,
   resultMbps: 0,
-  boothDisplayMibS: 0,
+  displayRateMibS: 0,
   transferLabel: '',
   selectedPeer: '',
   lastAnnounceMs: 0,

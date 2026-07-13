@@ -41,27 +41,19 @@ export function ConnectionLed({ state, pulseOn = false, onClick }: ConnectionLed
   );
 }
 
-export function deriveLinkLed(
-  usbConnected: boolean,
-  fabricConnected: boolean,
-  busy: boolean,
-): LinkLed {
-  if (busy && fabricConnected) {
+export function deriveLinkLed(usbConnected: boolean, busy: boolean): LinkLed {
+  if (busy && usbConnected) {
     return 'transferring';
   }
-  if (fabricConnected) {
-    return 'connected';
-  }
   if (usbConnected) {
-    return 'announcing';
+    return 'connected';
   }
   return 'offline';
 }
 
 export function statusLine(
-  _usbConnected: boolean,
-  fabricConnected: boolean,
-  fabricDevicesSeen: number,
+  usbConnected: boolean,
+  devicesSeen: number,
   _portIndex: number,
   busy: boolean,
   waitingForPartner: boolean,
@@ -71,10 +63,10 @@ export function statusLine(
   if ((busy || waitingForPartner) && statusMessage) {
     return { text: statusMessage, colour: theme.accent };
   }
-  if (fabricConnected && !peersConfigured) {
+  if (usbConnected && !peersConfigured) {
     return { text: 'USB connected — waiting for peers', colour: theme.warn };
   }
-  if (fabricConnected) {
+  if (usbConnected) {
     return { text: 'USB connected', colour: theme.ok };
   }
   if (webUsbBlockedReason()) {
@@ -84,11 +76,8 @@ export function statusLine(
       colour: theme.error,
     };
   }
-  if (fabricDevicesSeen === 0) {
+  if (devicesSeen === 0) {
     return { text: 'Plug in your USB cable, then connect below', colour: theme.warn };
   }
-  if (!fabricConnected) {
-    return { text: 'Click Connect USB below', colour: theme.warn };
-  }
-  return { text: 'USB allowed — click Connect USB below', colour: theme.warn };
+  return { text: 'Click Connect USB below', colour: theme.warn };
 }

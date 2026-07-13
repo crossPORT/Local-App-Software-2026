@@ -75,7 +75,7 @@ export function App() {
         </ConnectionPanel>
         <RosterPanel
           peers={state.roster}
-          fabricConnected={state.fabricConnected}
+          usbConnected={state.usbConnected}
           identityConfigured={!!state.identity.display_name.trim()}
           identityDisplayName={state.identity.display_name}
           localLeg={state.portIndex}

@@ -2,9 +2,9 @@
 
 Device: **RocketBox** hardware — USB vendor `0x1772`, product `0x0006`.
 
-Constants live in `core/include/usb_protocol.h`. Implementation in `core/src/usb_transfer_core.cpp`. PWA mirror: `apps/web/src/lib/fabric_protocol.ts`, `fabric_frame.ts`.
+Constants live in `sdks/cpp/core/include/usb_protocol.h`. Implementation in `sdks/cpp/core/src/usb_transfer_core.cpp`. TypeScript mirror: `@rocketbox/sdk` (`sdks/typescript/src/protocol.ts`, `frame.ts`).
 
-For **how apps call the core** (threading, progress, port index vs fabric leg), see [AGENTS.md](../AGENTS.md), [protocols/file-transfer.md](../protocols/file-transfer.md), and [protocols/session.md](../protocols/session.md). This document covers **on-the-wire** format.
+For **how apps call the core** (threading, progress, port index vs device port), see [AGENTS.md](../AGENTS.md), [protocols/file-transfer.md](../protocols/file-transfer.md), and [protocols/session.md](../protocols/session.md). This document covers **on-the-wire** format.
 
 ## Endpoints
 
@@ -15,11 +15,11 @@ For **how apps call the core** (threading, progress, port index vs fabric leg), 
 
 Interface: `0`. Claim interface and detach kernel driver if active (handled in core).
 
-## Fabric topology
+## Port topology
 
-- **Four host legs** per fabric (`kFabricLegCount = 4`), labeled Port 1–4 in UI.
-- Leg identity comes from cable USB serial: `(serial_hex - 1) % 4`.
-- **`port_index`** in libusb is the device enumeration order on the host PC — not the fabric leg.
+- **Four host ports** (`kPortCount = 4`), labeled Port 1–4 in UI.
+- Port identity comes from cable USB serial: `(serial_hex - 1) % 4`.
+- **`port_index`** in libusb is the device enumeration order on the host PC — not the user-facing port number.
 
 ## File transfer header (32 bytes)
 
@@ -34,7 +34,7 @@ Interface: `0`. Claim interface and detach kernel driver if active (handled in c
 
 | Byte | Constant | Traffic |
 |------|----------|---------|
-| `1` | `kFrameKindSession` | FABRIC-SESSION-v1 text bodies |
+| `1` | `kFrameKindSession` | Session text bodies (`ROCKETBOX-SESSION-v1`; legacy read also accepts `FABRIC-SESSION-v1`) |
 | `2` | `kFrameKindPayload` | File payload after handshake |
 
 There is **no legacy untagged mode**. Invalid kind bytes are rejected.
@@ -60,7 +60,7 @@ There is **no legacy untagged mode**. Invalid kind bytes are rejected.
 
 Two-port file cross-connect (same PC, two cables):
 
-1. Requires ≥ 2 fabric devices (port indices 0 and 1 typical)
+1. Requires ≥ 2 RocketBox devices (port indices 0 and 1 typical)
 2. Open send port and recv port
 3. Send 32-byte header on send port; read header on recv port
 4. Pipelined chunk transfer with double-buffered disk/USB overlap (`usb_transfer_chunk`)

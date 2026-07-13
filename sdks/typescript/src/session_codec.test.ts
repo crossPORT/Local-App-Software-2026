@@ -35,6 +35,16 @@ describe('session message codec', () => {
     expect(parseSessionPayload(bad)).toBeNull();
   });
 
+  it('parses alt ROCKETBOX-SESSION-v1 header', () => {
+    const msg = parseSessionPayload(
+      new TextEncoder().encode(
+        'ROCKETBOX-SESSION-v1\nkind=announce\nsession_id=alt1\nfrom=Kyle\n',
+      ),
+    );
+    expect(msg?.kind).toBe('announce');
+    expect(msg?.session_id).toBe('alt1');
+  });
+
   it('round-trips session kinds', () => {
     for (const kind of ['offer', 'accept', 'decline', 'ready', 'announce'] as const) {
       expect(sessionKindFromString(sessionKindToString(kind))).toBe(kind);

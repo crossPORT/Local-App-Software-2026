@@ -1,9 +1,9 @@
 #include "main_frame.h"
 
 #include "app_icon.h"
-#include "booth_log.h"
+#include "event_log.h"
 #include "connection_panel.h"
-#include "fabric_device_picker.h"
+#include "rocketbox_device_picker.h"
 #include "session_handshake.h"
 #include "incoming_dialog.h"
 #include "link_release_dialog.h"
@@ -304,8 +304,8 @@ void MainFrame::OnFirstShow(wxShowEvent& event) {
     SetFocus();
 
     if (!StartOrchestrator()) {
-        const int devices = CountFabricDevices();
-        last_fabric_devices_seen_ = devices;
+        const int devices = CountRocketBoxDevices();
+        last_devices_seen_ = devices;
         if (connection_panel_) {
             connection_panel_->ApplyState(
                 false,
@@ -344,12 +344,12 @@ void MainFrame::OnFirstShow(wxShowEvent& event) {
     }
 }
 
-int MainFrame::ResolveFabricPortIndex() {
+int MainFrame::ResolvePortIndex() {
     libusb_context* ctx = nullptr;
     if (libusb_init(&ctx) != 0) {
         return -1;
     }
-    const std::vector<FabricUsbDevice> devices = list_fabric_devices(ctx);
+    const std::vector<RocketBoxUsbDevice> devices = list_rocketbox_devices(ctx);
     libusb_exit(ctx);
 
     if (devices.empty()) {
@@ -364,15 +364,15 @@ int MainFrame::ResolveFabricPortIndex() {
     if (devices.size() == 1) {
         return 0;
     }
-    return pick_fabric_port_index(this, devices);
+    return pick_usb_port_index(this, devices);
 }
 
-int MainFrame::CountFabricDevices() const {
+int MainFrame::CountRocketBoxDevices() const {
     libusb_context* ctx = nullptr;
     if (libusb_init(&ctx) != 0) {
         return 0;
     }
-    const std::vector<FabricUsbDevice> devices = list_fabric_devices(ctx);
+    const std::vector<RocketBoxUsbDevice> devices = list_rocketbox_devices(ctx);
     libusb_exit(ctx);
     return static_cast<int>(devices.size());
 }
@@ -382,14 +382,14 @@ bool MainFrame::StartOrchestrator() {
         return true;
     }
 
-    port_index_ = ResolveFabricPortIndex();
+    port_index_ = ResolvePortIndex();
     if (port_index_ < 0) {
-        booth_log(0, "gui_start", "no fabric device selected");
+        event_log(0, "gui_start", "no RocketBox device selected");
         return false;
     }
 
-    orchestrator_ = std::make_unique<TransferOrchestrator>(
-        port_index_,
+    orchestrator_ = std::make_unique<SessionOrchestrator>(
+        rocketbox::make_shared_transport(rocketbox::TransportMode::Usb, port_index_),
         identity_,
         [this](const OrchestratorUiState& state) {
             auto snapshot = std::make_shared<OrchestratorUiState>(state);
@@ -401,7 +401,7 @@ bool MainFrame::StartOrchestrator() {
         });
 
     orchestrator_->start(/*run_wiring_probe=*/false);
-    booth_log(port_index_, "gui_start", config_path_);
+    event_log(port_index_, "gui_start", config_path_);
     return true;
 }
 
@@ -586,11 +586,11 @@ void MainFrame::OnLedPulseTimer(wxTimerEvent&) {
 
 void MainFrame::UpdateConnectionStatus(const OrchestratorUiState& state) {
     const bool usb_seen =
-        state.fabric_port_open || state.fabric_devices_seen > 0;
+        state.usb_port_open || state.devices_seen > 0;
 
-    if (state.busy && state.fabric_connected) {
+    if (state.busy && state.usb_connected) {
         link_led_ = LinkLed::Transferring;
-    } else if (state.fabric_connected) {
+    } else if (state.usb_connected) {
         link_led_ = LinkLed::Connected;
     } else if (usb_seen) {
         link_led_ = LinkLed::Announcing;
@@ -598,13 +598,13 @@ void MainFrame::UpdateConnectionStatus(const OrchestratorUiState& state) {
         link_led_ = LinkLed::Offline;
     }
     RenderConnectionIndicator();
-    SyncLedPulseTimer(state.busy && state.fabric_connected);
+    SyncLedPulseTimer(state.busy && state.usb_connected);
 
     const bool identity_configured = !state.identity.display_name.empty();
     const bool peers_configured = identity_configured && !state.roster.empty();
     const StatusLine status = status_line_native(
-        state.fabric_connected,
-        state.fabric_devices_seen,
+        state.usb_connected,
+        state.devices_seen,
         port_index_,
         state.busy,
         state.waiting_for_partner,
@@ -618,30 +618,30 @@ void MainFrame::UpdateConnectionStatus(const OrchestratorUiState& state) {
     }
 
     if (connection_panel_) {
-        const int fabric_port = state.fabric_port_index >= 0 ? state.fabric_port_index : port_index_;
-        connection_panel_->ApplyState(state.fabric_connected,
-                                      fabric_port,
-                                      state.fabric_devices_seen,
-                                      state.fabric_device_label,
+        const int usb_port = state.usb_port_index >= 0 ? state.usb_port_index : port_index_;
+        connection_panel_->ApplyState(state.usb_connected,
+                                      usb_port,
+                                      state.devices_seen,
+                                      state.device_label,
                                       state.busy,
                                       state.live_mbps,
-                                      state.booth_display_mib_s,
+                                      state.display_rate_mib_s,
                                       state.result_mbps,
                                       state.last_announce_ms,
-                                      state.fabric_activity_seq,
+                                      state.usb_activity_seq,
                                       state.status_message,
                                       state.error_message);
     }
 }
 
 void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
-    const bool was_connected = fabric_connected_;
-    fabric_connected_ = state.fabric_connected;
-    last_fabric_devices_seen_ = state.fabric_devices_seen;
+    const bool was_connected = usb_connected_;
+    usb_connected_ = state.usb_connected;
+    last_devices_seen_ = state.devices_seen;
 
     identity_ = state.identity;
-    if (state.fabric_port_index >= 0) {
-        port_index_ = state.fabric_port_index;
+    if (state.usb_port_index >= 0) {
+        port_index_ = state.usb_port_index;
     }
 
     if (modal_depth_ > 0) {
@@ -653,8 +653,8 @@ void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
     UpdateConnectionStatus(state);
     roster_panel_->UpdateRoster(state.roster,
                                 state.identity,
-                                state.fabric_connected,
-                                state.fabric_devices_seen,
+                                state.usb_connected,
+                                state.devices_seen,
                                 port_index_,
                                 state.busy || state.waiting_for_partner,
                                 state.last_announce_ms,
@@ -670,14 +670,14 @@ void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
     const bool has_peers = !state.roster.empty();
     progress_panel_->ApplyState(state.busy,
                                 state.waiting_for_partner,
-                                state.fabric_connected,
+                                state.usb_connected,
                                 has_peers,
                                 state.bytes_done,
                                 state.bytes_total,
                                 state.live_mbps,
                                 state.peak_mbps,
                                 state.result_mbps,
-                                state.booth_display_mib_s,
+                                state.display_rate_mib_s,
                                 state.transfer_label,
                                 state.status_message,
                                 state.notification,
@@ -687,7 +687,7 @@ void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
         && state.error_message.find("Accept failed") != std::string::npos) {
         shown_offer_id_.reset();
     }
-    if (!fabric_connected_ && was_connected) {
+    if (!usb_connected_ && was_connected) {
         SetMinClientSize(wxSize(content_width_, 0));
         FitToContent();
         return;
@@ -800,7 +800,7 @@ void MainFrame::OnSendRequested(const std::vector<std::string>& paths,
                 return;
             }
         }
-        if (!snap.fabric_connected) {
+        if (!snap.usb_connected) {
             wxMessageBox("Device is not ready yet — check the status at top right.",
                          "Device offline",
                          wxOK | wxICON_INFORMATION,
@@ -951,8 +951,8 @@ void MainFrame::OnSettings() {
             const OrchestratorUiState snap = orchestrator_->snapshot();
             roster_panel_->UpdateRoster(peer_entries_from_config(identity_.peers),
                                         identity_,
-                                        snap.fabric_connected,
-                                        snap.fabric_devices_seen,
+                                        snap.usb_connected,
+                                        snap.devices_seen,
                                         port_index_,
                                         snap.busy,
                                         snap.last_announce_ms);
@@ -990,7 +990,7 @@ void MainFrame::OnUsbDiagnostics() {
          << "s ready_timeout="
          << handshake_timing_from_identity(identity_).ready_timeout_sec
          << "s\n"
-         << "Event log: " << booth_log_path() << "\n"
+         << "Event log: " << event_log_path() << "\n"
          << "(View → Event Log or Settings → Event log…)";
     wxMessageBox(wxString::FromUTF8(text.str().c_str()),
                  "USB diagnostics",
@@ -1008,7 +1008,7 @@ void MainFrame::OnResetConnection() {
 }
 
 void MainFrame::OnAnnounceLedClick() {
-    if (!orchestrator_ || !fabric_connected_) {
+    if (!orchestrator_ || !usb_connected_) {
         return;
     }
     std::thread([this]() { orchestrator_->request_announce(); }).detach();
@@ -1019,8 +1019,8 @@ void MainFrame::OnConnectUsb() {
         return;
     }
     if (!StartOrchestrator()) {
-        const int devices = CountFabricDevices();
-        last_fabric_devices_seen_ = devices;
+        const int devices = CountRocketBoxDevices();
+        last_devices_seen_ = devices;
         status_message_label_->SetLabel(
             devices > 0 ? "USB cable detected — choose it when prompted."
                         : "Plug in your USB cable");
@@ -1058,7 +1058,7 @@ void MainFrame::OnDisconnectUsb() {
     }
     orchestrator_->stop();
     orchestrator_.reset();
-    fabric_connected_ = false;
+    usb_connected_ = false;
     link_led_ = LinkLed::Offline;
     status_message_label_->SetLabel("Disconnected");
     status_message_label_->SetForegroundColour(kWarn);
@@ -1066,14 +1066,14 @@ void MainFrame::OnDisconnectUsb() {
     roster_panel_->UpdateRoster(peer_entries_from_config(identity_.peers),
                                 identity_,
                                 false,
-                                last_fabric_devices_seen_,
+                                last_devices_seen_,
                                 -1,
                                 false,
                                 0);
     if (connection_panel_) {
         connection_panel_->ApplyState(false,
                                       -1,
-                                      last_fabric_devices_seen_,
+                                      last_devices_seen_,
                                       {},
                                       false,
                                       0.0,

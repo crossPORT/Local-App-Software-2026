@@ -1,6 +1,6 @@
 #include "test_util.h"
 
-namespace fabric_test {
+namespace rb_test {
 
 std::vector<TestCase>& registry() {
     static std::vector<TestCase> r;
@@ -58,4 +58,4 @@ int run_all(int argc, char** argv) {
     return failed == 0 ? 0 : 1;
 }
 
-}  // namespace fabric_test
+}  // namespace rb_test

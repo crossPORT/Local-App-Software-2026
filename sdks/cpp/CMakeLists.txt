@@ -1,24 +1,25 @@
 option(ROCKETBOX_BUILD_SIM "Include simulation support in compiled SDK" ON)
-option(ROCKETBOX_BUILD_USB "Include libusb USB transport in compiled SDK" ON)
+option(ROCKETBOX_BUILD_USB "Include USB transport in compiled SDK" ON)
 
 find_package(Threads REQUIRED)
 
 set(ROCKETBOX_SDK_SOURCES
     src/sdk.cpp
-    src/session_impl.cpp
-    src/connection_impl.cpp
+    src/sdk_defaults.cpp
 )
 
 if (ROCKETBOX_BUILD_SIM)
-    list(APPEND ROCKETBOX_SDK_SOURCES src/sim_transport.cpp)
-else()
-    list(APPEND ROCKETBOX_SDK_SOURCES src/sim_transport_stub.cpp)
+    list(APPEND ROCKETBOX_SDK_SOURCES
+        src/sim_plane.cpp
+        src/sim_plane_io.cpp
+    )
 endif()
 
 if (ROCKETBOX_BUILD_USB)
-    list(APPEND ROCKETBOX_SDK_SOURCES src/usb_transport.cpp)
-else()
-    list(APPEND ROCKETBOX_SDK_SOURCES src/usb_transport_stub.cpp)
+    list(APPEND ROCKETBOX_SDK_SOURCES
+        src/usb_plane.cpp
+        src/usb_plane_files.cpp
+    )
 endif()
 
 add_library(rocketbox_sdk STATIC ${ROCKETBOX_SDK_SOURCES})
@@ -32,6 +33,7 @@ target_include_directories(rocketbox_sdk
 
 target_link_libraries(rocketbox_sdk
     PUBLIC
+        rocketbox_session
         Threads::Threads
 )
 
@@ -40,10 +42,6 @@ if (ROCKETBOX_BUILD_SIM)
 endif()
 
 if (ROCKETBOX_BUILD_USB)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
-    target_include_directories(rocketbox_sdk PRIVATE ${LIBUSB_INCLUDE_DIRS})
-    target_link_libraries(rocketbox_sdk PUBLIC ${LIBUSB_LIBRARIES})
     target_compile_definitions(rocketbox_sdk PUBLIC ROCKETBOX_USB_SUPPORT=1)
 endif()
 

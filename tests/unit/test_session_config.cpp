@@ -10,7 +10,7 @@
 namespace {
 
 std::string write_conf(const std::string& body) {
-    char tmpl[] = "/tmp/slsfabric-test-sessionconf-XXXXXX";
+    char tmpl[] = "/tmp/rocketbox-test-sessionconf-XXXXXX";
     const int fd = mkstemp(tmpl);
     if (fd < 0) {
         return {};
@@ -24,7 +24,7 @@ std::string write_conf(const std::string& body) {
 
 }  // namespace
 
-FABRIC_TEST(session_config_global_values) {
+RB_TEST(session_config_global_values) {
     const std::string path = write_conf(
         "source_dir=/src\n"
         "target_dir=/dst\n"
@@ -39,7 +39,7 @@ FABRIC_TEST(session_config_global_values) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(session_config_port_override) {
+RB_TEST(session_config_port_override) {
     const std::string path = write_conf(
         "role=sender\n"
         "[port0]\n"
@@ -57,7 +57,7 @@ FABRIC_TEST(session_config_port_override) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(session_config_ignores_comments_and_blanks) {
+RB_TEST(session_config_ignores_comments_and_blanks) {
     const std::string path = write_conf(
         "# a comment\n"
         "\n"
@@ -70,7 +70,7 @@ FABRIC_TEST(session_config_ignores_comments_and_blanks) {
     std::remove(path.c_str());
 }
 
-FABRIC_TEST(session_config_missing_file_returns_false) {
+RB_TEST(session_config_missing_file_returns_false) {
     SessionConfig cfg;
     CHECK(!load_session_config_file("/tmp/does-not-exist-slsfabric.conf", 0, cfg));
 }

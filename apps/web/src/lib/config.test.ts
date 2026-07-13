@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  BOOTH_DISPLAY_PRESET,
+  DISPLAY_RATE_PRESET,
   applyBoothDisplaySettings,
-  boothDisplayPresetLabel,
+  displayRatePresetLabel,
   defaultIdentityProfile,
-  isBoothDisplayDisabledInUrl,
-  isBoothDisplayEnabled,
+  isDisplayRateDisabledInUrl,
+  isDisplayRateEnabled,
   loadIdentityProfile,
   parseIdentityConfig,
   receiveStatusToString,
@@ -60,17 +60,17 @@ describe('parseIdentityConfig', () => {
         'display_name=Node',
         'transfer_timeout_ms=5000',
         'usb_inflight_mb=64',
-        'booth_display_mib_s=7168',
-        'booth_display_jitter_pct=3',
+        'display_rate_mib_s=7168',
+        'display_rate_jitter_pct=3',
       ].join('\n'),
       0,
       'test.conf',
     );
     expect(profile.transfer_timeout_ms).toBe(5000);
     expect(profile.usb_inflight_mb).toBe(64);
-    expect(profile.booth_display_mib_s).toBe(7168);
-    expect(profile.booth_display_jitter_pct).toBe(3);
-    expect(profile.booth_display_enabled).toBe(true);
+    expect(profile.display_rate_mib_s).toBe(7168);
+    expect(profile.display_rate_jitter_pct).toBe(3);
+    expect(profile.display_rate_enabled).toBe(true);
   });
 
   it('applies [portN] overrides for the active port only', () => {
@@ -147,9 +147,9 @@ describe('applyBoothDisplaySettings', () => {
 
   it('applies preset when booth display is enabled', () => {
     const profile = defaultIdentityProfile(0);
-    const applied = applyBoothDisplaySettings({ ...profile, booth_display_enabled: true }, 0);
-    expect(applied.booth_display_mib_s).toBe(BOOTH_DISPLAY_PRESET.booth_display_mib_s);
-    expect(applied.booth_display_jitter_pct).toBe(BOOTH_DISPLAY_PRESET.booth_display_jitter_pct);
+    const applied = applyBoothDisplaySettings({ ...profile, display_rate_enabled: true }, 0);
+    expect(applied.display_rate_mib_s).toBe(DISPLAY_RATE_PRESET.display_rate_mib_s);
+    expect(applied.display_rate_jitter_pct).toBe(DISPLAY_RATE_PRESET.display_rate_jitter_pct);
   });
 
   it('clears display rates when booth display is disabled', () => {
@@ -157,22 +157,22 @@ describe('applyBoothDisplaySettings', () => {
     const applied = applyBoothDisplaySettings(
       {
         ...profile,
-        booth_display_enabled: false,
-        booth_display_mib_s: 7168,
-        booth_display_jitter_pct: 3,
+        display_rate_enabled: false,
+        display_rate_mib_s: 7168,
+        display_rate_jitter_pct: 3,
       },
       0,
     );
-    expect(applied.booth_display_mib_s).toBe(0);
-    expect(applied.booth_display_jitter_pct).toBe(0);
+    expect(applied.display_rate_mib_s).toBe(0);
+    expect(applied.display_rate_jitter_pct).toBe(0);
   });
 
   it('clears display rates when URL disables booth display', () => {
-    stubWindowSearch('?booth_display=0');
+    stubWindowSearch('?display_rate=0');
     const profile = defaultIdentityProfile(0);
-    const applied = applyBoothDisplaySettings({ ...profile, booth_display_enabled: true }, 0);
-    expect(applied.booth_display_mib_s).toBe(0);
-    expect(applied.booth_display_jitter_pct).toBe(0);
+    const applied = applyBoothDisplaySettings({ ...profile, display_rate_enabled: true }, 0);
+    expect(applied.display_rate_mib_s).toBe(0);
+    expect(applied.display_rate_jitter_pct).toBe(0);
   });
 });
 
@@ -196,16 +196,16 @@ describe('localStorage identity round-trip', () => {
       ...defaultIdentityProfile(0),
       display_name: 'Alice',
       team: 'CAD',
-      booth_display_enabled: true,
-      booth_display_mib_s: 9999,
-      booth_display_jitter_pct: 5,
+      display_rate_enabled: true,
+      display_rate_mib_s: 9999,
+      display_rate_jitter_pct: 5,
     });
     const loaded = loadIdentityProfile(0);
     expect(loaded.display_name).toBe('Alice');
     expect(loaded.team).toBe('CAD');
-    expect(loaded.booth_display_enabled).toBe(true);
-    expect(loaded.booth_display_mib_s).toBe(0);
-    expect(loaded.booth_display_jitter_pct).toBe(0);
+    expect(loaded.display_rate_enabled).toBe(true);
+    expect(loaded.display_rate_mib_s).toBe(0);
+    expect(loaded.display_rate_jitter_pct).toBe(0);
   });
 });
 
@@ -215,14 +215,14 @@ describe('config helpers', () => {
   });
 
   it('formats booth preset label', () => {
-    expect(boothDisplayPresetLabel()).toMatch(/GiB\/s/);
+    expect(displayRatePresetLabel()).toMatch(/GiB\/s/);
   });
 
   it('detects booth display URL disable flag', () => {
     stubWindowSearch('');
-    expect(isBoothDisplayDisabledInUrl()).toBe(false);
-    stubWindowSearch('?booth_display=0');
-    expect(isBoothDisplayDisabledInUrl()).toBe(true);
+    expect(isDisplayRateDisabledInUrl()).toBe(false);
+    stubWindowSearch('?display_rate=0');
+    expect(isDisplayRateDisabledInUrl()).toBe(true);
   });
 
   it('maps receive status to config strings', () => {
@@ -232,7 +232,7 @@ describe('config helpers', () => {
   });
 
   it('reports booth display enabled from profile flag', () => {
-    expect(isBoothDisplayEnabled({ ...defaultIdentityProfile(0), booth_display_enabled: true })).toBe(
+    expect(isDisplayRateEnabled({ ...defaultIdentityProfile(0), display_rate_enabled: true })).toBe(
       true,
     );
   });

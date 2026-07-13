@@ -6,7 +6,7 @@ add_executable(rocketbox
     main_frame.cpp
     app_icon.cpp
     connection_panel.cpp
-    fabric_device_picker.cpp
+    rocketbox_device_picker.cpp
     roster_panel.cpp
     transfer_progress_panel.cpp
     speed_monitor.cpp
@@ -42,7 +42,7 @@ target_include_directories(rocketbox PRIVATE
 )
 
 target_link_libraries(rocketbox PRIVATE
-    rocketbox_session
+    rocketbox_sdk
     ${wxWidgets_LIBRARIES}
 )
 
@@ -111,7 +111,7 @@ elseif(WIN32)
     ]])
 
     install(FILES
-        ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
+        ${CMAKE_SOURCE_DIR}/99-rocketbox-usb.rules
         ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
         DESTINATION share/rocketbox
     )
@@ -139,7 +139,7 @@ else()
     )
 
     install(FILES
-        ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
+        ${CMAKE_SOURCE_DIR}/99-rocketbox-usb.rules
         ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
         DESTINATION share/rocketbox
     )

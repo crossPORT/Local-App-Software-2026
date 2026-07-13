@@ -12,10 +12,10 @@ function transferIsReceiving(statusMessage: string): boolean {
 }
 
 function derivePhase(state: AppUiState): TransferPhase {
-  if (!state.fabricConnected && state.errorMessage) {
+  if (!state.usbConnected && state.errorMessage) {
     return 'idle';
   }
-  if (state.errorMessage && !state.busy && !state.waitingForPartner && state.fabricConnected) {
+  if (state.errorMessage && !state.busy && !state.waitingForPartner && state.usbConnected) {
     return 'failed';
   }
   if (state.pendingOffer || (state.waitingForPartner && !state.busy)) {
@@ -35,7 +35,7 @@ function derivePhase(state: AppUiState): TransferPhase {
 
 function phaseTitle(
   phase: TransferPhase,
-  fabricConnected: boolean,
+  usbConnected: boolean,
   waitingForPartner: boolean,
   statusMessage: string,
   hasPeers: boolean,
@@ -43,7 +43,7 @@ function phaseTitle(
 ): string {
   switch (phase) {
     case 'idle':
-      if (!fabricConnected) return 'Not connected';
+      if (!usbConnected) return 'Not connected';
       return hasPeers ? 'Ready' : 'Waiting for peers…';
     case 'waiting':
       if (isOutboundHandshakeWait(statusMessage)) {
@@ -122,9 +122,9 @@ export function TransferProgressPanel({ state, onReset }: TransferProgressPanelP
     messageLine = state.statusMessage || 'Waiting for a file…';
   } else if (phase === 'failed') {
     messageLine = '';
-  } else if (phase === 'idle' && !state.fabricConnected && state.errorMessage) {
+  } else if (phase === 'idle' && !state.usbConnected && state.errorMessage) {
     messageLine = state.errorMessage;
-  } else if (phase === 'idle' && state.fabricConnected) {
+  } else if (phase === 'idle' && state.usbConnected) {
     messageLine = state.notification || '';
   } else if (phase === 'idle') {
     messageLine = state.notification || '';
@@ -139,7 +139,7 @@ export function TransferProgressPanel({ state, onReset }: TransferProgressPanelP
         <div className="phase-title" style={{ color: isListening ? theme.muted : colour }}>
           {phaseTitle(
             phase,
-            state.fabricConnected,
+            state.usbConnected,
             state.waitingForPartner,
             state.statusMessage,
             state.roster.length > 0,
@@ -185,7 +185,7 @@ export function TransferProgressPanel({ state, onReset }: TransferProgressPanelP
             color:
               phase === 'complete'
                 ? theme.ok
-                : !state.fabricConnected && state.errorMessage
+                : !state.usbConnected && state.errorMessage
                   ? theme.warn
                   : theme.muted,
           }}

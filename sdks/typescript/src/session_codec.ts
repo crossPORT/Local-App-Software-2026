@@ -5,7 +5,10 @@ import {
   type SessionMessageKind,
 } from './session_types';
 
+// Wire write stays FABRIC-SESSION-v1 (last known-good wx↔PWA interop).
+// Dual-read ROCKETBOX-SESSION-v1 for any newer peers.
 const SESSION_HEADER = 'FABRIC-SESSION-v1\n';
+const ALT_SESSION_HEADER = 'ROCKETBOX-SESSION-v1\n';
 
 function trim(value: string): string {
   return value.trim();
@@ -85,7 +88,12 @@ export function serializeSessionMessage(message: SessionMessage): Uint8Array {
 
 export function parseSessionPayload(data: Uint8Array): SessionMessage | null {
   const payload = new TextDecoder().decode(data);
-  if (!payload.startsWith(SESSION_HEADER)) {
+  const header = payload.startsWith(SESSION_HEADER)
+    ? SESSION_HEADER
+    : payload.startsWith(ALT_SESSION_HEADER)
+      ? ALT_SESSION_HEADER
+      : null;
+  if (!header) {
     return null;
   }
   const out: SessionMessage = {
@@ -100,7 +108,7 @@ export function parseSessionPayload(data: Uint8Array): SessionMessage | null {
     file_count: 0,
     total_bytes: 0,
   };
-  for (const rawLine of payload.slice(SESSION_HEADER.length).split('\n')) {
+  for (const rawLine of payload.slice(header.length).split('\n')) {
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
     if (!line) {
       continue;

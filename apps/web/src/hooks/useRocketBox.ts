@@ -41,13 +41,13 @@ function pickSelectedPeer(roster: PeerRoster, portIndex: number, current: string
   return online.find((peer) => peer.port_index !== portIndex)?.id ?? online[0]?.id ?? '';
 }
 
-function syncFabricPortIndex(
+function syncPortIndex(
   session: ReturnType<typeof createTransportSession>,
   portIndexRef: { current: number },
 ): number {
-  const fabricPort = session.getPortIndex();
-  portIndexRef.current = fabricPort;
-  return fabricPort;
+  const portIdx = session.getPortIndex();
+  portIndexRef.current = portIdx;
+  return portIdx;
 }
 
 export function useRocketBox() {
@@ -119,8 +119,8 @@ export function useRocketBox() {
       liveMbps: 0,
       peakMbps: 0,
       resultMbps: 0,
-      boothDisplayMibS: 0,
-      fabricActivityMbps: 0,
+      displayRateMibS: 0,
+      usbActivityMbps: 0,
     });
   }, [patch]);
 
@@ -180,13 +180,13 @@ export function useRocketBox() {
   }, [state]);
 
   useEffect(() => {
-    if (!state?.busy || !state.fabricConnected) {
+    if (!state?.busy || !state.usbConnected) {
       setLedPulse(false);
       return;
     }
     const id = window.setInterval(() => setLedPulse((v) => !v), 500);
     return () => window.clearInterval(id);
-  }, [state?.busy, state?.fabricConnected]);
+  }, [state?.busy, state?.usbConnected]);
 
   const hasStateRef = useRef(false);
   hasStateRef.current = state !== null;
@@ -208,7 +208,6 @@ export function useRocketBox() {
         }
         patch({
           usbConnected: false,
-          fabricConnected: false,
           roster: [],
         });
         clearTransferState();
@@ -226,7 +225,7 @@ export function useRocketBox() {
   }, []);
 
   useEffect(() => {
-    if (!state?.usbConnected || !state.fabricConnected) {
+    if (!state?.usbConnected) {
       orchestratorRef.current?.stopListener();
       return;
     }
@@ -234,7 +233,7 @@ export function useRocketBox() {
     return () => {
       orchestratorRef.current?.stopListener();
     };
-  }, [ensureOrchestrator, state?.fabricConnected, state?.usbConnected]);
+  }, [ensureOrchestrator, state?.usbConnected]);
 
   const promptSetupIfNeeded = useCallback(() => {
     const identity = identityRef.current;
@@ -245,18 +244,17 @@ export function useRocketBox() {
 
   const applyUsbConnected = useCallback(
     async (desc: string) => {
-      const fabricPort = syncFabricPortIndex(sessionRef.current, portIndexRef);
-      const legIdentity = await loadIdentityProfileAsync(fabricPort);
+      const portIdx = syncPortIndex(sessionRef.current, portIndexRef);
+      const legIdentity = await loadIdentityProfileAsync(portIdx);
       setUsbDescription(desc);
       const count = await countTransportDevices();
       patch(() => {
         identityRef.current = legIdentity;
         return {
-          portIndex: fabricPort,
+          portIndex: portIdx,
           identity: legIdentity,
           usbConnected: true,
-          fabricDevicesSeen: count,
-          fabricConnected: true,
+          devicesSeen: count,
           hasSavedCable: transportHasSavedSerial(),
           roster: rosterRef.current.visiblePeers(true),
           errorMessage: '',
@@ -339,7 +337,7 @@ export function useRocketBox() {
       let portIndex = portIndexRef.current;
       let identityPatch: IdentityProfile | null = null;
       if (usbConnected) {
-        const nextPort = syncFabricPortIndex(sessionRef.current, portIndexRef);
+        const nextPort = syncPortIndex(sessionRef.current, portIndexRef);
         if (nextPort !== portIndex) {
           portIndex = nextPort;
           const legIdentity = await loadIdentityProfileAsync(portIndex);
@@ -373,8 +371,7 @@ export function useRocketBox() {
       }
       patch((prev) => ({
         usbConnected,
-        fabricDevicesSeen: count,
-        fabricConnected: usbConnected,
+        devicesSeen: count,
         hasSavedCable: transportHasSavedSerial(),
         roster: rosterRef.current.visiblePeers(usbConnected),
         selectedPeer: pickSelectedPeer(rosterRef.current, portIndex, prev.selectedPeer),
@@ -415,7 +412,6 @@ export function useRocketBox() {
       rosterRef.current.setAllPeersOffline();
       patch({
         usbConnected: false,
-        fabricConnected: false,
         roster: [],
       });
       setUsbDescription('');
@@ -436,8 +432,7 @@ export function useRocketBox() {
       rosterRef.current.setAllPeersOffline();
       patch({
         usbConnected: false,
-        fabricConnected: false,
-        fabricDevicesSeen: 0,
+        devicesSeen: 0,
         hasSavedCable: false,
         roster: [],
       });
@@ -497,11 +492,11 @@ export function useRocketBox() {
   }, [clearTransferState, ensureOrchestrator]);
 
   const requestAnnounce = useCallback(() => {
-    if (!state?.usbConnected && !state?.fabricConnected) {
+    if (!state?.usbConnected) {
       return;
     }
     ensureOrchestrator().sendAnnounceNow();
-  }, [ensureOrchestrator, state?.fabricConnected, state?.usbConnected]);
+  }, [ensureOrchestrator, state?.usbConnected]);
 
   const releaseLinkedCircuit = useCallback(async () => {
     await ensureOrchestrator().releaseLinkedCircuit();
