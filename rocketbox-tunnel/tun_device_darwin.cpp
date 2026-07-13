@@ -1,20 +1,31 @@
 #include "tun_device.hpp"
 
-#include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
-#include <net/if.h>
-#include <netinet/in.h>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+#include <arpa/inet.h>
+#include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/kern_control.h>
 #include <sys/socket.h>
 #include <sys/sys_domain.h>
 #include <unistd.h>
 
-// UTUN_CONTROL_NAME / UTUN_OPT_IFNAME
+#if defined(__has_include)
+#if __has_include(<net/if_utun.h>)
 #include <net/if_utun.h>
+#endif
+#endif
+
+#ifndef UTUN_CONTROL_NAME
+#define UTUN_CONTROL_NAME "com.apple.net.utun_control"
+#endif
+#ifndef UTUN_OPT_IFNAME
+#define UTUN_OPT_IFNAME 2
+#endif
 
 namespace {
 

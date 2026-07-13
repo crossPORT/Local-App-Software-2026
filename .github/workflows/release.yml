@@ -69,9 +69,14 @@ jobs:
             -DROCKETBOX_RELEASE_TAG="$ROCKETBOX_RELEASE_TAG"
 
       - name: Build
-        run: >
-          cmake --build build --config Release --parallel
-          --target rocketbox rocketbox-tunnel rocketbox-tunnel-helper rocketbox-tunnel-tray
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --parallel --target rocketbox
+          cmake --build build --config Release --parallel --target rocketbox-tunnel
+          cmake --build build --config Release --parallel --target rocketbox-tunnel-helper
+          cmake --build build --config Release --parallel --target rocketbox-tunnel-tray
+          test -x build/rocketbox-tunnel/rocketbox-tunnel
+          test -x build/apps/tunnel-tray/rocketbox-tunnel-tray
 
       - name: Install staging tree
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
@@ -139,7 +144,14 @@ jobs:
             -DROCKETBOX_RELEASE_TAG="$ROCKETBOX_RELEASE_TAG"
 
       - name: Build
-        run: cmake --build build --config Release --target rocketbox --parallel
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --parallel --target rocketbox
+          cmake --build build --config Release --parallel --target rocketbox-tunnel
+          cmake --build build --config Release --parallel --target rocketbox-tunnel-helper
+          cmake --build build --config Release --parallel --target rocketbox-tunnel-tray
+          test -x build/rocketbox-tunnel/rocketbox-tunnel || test -x build/rocketbox-tunnel/Release/rocketbox-tunnel
+          test -x build/apps/tunnel-tray/rocketbox-tunnel-tray || test -x build/apps/tunnel-tray/Release/rocketbox-tunnel-tray
 
       - name: Install and bundle dylibs
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
