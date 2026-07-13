@@ -114,6 +114,7 @@ select {
   width: 14px;
   height: 14px;
   border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
@@ -269,10 +270,59 @@ button.primary:hover {
 }
 
 .peer-row {
+  position: relative;
   border-radius: 10px;
   padding: 10px;
   margin-bottom: 8px;
   cursor: pointer;
+}
+
+.peer-link-icon {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: #00d4aa;
+  opacity: 0.95;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.peer-link-icon--linking {
+  opacity: 0.55;
+  animation: peer-link-pulse 1.2s ease-in-out infinite;
+}
+
+.peer-link-icon--linked {
+  opacity: 0.95;
+}
+
+@keyframes peer-link-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.peer-link-icon:hover {
+  background: #00d4aa22;
+}
+
+.link-release-dialog .link-release-warn {
+  color: #e8a838;
+}
+
+.link-release-dialog .muted {
+  color: #8899aa;
 }
 
 .peer-row.selected {
@@ -726,6 +776,14 @@ button.primary:hover {
 
 .settings-toggle-row .settings-hint {
   margin: 6px 0 0;
+}
+
+.settings-advanced-row {
+  margin-top: 12px;
+}
+
+.settings-advanced-row button {
+  width: 100%;
 }
 
 .settings-toggle-label {

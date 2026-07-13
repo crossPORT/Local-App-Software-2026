@@ -1,4 +1,4 @@
-import { FabricUsbError } from '@rocketbox/sdk';
+import { RocketBoxError } from '@rocketbox/sdk';
 
 /** User closed the browser USB picker without choosing a device. */
 export function isUsbPickerCancel(err: unknown): boolean {
@@ -14,7 +14,7 @@ export function formatUsbConnectError(err: unknown): string | null {
   if (isUsbPickerCancel(err)) {
     return null;
   }
-  if (err instanceof FabricUsbError) {
+  if (err instanceof RocketBoxError) {
     return err.message;
   }
   const message = (err as Error)?.message ?? String(err);
@@ -52,7 +52,7 @@ export function formatUsbConnectError(err: unknown): string | null {
 }
 
 export function formatTransferError(err: unknown): string {
-  if (err instanceof FabricUsbError) {
+  if (err instanceof RocketBoxError) {
     return err.message;
   }
   const message = (err as Error)?.message ?? String(err);

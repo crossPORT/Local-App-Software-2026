@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from '@rocketbox/sdk';
+import { toDisplayPort } from '@rocketbox/sdk';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -126,5 +126,5 @@ export function peerRosterLabel(peer: { display_name: string; port_index: number
   if (!duplicates) {
     return peer.display_name;
   }
-  return `${peer.display_name} · port ${displayPortFromLeg(peer.port_index)}`;
+  return `${peer.display_name} · port ${toDisplayPort(peer.port_index)}`;
 }

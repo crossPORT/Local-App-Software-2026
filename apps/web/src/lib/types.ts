@@ -50,6 +50,9 @@ export interface PendingOffer {
 
 export type TransferPhase = 'idle' | 'waiting' | 'transferring' | 'complete' | 'failed';
 
+/** Peer-card link icon: absent / attempting / established. */
+export type LinkUiState = 'none' | 'linking' | 'linked';
+
 export interface AppUiState {
   identity: IdentityProfile;
   roster: PeerEntry[];
@@ -76,6 +79,10 @@ export interface AppUiState {
   transferLabel: string;
   selectedPeer: string;
   lastAnnounceMs: number;
+  /** Display port 1–4 when linkState ≠ none; 0 = cleared. */
+  linkedPort: number;
+  /** none = no icon; linking = attempt; linked = both sides evidenced. */
+  linkState: LinkUiState;
 }
 
 export const initialUiState = (identity: IdentityProfile, portIndex: number): AppUiState => ({
@@ -103,4 +110,6 @@ export const initialUiState = (identity: IdentityProfile, portIndex: number): Ap
   transferLabel: '',
   selectedPeer: '',
   lastAnnounceMs: 0,
+  linkedPort: 0,
+  linkState: 'none',
 });

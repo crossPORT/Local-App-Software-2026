@@ -441,6 +441,7 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         invalidate_dismiss();
+        session_peer_name_ = peer->display_name;
         state_.busy = true;
         state_.waiting_for_partner = true;
         state_.transfer_label.clear();
@@ -459,6 +460,15 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
             std::string send_error;
+            const int peer_dest = display_port_from_leg(peer->port_index);
+            (void)controller_->switch_port_if_needed(peer_dest);
+            controller_->mark_switch_preserve();
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                state_.link_state = LinkUiState::Linking;
+                state_.linked_port = peer_dest;
+            }
+            publish_state();
             const bool sent = send_session_with_routing(offer, false, &send_error);
 
             if (!sent) {
@@ -522,14 +532,34 @@ bool TransferOrchestrator::send_to_peer(const std::string& peer_name,
 
             if (!accepted && !offer_retransmitted && now >= retransmit_at) {
                 offer_retransmitted = true;
+                // pause() drains an in-flight receive — accept can land there.
+                // Re-check before send so we do not clobber the peer's ready path.
+                bool still_need = true;
                 {
+                    std::lock_guard<std::mutex> lock(state_mutex_);
+                    still_need = !awaiting_ready_ && static_cast<bool>(outbound_offer_);
+                }
+                if (still_need) {
                     ListenerPauseGuard listener_guard(listener_.get());
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    std::string send_error;
-                    if (send_session_with_routing(offer, false, &send_error)) {
-                        booth_log(log_leg(), "offer_retransmit", "to=" + peer->display_name);
-                        std::this_thread::sleep_for(
-                            std::chrono::milliseconds(handshake_.accept_ready_gap_ms));
+                    {
+                        std::lock_guard<std::mutex> lock(state_mutex_);
+                        still_need = !awaiting_ready_ && static_cast<bool>(outbound_offer_);
+                    }
+                    if (still_need) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                        {
+                            std::lock_guard<std::mutex> lock(state_mutex_);
+                            still_need = !awaiting_ready_ && static_cast<bool>(outbound_offer_);
+                        }
+                    }
+                    if (still_need) {
+                        std::string send_error;
+                        if (send_session_with_routing(offer, false, &send_error)) {
+                            booth_log(log_leg(), "offer_retransmit",
+                                      "to=" + peer->display_name);
+                            std::this_thread::sleep_for(std::chrono::milliseconds(
+                                handshake_.accept_ready_gap_ms));
+                        }
                     }
                 }
                 ensure_listener_active();
@@ -601,12 +631,15 @@ void TransferOrchestrator::on_session_message(const FabricSessionMessage& messag
             handle_offer(message);
             break;
         case SessionMessageKind::Accept:
+            note_peer_alive(message.from_name);
             handle_accept(message);
             break;
         case SessionMessageKind::Decline:
+            note_peer_alive(message.from_name);
             handle_decline(message);
             break;
         case SessionMessageKind::Ready:
+            note_peer_alive(message.from_name);
             handle_ready(message);
             break;
         case SessionMessageKind::Announce:
@@ -658,23 +691,8 @@ void TransferOrchestrator::tick_presence() {
         roster_.mark_stale_peers_offline(std::chrono::seconds(45));
         if (fabric_just_connected) {
             last_announce_ms_ = 0;
-            // TS HwPlane.connect clears sticky switch with dest=0.
-            if (controller_) {
-                if (listener_) {
-                    listener_->pause();
-                }
-                const TransferResult clear = controller_->switch_port(0);
-                if (listener_) {
-                    listener_->resume();
-                }
-                if (!clear.ok) {
-                    booth_log(log_leg(),
-                              "switch_clear_fail",
-                              clear.error_message);
-                } else {
-                    booth_log(log_leg(), "switch_clear", "dest=0");
-                }
-            }
+            // Do not switch_port(0) here — dest=0 on connect broke cross-port
+            // announce discovery on real hardware (native + PWA).
         }
     }
 
@@ -736,9 +754,21 @@ void TransferOrchestrator::handle_announce(const FabricSessionMessage& message) 
               message.from_name + " port=" + std::to_string(display_port_from_leg(peer_port))
                   + " note=" + message.note);
 
+    // Aim at the peer who just reached us so their follow-up offer can land.
+    // Only while idle — do not yank mid-transfer / pending dialog.
+    bool idle = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        idle = !state_.busy && !state_.waiting_for_partner && !state_.pending_offer
+               && !outbound_offer_ && !accepting_inbound_session_id_;
         state_.roster = roster_.peers();
+    }
+    if (idle && controller_) {
+        const int dest = display_port_from_leg(peer_port);
+        if (controller_->switch_port_if_needed(dest).ok) {
+            controller_->mark_switch_preserve();
+            booth_log(my_leg, "circuit_listen", "dest=" + std::to_string(dest));
+        }
     }
     publish_state();
 }
@@ -772,12 +802,20 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms, bool force) {
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        // While waiting for accept/ready, do not send announces — they use the
-        // same ROCKETBX payload header wire format and the receiver may
-        // mistake them for the incoming file (typically ~100–200 B).
-        if (outbound_offer_) {
+        // PWA parity: never announce during handshake/transfer — switch+clear
+        // fights the offer circuit. Gate from busy/pending, not only after
+        // outbound_offer_ is set (that lands after the offer USB send).
+        const char* skip = nullptr;
+        if (state_.busy || accepting_inbound_session_id_) {
+            skip = "busy";
+        } else if (outbound_offer_ || state_.waiting_for_partner) {
+            skip = "outbound_offer";
+        } else if (state_.pending_offer) {
+            skip = "pending_inbound";
+        }
+        if (skip) {
             if (force) {
-                booth_log(log_leg(), "announce_skip", "outbound_offer");
+                booth_log(log_leg(), "announce_skip", skip);
             }
             return;
         }
@@ -795,7 +833,7 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms, bool force) {
         return;
     }
 
-    constexpr int64_t kAnnounceIntervalMs = 15000;
+    constexpr int64_t kAnnounceIntervalMs = 30000;
     constexpr int64_t kForceMinGapMs = 1000;
     if (force) {
         if (last_announce_ms_ != 0 && now_ms - last_announce_ms_ < kForceMinGapMs) {
@@ -827,8 +865,49 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms, bool force) {
     const int my_leg = log_leg();
     message.note = build_announce_note(my_leg, identity_.receive_status, instance_id_);
 
+    const std::vector<int> remotes = remote_fabric_legs(my_leg);
+    bool ok = false;
     std::string error;
-    if (send_session_with_routing(message, false, &error)) {
+    const int held = controller_ ? controller_->last_switch_dest() : -1;
+    const bool hold_link =
+        controller_ && controller_->switch_preserve() && held >= 1 && held <= 4;
+
+    // Sticky session/listen hold: scheduled announce rides that link — no rotate.
+    if (hold_link && !force) {
+        booth_log(my_leg, "announce_hold", "dest=" + std::to_string(held));
+        ok = send_session_with_routing(message, false, &error);
+    } else if (force) {
+        for (int leg : remotes) {
+            const int dest = display_port_from_leg(leg);
+            booth_log(my_leg, "announce_fanout", "dest=" + std::to_string(dest));
+            (void)controller_->switch_port_if_needed(dest);
+            ok = send_session_with_routing(message, false, &error) || ok;
+        }
+        announce_rotate_index_ = 0;
+        if (hold_link) {
+            booth_log(my_leg, "announce_restore", "dest=" + std::to_string(held));
+            (void)controller_->switch_port_if_needed(held);
+        } else if (controller_) {
+            const int left = controller_->last_switch_dest();
+            booth_log(my_leg,
+                      "announce_leave",
+                      left >= 1 ? "dest=" + std::to_string(left) : "none");
+        }
+    } else if (!remotes.empty()) {
+        const int leg = remotes[static_cast<size_t>(announce_rotate_index_ % static_cast<int>(remotes.size()))];
+        announce_rotate_index_ =
+            (announce_rotate_index_ + 1) % static_cast<int>(remotes.size());
+        const int dest = display_port_from_leg(leg);
+        booth_log(my_leg, "announce_rotate", "dest=" + std::to_string(dest));
+        (void)controller_->switch_port_if_needed(dest);
+        ok = send_session_with_routing(message, false, &error);
+        booth_log(my_leg, "announce_leave", "dest=" + std::to_string(dest));
+    } else {
+        ok = send_session_with_routing(message, false, &error);
+        booth_log(my_leg, "announce_leave", "none");
+    }
+
+    if (ok) {
         last_announce_ms_ = now_ms;
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
@@ -851,6 +930,9 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
                       + message.from_name);
         return;
     }
+
+    note_peer_alive(message.from_name);
+    session_peer_name_ = message.from_name;
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -879,6 +961,30 @@ void TransferOrchestrator::handle_offer(const FabricSessionMessage& message) {
     if (is_busy()) {
         booth_log(log_leg(), "offer_rejected", "busy from=" + message.from_name);
         return;
+    }
+
+    // Aim at sender so both sides share a circuit (offer delivery already proved inbound).
+    if (const auto peer = roster_.find_by_name(message.from_name)) {
+        const int dest = display_port_from_leg(peer->port_index);
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.link_state = LinkUiState::Linking;
+            state_.linked_port = dest;
+        }
+        publish_state();
+        if (controller_ && controller_->switch_port_if_needed(dest).ok) {
+            controller_->mark_switch_preserve();
+            booth_log(log_leg(), "circuit_inbound", "dest=" + std::to_string(dest));
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.link_state = LinkUiState::Linked;
+            state_.linked_port = dest;
+        } else {
+            booth_log(log_leg(), "circuit_inbound_fail", "dest=" + std::to_string(dest));
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.link_state = LinkUiState::None;
+            state_.linked_port = 0;
+        }
+        publish_state();
     }
 
     ReceiveStatus effective = identity_.receive_status;
@@ -987,8 +1093,16 @@ void TransferOrchestrator::decline_pending_offer() {
         ListenerPauseGuard listener_guard(listener_.get());
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         send_session_reply(offer_copy.message, SessionMessageKind::Decline);
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        state_.status_message = "Declined transfer from " + offer_copy.message.from_name;
+        if (controller_) {
+            booth_log(log_leg(), "transfer_clear", "dest=0");
+            (void)controller_->switch_port_if_needed(0);
+        }
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.link_state = LinkUiState::None;
+            state_.linked_port = 0;
+            state_.status_message = "Declined transfer from " + offer_copy.message.from_name;
+        }
         publish_state();
     });
 }
@@ -1018,6 +1132,9 @@ void TransferOrchestrator::handle_accept(const FabricSessionMessage& message) {
     }
     state_.waiting_for_partner = true;
     state_.status_message = "Accepted — waiting for receiver to prepare…";
+    if (state_.linked_port >= 1) {
+        state_.link_state = LinkUiState::Linked;
+    }
     awaiting_ready_ = true;
     publish_state();
 }
@@ -1050,6 +1167,9 @@ void TransferOrchestrator::handle_ready(const FabricSessionMessage& message) {
         if (!awaiting_ready_) {
             // Accept may have been dropped on the no-buffer fabric; ready implies acceptance.
             awaiting_ready_ = true;
+            if (state_.linked_port >= 1) {
+                state_.link_state = LinkUiState::Linked;
+            }
             state_.status_message = "Accepted — waiting for receiver to prepare…";
             publish_state();
         }
@@ -1122,6 +1242,16 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
         finish_transfer(false, "Ready failed", state_.error_message);
         return;
     }
+
+    // Re-aim at sender after accept/ready USB churn before arming payload IN.
+    if (const auto peer = roster_.find_by_name(offer.from_name)) {
+        const int dest = display_port_from_leg(peer->port_index);
+        if (controller_ && controller_->switch_port_if_needed(dest).ok) {
+            controller_->mark_switch_preserve();
+            booth_log(log_leg(), "circuit_payload", "dest=" + std::to_string(dest));
+        }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -1245,6 +1375,8 @@ void TransferOrchestrator::finish_transfer(bool ok,
         clear_outbound_session();
         state_.busy = false;
         state_.waiting_for_partner = false;
+        state_.link_state = LinkUiState::None;
+        state_.linked_port = 0;
         state_.status_message = message;
         state_.error_message = ok ? "" : error;
         state_.live_mbps = 0.0;
@@ -1305,16 +1437,31 @@ void TransferOrchestrator::finish_transfer(bool ok,
             if (done_kind == TransferDoneKind::Received && accepting_inbound_session_id_) {
                 last_completed_inbound_session_id_ = *accepting_inbound_session_id_;
             }
+            // Do not silence announces after transfer — that + 45s peer TTL made
+            // the partner vanish while both sides were in announce_quiet.
         } else {
             state_.bytes_done = 0;
             state_.bytes_total = 0;
             state_.peak_mbps = 0.0;
             state_.result_mbps = 0.0;
             state_.transfer_label.clear();
-            last_announce_ms_ = 0;
-            state_.last_announce_ms = 0;
         }
         publish_state();
+    }
+    // Leave last EP4 dest so a reverse offer still has a path. dest=0 here
+    // dropped Kyle→Bob offers right after Bob→Kyle (and the reverse).
+    if (controller_) {
+        const int held = controller_->last_switch_dest();
+        if (held >= 1 && held <= 4) {
+            controller_->mark_switch_preserve();
+            booth_log(log_leg(), "transfer_leave", "dest=" + std::to_string(held));
+        } else {
+            booth_log(log_leg(), "transfer_leave", "none");
+        }
+    }
+    if (!session_peer_name_.empty()) {
+        note_peer_alive(session_peer_name_);
+        session_peer_name_.clear();
     }
     if (listener_) {
         listener_->set_tight_poll(false);
@@ -1325,12 +1472,57 @@ void TransferOrchestrator::finish_transfer(bool ok,
     }
 }
 
+void TransferOrchestrator::note_peer_alive(const std::string& display_name) {
+    if (display_name.empty()) {
+        return;
+    }
+    roster_.touch_peer_presence(display_name, "");
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.roster = roster_.peers();
+    }
+    publish_state();
+}
+
 void TransferOrchestrator::invalidate_dismiss() {
     dismiss_epoch_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void TransferOrchestrator::request_announce() {
     maybe_send_announce(steady_now_ms(), true);
+    publish_state();
+}
+
+void TransferOrchestrator::release_link() {
+    booth_log(log_leg(), "link_release", "user");
+    StagedPayload staged{};
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        staged = staged_payload_;
+        clear_outbound_session();
+        state_.waiting_for_partner = false;
+        state_.busy = false;
+        state_.pending_offer.reset();
+        state_.link_state = LinkUiState::None;
+        state_.linked_port = 0;
+        state_.error_message.clear();
+        state_.status_message = "Link released";
+        state_.notification.clear();
+        state_.live_mbps = 0.0;
+    }
+    awaiting_ready_ = false;
+    accepting_inbound_session_id_.reset();
+    if (staged.is_temp && !staged.path.empty()) {
+        std::remove(staged.path.c_str());
+    }
+    if (controller_) {
+        booth_log(log_leg(), "link_clear", "dest=0");
+        (void)controller_->switch_port_if_needed(0);
+    }
+    if (listener_) {
+        listener_->set_tight_poll(false);
+    }
+    ensure_listener_active();
     publish_state();
 }
 
@@ -1403,15 +1595,8 @@ void TransferOrchestrator::reset_connection() {
         }
     }
 
-    // TS HwPlane.resetConnection clears sticky switch with dest=0.
-    if (controller_) {
-        const TransferResult clear = controller_->switch_port(0);
-        if (!clear.ok) {
-            booth_log(log_leg(), "switch_clear_fail", clear.error_message);
-        } else {
-            booth_log(log_leg(), "switch_clear", "dest=0");
-        }
-    }
+    // Do not switch_port(0) on reset — dest=0 clears break cross-port announces.
+    // Use tools/usb-switch manually if a sticky p2p link needs clearing.
 
     ensure_listener_active();
     publish_state();

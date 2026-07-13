@@ -25,7 +25,7 @@ export async function writeSwitch(
     }
   }
   const pkt = buildSwitchPacket(destDisplayPort);
-  const result = await device.transferOut(ep4Out, pkt);
+  const result = await device.transferOut(ep4Out, pkt as BufferSource);
   if (result.status !== 'ok' || (result.bytesWritten ?? 0) !== SWITCH_PACKET_SIZE) {
     throw new Error(
       `Switch EP4 write failed status=${result.status} written=${result.bytesWritten ?? 0}`,

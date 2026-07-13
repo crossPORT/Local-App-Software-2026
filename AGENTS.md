@@ -23,8 +23,8 @@ Wire magic **ROCKETBX** stays as the on-wire header constant only.
 
 1. **This file** — repo layout, build, conventions
 2. **[docs/DEV-DEMO.md](docs/DEV-DEMO.md)** — run/test with **simulated hardware** or **real USB** (PWA, wx, tunnel)
-3. **[sdks/typescript/AGENTS.md](sdks/typescript/AGENTS.md)** — when touching TS SDK / WebUSB / fabric wire
-4. **[apps/web/AGENTS.md](apps/web/AGENTS.md)** — when touching the PWA (UI only; no local USB/wire)
+3. **[sdks/typescript/AGENTS.md](sdks/typescript/AGENTS.md)** — when touching `@rocketbox/sdk` / WebUSB / wire
+4. **[apps/web/AGENTS.md](apps/web/AGENTS.md)** — when touching the PWA (UI only; USB via SDK)
 5. **[protocols/session.md](protocols/session.md)** — session handshake best practices (no-buffer fabric, timing, listener rules)
 6. **[protocols/file-transfer.md](protocols/file-transfer.md)** — ROCKETBX payload best practices (send/receive, mutex, staging)
 7. **[docs/PROTOCOL.md](docs/PROTOCOL.md)** — wire format (if editing `core/`)
@@ -34,8 +34,8 @@ Wire magic **ROCKETBX** stays as the on-wire header constant only.
 
 - **This repo:** CMake monorepo — `core/` engine + `lib/session/` shared logic + `apps/wx/` desktop + `apps/web/` PWA + `sdks/typescript/` + `tools/` CLIs
 - **Engine:** `core/src/usb_transfer_core.cpp` — async send, ring-buffer receive, `ROCKETBX` header, two-port loopback
-- **TS fabric/USB:** lives in `sdks/typescript` only; PWA captures `?simulate=`/`?port=` and calls `createFabricTransport`
-- **HW USB messaging:** ROCKETBX transfer on data EPs + **switch** on EP4 (TS working reference; C++ mirrors). Switch not used on the session/transfer send path; clear dest=0 on connect. Session ATTACH is not the HW contract.
+- **TypeScript SDK:** `@rocketbox/sdk` in `sdks/typescript` — PWA uses `createRocketBoxTransport`; no USB in `apps/web`
+- **HW USB messaging:** ROCKETBX on data EPs + **switch** on EP4 (TS working reference; C++ mirrors). Announce leaves last probe dest (no idle dest=0 clear — that tears offer circuits). If already switched to a peer, announce holds that link. Idle inbound announce aims at that peer (`circuit_listen`) so offers can land. Transfer ends with dest=0. Session ATTACH is not the HW contract.
 - **Do not** start the GUI server for the user; they run binaries themselves
 
 ## Build (always verify changes)
@@ -59,8 +59,8 @@ All targets must compile:
 | `core/src/usb_transfer_core.cpp` | USB transfer engine |
 | `lib/session/` | Shared session layer (`transfer_orchestrator`, `session_listener`, `TransferController`, …) |
 | `apps/wx/` | RocketBox App (desktop UI) — roster, send-to-peer, accept/reject |
-| `apps/web/` | RocketBox App (PWA) — UI + orchestrator; USB/fabric via `@rocketbox/sdk` |
-| `sdks/typescript/` | TS SDK — WebUSB, ROCKETBX (HW), sim Session, `createFabricTransport` |
+| `apps/web/` | RocketBox App (PWA) — UI + orchestrator; USB via `@rocketbox/sdk` |
+| `sdks/typescript/` | `@rocketbox/sdk` — WebUSB, ROCKETBX, sim, `createRocketBoxTransport` |
 | `tools/usb_probe.cpp` | Enumerate devices/endpoints (no full transfer) |
 | `tools/usb_loopback_test.cpp` | Two-port file loopback |
 | `tools/booth_cli.cpp` | Headless session CLI (links `rocketbox_session`) |
@@ -73,8 +73,8 @@ All targets must compile:
 1. **USB logic lives in `core/` only** (native) — no wx/GTK in core, no `stdio` menu loops in core
 2. **Session logic lives in `lib/session/`** — handshake, roster, orchestration; no UI toolkit includes
 3. **UI lives in `apps/wx/`** — wxWidgets only; marshal worker/orchestrator updates via `wxTheApp->CallAfter`
-4. **TS fabric/USB lives in `sdks/typescript/` only** — one RocketBox path (`RocketBoxTransport` + `UsbTransport` / `SimTransport`); no second browser USB implementation; no UI imports
-5. **Web UI lives in `apps/web/`** — PWA; may only call `@rocketbox/sdk` for transport/wire; keep orchestrator parity with `lib/session/` via golden fixtures + vitest
+4. **TypeScript USB/wire lives in `sdks/typescript/` (`@rocketbox/sdk`)** — `createRocketBoxTransport` / `RocketBoxTransport`; no UI imports; PWA does not implement WebUSB
+5. **Web UI lives in `apps/web/`** — PWA; call `@rocketbox/sdk` for transport/wire; keep orchestrator parity with `lib/session/` via golden fixtures + vitest
 6. **Raw USB tools link `fabric_usb_core` only** — e.g. `usb-probe`, `usb-loopback-test`
 7. **Session tools link `rocketbox_session`** — e.g. `booth-cli`, `fabric-session-test`
 8. **New native apps** → `apps/<name>/` linking `rocketbox_session` and/or `fabric_usb_core`
@@ -144,8 +144,7 @@ Permission errors → run `./scripts/setup-usb-access.sh`, replug cable.
 See also **[protocols/session.md](protocols/session.md)** and **[protocols/file-transfer.md](protocols/file-transfer.md)** for handshake timing and payload sequencing.
 
 - Putting GUI toolkit includes in `core/`
-- Implementing WebUSB / ROCKETBX / fabric codecs in `apps/web` (use `@rocketbox/sdk`)
-- Adding a second TypeScript browser USB/connect path alongside `RocketBoxTransport` + `UsbTransport`
+- Implementing WebUSB / ROCKETBX / codecs in `apps/web` (use `@rocketbox/sdk`)
 - Changing header magic/endpoints without coordinating with the FPGA team
 - Using sync bulk transfers for large file payload (regresses throughput and large-file correctness)
 - Assuming port index equals physical port label — always use libusb enumeration order

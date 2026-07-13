@@ -208,7 +208,7 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
     peers: global.peers ?? [],
     config_path: configPath,
     usb_read_buffer_size: portCfg.usb_read_buffer_size || global.usb_read_buffer_size || '256kb',
-    announce_interval_sec: portCfg.announce_interval_sec || global.announce_interval_sec || 10,
+    announce_interval_sec: portCfg.announce_interval_sec || global.announce_interval_sec || 30,
   };
 
   return profile;
@@ -250,7 +250,7 @@ export function defaultIdentityProfile(portIndex: number): IdentityProfile {
     peers: [],
     config_path: `local:port${portIndex}`,
     usb_read_buffer_size: '256kb',
-    announce_interval_sec: 10,
+    announce_interval_sec: 30,
   };
 }
 

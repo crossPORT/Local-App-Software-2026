@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FabricUsbError } from '@rocketbox/sdk';
+import { RocketBoxError } from '@rocketbox/sdk';
 import { formatTransferError, formatUsbConnectError, isUsbPickerCancel } from './user_errors';
 
 describe('isUsbPickerCancel', () => {
@@ -15,8 +15,10 @@ describe('formatUsbConnectError', () => {
     expect(formatUsbConnectError(new DOMException('', 'NotFoundError'))).toBeNull();
   });
 
-  it('passes through FabricUsbError message', () => {
-    expect(formatUsbConnectError(new FabricUsbError('interface is busy'))).toBe('interface is busy');
+  it('passes through RocketBoxError message', () => {
+    expect(formatUsbConnectError(new RocketBoxError('interface is busy', 'busy'))).toBe(
+      'interface is busy',
+    );
   });
 
   it('maps common WebUSB failures to user copy', () => {
@@ -27,8 +29,9 @@ describe('formatUsbConnectError', () => {
     expect(formatUsbConnectError(new Error('timeout'))).toMatch(/ATTACH|EP3|firmware/i);
     expect(
       formatUsbConnectError(
-        new FabricUsbError(
+        new RocketBoxError(
           'USB opened, but the local port did not reply on EP3 after ATTACH — port control firmware required (not just 4 endpoints).',
+          'timeout',
         ),
       ),
     ).toMatch(/did not reply on EP3/i);

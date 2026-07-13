@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <chrono>
+#include <thread>
 #include <libusb-1.0/libusb.h>
 #include <sstream>
 
@@ -192,6 +193,10 @@ TransferResult TransferController::switch_port(int dest_port) {
     }
     if (fabric_sim_enabled()) {
         booth_log(fabric_leg(), "switch_port", "sim skip dest=" + std::to_string(dest_port));
+        last_switch_dest_ = dest_port;
+        if (dest_port == 0) {
+            switch_preserve_ = false;
+        }
         return TransferResult{true, 16, 16, 0.0, 0.0, {}};
     }
     std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
@@ -199,11 +204,37 @@ TransferResult TransferController::switch_port(int dest_port) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     TransferResult result = switch_port_core(usb_ctx_, port_index_, dest_port);
+    if (result.ok) {
+        last_switch_dest_ = dest_port;
+        if (dest_port == 0) {
+            switch_preserve_ = false;
+        }
+    }
     booth_log(fabric_leg(),
               result.ok ? "switch_ok" : "switch_fail",
               "dest=" + std::to_string(dest_port)
                   + (result.error_message.empty() ? "" : " err=" + result.error_message));
     return result;
+}
+
+TransferResult TransferController::switch_port_if_needed(int dest_port) {
+    if (last_switch_dest_ == dest_port) {
+        return TransferResult{true, 0, 0, 0.0, 0.0, {}};
+    }
+    TransferResult result = switch_port(dest_port);
+    if (result.ok && dest_port >= 1 && dest_port <= 4) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(8));
+    }
+    return result;
+}
+
+void TransferController::mark_switch_preserve() {
+    switch_preserve_ = last_switch_dest_ >= 1 && last_switch_dest_ <= 4;
+}
+
+void TransferController::clear_switch_dest_cache() {
+    last_switch_dest_ = -1;
+    switch_preserve_ = false;
 }
 
 void TransferController::run_payload_send(const std::string& path,

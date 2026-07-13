@@ -6,6 +6,7 @@
 #include "fabric_device_picker.h"
 #include "session_handshake.h"
 #include "incoming_dialog.h"
+#include "link_release_dialog.h"
 #include "link_status.h"
 #include "peer_roster.h"
 #include "platform_util.h"
@@ -175,9 +176,11 @@ private:
     void OnPaint(wxPaintEvent&) {
         wxAutoBufferedPaintDC dc(this);
         const wxSize sz = GetClientSize();
+        dc.SetBackground(wxBrush(GetBackgroundColour()));
+        dc.Clear();
         dc.SetPen(wxPen(wxColour(255, 255, 255, 38)));
         dc.SetBrush(wxBrush(colour_));
-        dc.DrawRectangle(0, 0, sz.x, sz.y);
+        dc.DrawEllipse(0, 0, sz.x, sz.y);
     }
 
     void OnClick(wxMouseEvent&) {
@@ -442,6 +445,12 @@ void MainFrame::BuildUi() {
         icon_sizer->AddStretchSpacer();
         icon_sizer->Add(icon_bitmap, 0, wxALIGN_CENTER_HORIZONTAL);
         icon_sizer->AddStretchSpacer();
+    } else {
+        // Dev builds often lack installed icons — keep the old rocket glyph.
+        auto* icon_label = MakeLabel(icon_box, wxString::FromUTF8("🚀"), kText, 14);
+        icon_sizer->AddStretchSpacer();
+        icon_sizer->Add(icon_label, 0, wxALIGN_CENTER_HORIZONTAL);
+        icon_sizer->AddStretchSpacer();
     }
     icon_box->SetSizer(icon_sizer);
 
@@ -497,7 +506,10 @@ void MainFrame::BuildUi() {
             OnPeerSelected(peer);
             OnSendRequested(paths, "");
         },
-        [this]() { OnSettings(); });
+        [this]() { OnSettings(); },
+        [this](const std::string& peer, int display_port) {
+            OnReleaseLinkRequested(peer, display_port);
+        });
     header_sizer->Add(roster_panel_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 14);
     header_sizer->AddSpacer(6);
     header->SetSizer(header_sizer);
@@ -647,7 +659,13 @@ void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
                                 state.busy || state.waiting_for_partner,
                                 state.last_announce_ms,
                                 (state.busy || state.waiting_for_partner) ? state.status_message
-                                                                          : "");
+                                                                          : "",
+                                state.linked_port,
+                                state.link_state == LinkUiState::Linking
+                                    ? RosterLinkIcon::Linking
+                                    : state.link_state == LinkUiState::Linked
+                                          ? RosterLinkIcon::Linked
+                                          : RosterLinkIcon::None);
 
     const bool has_peers = !state.roster.empty();
     progress_panel_->ApplyState(state.busy,
@@ -897,6 +915,19 @@ void MainFrame::OnBrowseFolder() {
 
 void MainFrame::OnSettingsMenu(wxCommandEvent&) {
     OnSettings();
+}
+
+void MainFrame::OnReleaseLinkRequested(const std::string& peer_name, int display_port) {
+    const bool waiting =
+        orchestrator_
+        && (orchestrator_->snapshot().busy || orchestrator_->snapshot().waiting_for_partner);
+    ++modal_depth_;
+    LinkReleaseDialog dlg(this, peer_name, display_port, waiting);
+    const int rc = dlg.ShowModal();
+    --modal_depth_;
+    if (rc == wxID_OK && orchestrator_) {
+        orchestrator_->release_link();
+    }
 }
 
 void MainFrame::OnSettings() {

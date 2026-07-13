@@ -46,14 +46,14 @@ export function isFabricDevice(device: USBDevice): boolean {
   return device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID;
 }
 
-export function sortFabricDevicesBySerial<T extends { serialNumber?: string }>(
+export function sortDevicesBySerial<T extends { serialNumber?: string }>(
   devices: T[],
 ): T[] {
   return [...devices].sort((a, b) => (a.serialNumber ?? '').localeCompare(b.serialNumber ?? ''));
 }
 
 export function findPairedDevice(devices: USBDevice[]): USBDevice | null {
-  const sorted = sortFabricDevicesBySerial(devices);
+  const sorted = sortDevicesBySerial(devices);
   if (sorted.length === 0) {
     return null;
   }
@@ -70,7 +70,7 @@ export function findPairedDevice(devices: USBDevice[]): USBDevice | null {
   return null;
 }
 
-export async function countFabricDevices(): Promise<number> {
+export async function countDevices(): Promise<number> {
   if (!navigator.usb) {
     return 0;
   }

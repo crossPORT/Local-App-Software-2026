@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  boothLog,
+  eventLog,
   clearBoothLog,
   filterBoothLogLinesByPort,
-  getBoothLogLevel,
-  readBoothLogLines,
-  setBoothLogLevel,
-  subscribeBoothLog,
-  type BoothLogLevel,
-} from '../lib/booth_log';
-import { FABRIC_LEG_COUNT, displayPortFromLeg } from '@rocketbox/sdk';
-import { diagnoseBoothLog, parseBoothLogLine } from '../lib/booth_log_diagnostics';
+  getEventLogLevel,
+  readEventLogLines,
+  setEventLogLevel,
+  subscribeEventLog,
+  type EventLogLevel,
+} from '../lib/event_log';
+import { PORT_COUNT, toDisplayPort } from '@rocketbox/sdk';
+import { diagnoseEventLog, parseEventLogLine } from '../lib/event_log_diagnostics';
 import { theme } from '../lib/theme';
 
 interface EventLogDialogProps {
@@ -43,7 +43,7 @@ function eventTone(event: string): string {
 }
 
 function EventLogLine({ line }: { line: string }) {
-  const parsed = parseBoothLogLine(line);
+  const parsed = parseEventLogLine(line);
   if (!parsed) {
     return (
       <div className="event-log-line event-log-line--meta">
@@ -66,9 +66,9 @@ function EventLogLine({ line }: { line: string }) {
 }
 
 export function EventLogDialog({ onClose }: EventLogDialogProps) {
-  const [entries, setEntries] = useState(() => readBoothLogLines());
+  const [entries, setEntries] = useState(() => readEventLogLines());
   const [legFilter, setLegFilter] = useState<number | null>(null);
-  const [level, setLevel] = useState<BoothLogLevel>(() => getBoothLogLevel());
+  const [level, setLevel] = useState<EventLogLevel>(() => getEventLogLevel());
   const [followLive, setFollowLive] = useState(true);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
@@ -76,18 +76,18 @@ export function EventLogDialog({ onClose }: EventLogDialogProps) {
   const followLiveRef = useRef(true);
 
   const refresh = useCallback(() => {
-    setEntries(readBoothLogLines());
+    setEntries(readEventLogLines());
   }, []);
 
   useEffect(() => {
     refresh();
-    if (getBoothLogLevel() === 'off') {
-      setBoothLogLevel('normal');
+    if (getEventLogLevel() === 'off') {
+      setEventLogLevel('normal');
       setLevel('normal');
-      boothLog(0, 'log_enabled', 'auto-enabled for event log viewer');
+      eventLog(0, 'log_enabled', 'auto-enabled for event log viewer');
       refresh();
     }
-    return subscribeBoothLog(refresh);
+    return subscribeEventLog(refresh);
   }, [refresh]);
 
   useEffect(() => {
@@ -101,14 +101,14 @@ export function EventLogDialog({ onClose }: EventLogDialogProps) {
   }, [onClose]);
 
   const displayLines = filterBoothLogLinesByPort(entries, legFilter);
-  const diagnoses = diagnoseBoothLog(entries).filter(
-    (d) => legFilter === null || d.port === null || d.port === displayPortFromLeg(legFilter),
+  const diagnoses = diagnoseEventLog(entries).filter(
+    (d) => legFilter === null || d.port === null || d.port === toDisplayPort(legFilter),
   );
   const displayText =
     displayLines.length === 0
       ? legFilter === null
         ? '(log is empty)'
-        : `(no lines for port ${legFilter === null ? '?' : displayPortFromLeg(legFilter)} yet)`
+        : `(no lines for port ${legFilter === null ? '?' : toDisplayPort(legFilter)} yet)`
       : displayLines.join('\n');
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
@@ -142,9 +142,9 @@ export function EventLogDialog({ onClose }: EventLogDialogProps) {
     requestAnimationFrame(() => scrollToBottom('auto'));
   }, [scrollToBottom]);
 
-  const onLevelChange = (next: BoothLogLevel) => {
+  const onLevelChange = (next: EventLogLevel) => {
     setLevel(next);
-    setBoothLogLevel(next);
+    setEventLogLevel(next);
     refresh();
   };
 
@@ -209,7 +209,7 @@ export function EventLogDialog({ onClose }: EventLogDialogProps) {
             Level
             <select
               value={level}
-              onChange={(e) => onLevelChange(e.target.value as BoothLogLevel)}
+              onChange={(e) => onLevelChange(e.target.value as EventLogLevel)}
             >
               <option value="off">Off</option>
               <option value="normal">Normal</option>
@@ -226,9 +226,9 @@ export function EventLogDialog({ onClose }: EventLogDialogProps) {
               }}
             >
               <option value="all">All</option>
-              {Array.from({ length: FABRIC_LEG_COUNT }, (_, leg) => (
+              {Array.from({ length: PORT_COUNT }, (_, leg) => (
                 <option key={leg} value={String(leg)}>
-                  Port {displayPortFromLeg(leg)}
+                  Port {toDisplayPort(leg)}
                 </option>
               ))}
             </select>
@@ -249,7 +249,7 @@ export function EventLogDialog({ onClose }: EventLogDialogProps) {
         <div className="event-log-status" aria-live="polite">
           <span>
             {displayLines.length} line{displayLines.length === 1 ? '' : 's'}
-            {legFilter !== null ? ` · port ${displayPortFromLeg(legFilter)}` : ''}
+            {legFilter !== null ? ` · port ${toDisplayPort(legFilter)}` : ''}
           </span>
           <span className={followLive ? 'event-log-live event-log-live--on' : 'event-log-live'}>
             {followLive ? '● Live' : 'Paused'}

@@ -11,17 +11,23 @@
 
 class PeerDropZonePanel;
 
+/** Peer-card link glyph: absent / attempting / established. */
+enum class RosterLinkIcon { None, Linking, Linked };
+
 class RosterPanel : public wxPanel {
 public:
     using PeerSelectedCallback = std::function<void(const std::string& peer_name)>;
     using FilesDroppedOnPeerCallback =
         std::function<void(const std::string& peer_name, const std::vector<std::string>& paths)>;
     using OpenSettingsCallback = std::function<void()>;
+    using ReleaseLinkCallback =
+        std::function<void(const std::string& peer_name, int display_port)>;
 
     RosterPanel(wxWindow* parent,
                 PeerSelectedCallback on_peer_selected,
                 FilesDroppedOnPeerCallback on_files_dropped,
-                OpenSettingsCallback on_open_settings = {});
+                OpenSettingsCallback on_open_settings = {},
+                ReleaseLinkCallback on_release_link = {});
 
     void UpdateRoster(const std::vector<PeerEntry>& peers,
                       const IdentityProfile& self,
@@ -30,7 +36,9 @@ public:
                       int port_index,
                       bool transfer_busy = false,
                       int64_t last_announce_ms = 0,
-                      const std::string& transfer_status = "");
+                      const std::string& transfer_status = "",
+                      int linked_display_port = 0,
+                      RosterLinkIcon link_icon = RosterLinkIcon::None);
     std::optional<std::string> SelectedPeer() const;
 
 private:
@@ -83,10 +91,13 @@ private:
     bool transfer_busy_ = false;
     std::string transfer_status_;
     int64_t last_announce_ms_ = 0;
+    int linked_display_port_ = 0;
+    RosterLinkIcon link_icon_ = RosterLinkIcon::None;
     std::string selected_peer_;
     PeerSelectedCallback on_peer_selected_;
     FilesDroppedOnPeerCallback on_files_dropped_;
     OpenSettingsCallback on_open_settings_;
+    ReleaseLinkCallback on_release_link_;
 
     class PeerDropZoneTarget;
 };

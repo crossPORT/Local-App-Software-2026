@@ -1,25 +1,21 @@
 import type { SystemInfo } from '../system_info';
-import { fabricDebugLog } from '../fabric/debug_log';
-import { FabricUsbError } from '../fabric/errors';
-import {
-  displayPortFromLeg,
-  formatFabricPortDisplay,
-  legFromWirePort,
-  resolveFabricLegFromDevice,
-} from '../fabric/port';
-import { receiveStatusFromAnnounceNote } from '../fabric/announce_note';
-import type { FabricSessionMessage } from '../fabric/session_types';
-import type { ListenMode } from '../fabric/types';
+import { debugLog } from '../debug_log';
+import { RocketBoxError } from '../errors';
+import { toDisplayPort, formatPortLabel, resolvePortIndexFromDevice } from '../port';
+import type { SessionMessage } from '../session_types';
+import type { AnnouncePresenceMode, ListenMode } from '../types';
+import { sendAnnouncePresence } from './announce_presence';
+import { noteAnnouncePeer } from './hw_peers';
 import { DataListen } from './data_listen';
 import { DataRecv } from './data_recv';
 import { DataSend } from './data_send';
-import { writeSwitch } from './usb_switch';
 import { openAndClaim, pickDevice, releaseDevice, resetAndClaim } from './usb_open';
 import type { UsbEndpoints } from './usb_ids';
 import { rememberSerial } from './usb_pairing';
 import { resolvePairedUsbDevice } from './usb_pair_ops';
+import { SwitchDestCache } from './switch_cache';
 
-/** HW USB: ROCKETBX transfer; switch clear on connect. */
+/** HW USB: ROCKETBX transfer + EP4 switch for presence/circuit. */
 export class HwPlane {
   private device: USBDevice | null = null;
   private eps: UsbEndpoints | null = null;
@@ -29,8 +25,10 @@ export class HwPlane {
   private send: DataSend;
   private recv: DataRecv;
   private readonly peers = new Map<string, SystemInfo>();
-  private readonly sessionHandlers = new Set<(m: FabricSessionMessage) => void>();
+  private readonly sessionHandlers = new Set<(m: SessionMessage) => void>();
   private unsubListen: (() => void) | null = null;
+  private readonly switches = new SwitchDestCache();
+  private readonly rotateIndex = { current: 0 };
 
   constructor() {
     this.listen = new DataListen(() => this.device, () => this.eps, () => this.leg);
@@ -57,17 +55,16 @@ export class HwPlane {
     return this.device?.serialNumber?.trim() ?? '';
   }
   describe(): string {
-    return formatFabricPortDisplay(this.leg, this.getSerial());
+    return formatPortLabel(this.leg, this.getSerial());
   }
   getDevice(): USBDevice | null {
     return this.device;
   }
 
-  subscribeSession(h: (m: FabricSessionMessage) => void): () => void {
+  subscribeSession(h: (m: SessionMessage) => void): () => void {
     this.sessionHandlers.add(h);
     return () => this.sessionHandlers.delete(h);
   }
-
   setListenMode(m: ListenMode): void {
     this.listen.setListenMode(m);
   }
@@ -81,21 +78,15 @@ export class HwPlane {
     return this.send.waitForIdle();
   }
 
-  /** Explicit port switch (C++ `switch_port_core` parity). */
   async switchPort(destDisplayPort: number): Promise<void> {
-    if (!this.device || !this.eps) throw new FabricUsbError('USB not connected');
-    await writeSwitch(this.device, this.eps.ep4Out, destDisplayPort);
+    if (!this.device || !this.eps) throw new RocketBoxError('USB not connected', 'usb');
+    await this.switches.switchIfNeeded(this.device, this.eps, destDisplayPort);
   }
 
-  /** dest=0 clears sticky p2p left by earlier experiments. */
-  private async clearSwitch(): Promise<void> {
-    if (!this.device || !this.eps) return;
-    try {
-      await this.switchPort(0);
-      fabricDebugLog(this.leg, 'switch_clear', 'dest=0');
-    } catch (err) {
-      fabricDebugLog(this.leg, 'switch_clear_fail', (err as Error).message);
-    }
+  /** Live EP4 dest 1–4, or 0 if cleared. */
+  switchDest(): number {
+    const d = this.switches.last;
+    return d != null && d >= 1 && d <= 4 ? d : 0;
   }
 
   async connect(existing?: USBDevice): Promise<string> {
@@ -103,23 +94,23 @@ export class HwPlane {
     this.device = existing ?? (await pickDevice());
     this.eps = await openAndClaim(this.device);
     try {
-      this.leg = resolveFabricLegFromDevice(this.device);
+      this.leg = resolvePortIndexFromDevice(this.device);
     } catch {
       this.leg = 0;
     }
-    this.systemId = `sys-port-${displayPortFromLeg(this.leg)}`;
+    this.systemId = `sys-port-${toDisplayPort(this.leg)}`;
+    this.switches.clear();
+    this.rotateIndex.current = 0;
     rememberSerial(this.device);
-    await this.clearSwitch();
     this.unsubListen = this.listen.subscribe((m) => this.dispatchSession(m));
     this.listen.setListenMode('always');
-    fabricDebugLog(this.leg, 'usb_connect', this.describe());
-    fabricDebugLog(this.leg, 'cable_serial', this.getSerial() || '(none)');
+    debugLog(this.leg, 'usb_connect', this.describe());
+    debugLog(this.leg, 'cable_serial', this.getSerial() || '(none)');
     return this.describe();
   }
 
   async reconnectKnown(): Promise<string> {
-    const device = await resolvePairedUsbDevice();
-    return this.connect(device);
+    return this.connect(await resolvePairedUsbDevice());
   }
 
   async disconnect(): Promise<void> {
@@ -127,6 +118,7 @@ export class HwPlane {
     this.unsubListen?.();
     this.unsubListen = null;
     this.peers.clear();
+    this.switches.clear();
     await releaseDevice(this.device);
     this.device = null;
     this.eps = null;
@@ -134,33 +126,49 @@ export class HwPlane {
   }
 
   async resetConnection(): Promise<string> {
-    if (!this.device) throw new FabricUsbError('USB not connected');
+    if (!this.device) throw new RocketBoxError('USB not connected', 'usb');
     this.listen.setListenMode('off');
     this.eps = await resetAndClaim(this.device);
-    await this.clearSwitch();
+    this.switches.clear();
     this.listen.setListenMode('always');
     return this.describe();
   }
 
-  /** Validate peer id only — no port switch (C++ send_file_core parity). */
   async ensureCircuit(peerSystemId: string): Promise<void> {
-    if (!this.device || !this.eps) throw new FabricUsbError('USB not connected');
+    if (!this.device || !this.eps) throw new RocketBoxError('USB not connected', 'usb');
     const m = peerSystemId.match(/^sys-port-(\d+)$/);
     const dest = m ? Number.parseInt(m[1]!, 10) : 0;
-    if (dest < 1 || dest > 4) throw new FabricUsbError(`Invalid peer system id ${peerSystemId}`);
-    fabricDebugLog(this.leg, 'circuit_ready', `peer=${peerSystemId} (no switch)`);
+    if (dest < 1 || dest > 4) {
+      throw new RocketBoxError(`Invalid peer system id ${peerSystemId}`, 'protocol');
+    }
+    await this.switches.switchIfNeeded(this.device, this.eps, dest);
+    this.switches.markPreserve();
+    debugLog(this.leg, 'circuit_ready', `peer=${peerSystemId} dest=${dest}`);
+  }
+
+  async sendAnnouncePresence(message: SessionMessage, mode: AnnouncePresenceMode): Promise<void> {
+    if (!this.device || !this.eps) throw new RocketBoxError('USB not connected', 'usb');
+    await sendAnnouncePresence(
+      {
+        device: this.device,
+        eps: this.eps,
+        portIndex: this.leg,
+        switches: this.switches,
+        rotateIndex: this.rotateIndex,
+        sendSession: (m) => this.send.sendSessionMessage(m),
+      },
+      message,
+      mode,
+    );
   }
 
   listSystems(): SystemInfo[] {
     return [...this.peers.values()];
   }
-
   async syncSystems(handler: (systems: SystemInfo[]) => void): Promise<void> {
     handler(this.listSystems());
   }
-
-  sendSessionMessage = (msg: FabricSessionMessage): Promise<void> =>
-    this.send.sendSessionMessage(msg);
+  sendSessionMessage = (msg: SessionMessage): Promise<void> => this.send.sendSessionMessage(msg);
   sendBytes = (
     p: Uint8Array,
     onProgress?: (d: number, t: number) => void,
@@ -173,23 +181,8 @@ export class HwPlane {
   ): Promise<{ data: Uint8Array; filename: string }> =>
     this.recv.receiveFileTransfer(ms, expected, onProgress);
 
-  private dispatchSession(msg: FabricSessionMessage): void {
-    if (msg.kind === 'announce' && msg.from_name) this.noteAnnounce(msg);
+  private dispatchSession(msg: SessionMessage): void {
+    noteAnnouncePeer(msg, this.leg, this.peers);
     for (const h of this.sessionHandlers) h(msg);
-  }
-
-  private noteAnnounce(msg: FabricSessionMessage): void {
-    const portMatch = (msg.note ?? '').match(/(?:^|;)\s*port=(\d+)/);
-    const wire = portMatch ? Number.parseInt(portMatch[1]!, 10) : NaN;
-    const leg = legFromWirePort(wire);
-    if (leg == null || leg === this.leg) return;
-    const id = `sys-port-${leg + 1}`;
-    const receive = receiveStatusFromAnnounceNote(msg.note);
-    this.peers.set(id, {
-      id,
-      name: msg.from_name,
-      status: receive === 'busy' ? 'busy' : 'reachable',
-      receive,
-    });
   }
 }

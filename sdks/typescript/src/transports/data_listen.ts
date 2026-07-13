@@ -1,9 +1,9 @@
-import { fabricDebugLog } from '../fabric/debug_log';
-import { FabricUsbError } from '../fabric/errors';
-import { HEADER_SIZE, buildHeader, parseHeader } from '../fabric/protocol';
-import { parseSessionPayload } from '../fabric/session_codec';
-import type { FabricSessionMessage } from '../fabric/session_types';
-import type { ListenMode } from '../fabric/types';
+import { debugLog } from '../debug_log';
+import { RocketBoxError } from '../errors';
+import { HEADER_SIZE, parseHeader } from '../protocol';
+import { parseSessionPayload } from '../session_codec';
+import type { SessionMessage } from '../session_types';
+import type { ListenMode } from '../types';
 import { isBenignListenError, sleep } from './bulk_io';
 import type { UsbEndpoints } from './usb_ids';
 
@@ -11,7 +11,7 @@ const ALWAYS_HEADER_MS = 200;
 const LISTEN_GAP_MS = 250;
 const HANDSHAKE_GAP_MS = 50;
 
-type SessionCb = (m: FabricSessionMessage) => void;
+type SessionCb = (m: SessionMessage) => void;
 
 /** Background ROCKETBX session listener (C++ SessionListener parity). */
 export class DataListen {
@@ -37,14 +37,14 @@ export class DataListen {
   setListenMode(mode: ListenMode): void {
     const prev = this.mode;
     this.mode = mode;
-    fabricDebugLog(this.getLeg(), 'listen_mode', mode);
+    debugLog(this.getLeg(), 'listen_mode', mode);
     if (mode === 'off') this.stop();
     else if (prev === 'off' || !this.running) this.start();
   }
 
   ensureListening(): void {
     if (this.mode !== 'off' && !this.running) {
-      fabricDebugLog(this.getLeg(), 'listen_restart', 'watchdog');
+      debugLog(this.getLeg(), 'listen_restart', 'watchdog');
       this.start();
     }
   }
@@ -62,7 +62,7 @@ export class DataListen {
   endOutbound(): void {
     this.suspended = Math.max(0, this.suspended - 1);
     if (this.mode !== 'off') {
-      fabricDebugLog(this.getLeg(), 'listen_restart', this.mode);
+      debugLog(this.getLeg(), 'listen_restart', this.mode);
       this.start();
     }
   }
@@ -89,7 +89,7 @@ export class DataListen {
     this.running = false;
   }
 
-  private emit(m: FabricSessionMessage): void {
+  private emit(m: SessionMessage): void {
     for (const h of this.handlers) h(m);
   }
 
@@ -99,7 +99,7 @@ export class DataListen {
       (r) => r,
       (err) => {
         if (!isBenignListenError(err) && (err as Error)?.name !== 'AbortError') {
-          fabricDebugLog(this.getLeg(), 'usb_recv_fail', (err as Error).message);
+          debugLog(this.getLeg(), 'usb_recv_fail', (err as Error).message);
         }
         return null;
       },
@@ -108,7 +108,7 @@ export class DataListen {
     return read;
   }
 
-  private async tryOnce(headerMs: number): Promise<FabricSessionMessage | null> {
+  private async tryOnce(headerMs: number): Promise<SessionMessage | null> {
     const device = this.getDevice();
     const eps = this.getEps();
     if (!device || !eps) return null;
@@ -143,7 +143,9 @@ export class DataListen {
     let off = 0;
     while (off < n) {
       const r = await device.transferIn(epIn, Math.min(16 * 1024, n - off));
-      if (r.status !== 'ok' || !r.data?.byteLength) throw new FabricUsbError('session body read failed');
+      if (r.status !== 'ok' || !r.data?.byteLength) {
+        throw new RocketBoxError('session body read failed', 'usb');
+      }
       const part = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
       out.set(part.subarray(0, n - off), off);
       off += part.length;
@@ -173,7 +175,7 @@ export class DataListen {
         );
         const message = await poll;
         if (message) {
-          fabricDebugLog(this.getLeg(), 'session_frame', message.kind);
+          debugLog(this.getLeg(), 'session_frame', message.kind);
           this.emit(message);
         }
       }

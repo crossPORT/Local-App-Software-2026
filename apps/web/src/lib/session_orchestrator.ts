@@ -1,22 +1,22 @@
-import { rollBoothDisplayMibS, buildAnnounceMessage, receiveStatusFromAnnounceNote } from '@rocketbox/sdk';
+import { rollDisplayMibS, buildAnnounceMessage, receiveStatusFromAnnounceNote } from '@rocketbox/sdk';
 import { formatBytes, formatTransferDoneMessage, isTransferCompleteMessage } from './format';
-import { boothLog } from './booth_log';
+import { eventLog } from './event_log';
 import {
   buildSessionReply,
-  type FabricSessionMessage,
+  type SessionMessage,
   makeSessionId,
   makeInstanceId,
 } from '@rocketbox/sdk';
-import { FABRIC_LEG_COUNT } from '@rocketbox/sdk';
-import type { FabricTransport, SystemInfo } from '@rocketbox/sdk';
+import { PORT_COUNT, toDisplayPort } from '@rocketbox/sdk';
+import type { RocketBoxTransport, SystemInfo } from '@rocketbox/sdk';
 import { PeerRoster } from './peer_roster';
 import { readFilePayload } from './file_bytes';
-import type { AppUiState, IdentityProfile, PendingOffer, ReceiveStatus } from './types';
+import type { AppUiState, IdentityProfile, LinkUiState, PendingOffer, ReceiveStatus } from './types';
 import { formatTransferError } from './user_errors';
 import { handshakeTimingFromIdentity } from './session_handshake';
 import type { HandshakeTiming } from './session_handshake';
 import { TRANSFER_DONE_DISMISS_MS } from './usb_constants';
-import { legFromWirePort } from '@rocketbox/sdk';
+import { portIndexFromWire } from '@rocketbox/sdk';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -28,7 +28,12 @@ function effectiveReceiveStatus(status: ReceiveStatus): ReceiveStatus {
   return status === 'busy' ? 'open' : status;
 }
 
-function toPendingOffer(message: FabricSessionMessage): PendingOffer {
+/** USB cable leg — never trust a stale UI portIndex for echo filters. */
+function portIndexOf(usb: RocketBoxTransport, fallback: number): number {
+  return typeof usb.getPortIndex === 'function' ? usb.getPortIndex() : fallback;
+}
+
+function toPendingOffer(message: SessionMessage): PendingOffer {
   return {
     from_name: message.from_name,
     team: message.team,
@@ -66,23 +71,27 @@ export class SessionOrchestrator {
   private linkActivity: LinkActivity = 'idle';
 
   private busy = false;
-  private outboundOffer: FabricSessionMessage | null = null;
+  private outboundOffer: SessionMessage | null = null;
   private awaitingReady = false;
   /** Sender must not hold USB IN until the receiver has had time to read the offer. */
   private offerReceiveGraceUntil = 0;
 
-  private pendingInbound: FabricSessionMessage | null = null;
+  private pendingInbound: SessionMessage | null = null;
   /** When the current pendingInbound dialog started — used to expire a wedged
    *  offer if the receiver's dialog timer was frozen (e.g. mobile backgrounded). */
   private pendingInboundAt = 0;
 
   private acceptWaiter: { resolve: () => void; reject: (err: Error) => void } | null = null;
   private readyWaiter: { resolve: () => void; reject: (err: Error) => void } | null = null;
+  /** Bumped when waiters are cleared so stale Accept/Ready timeouts cannot kill the next send. */
+  private waiterEpoch = 0;
   private dismissTimer: number | null = null;
   private dismissEpoch = 0;
   private lastOfferRetransmitMs = 0;
   /** C++ parity: at most one offer retransmit — repeated ones keep USB IN off and drop accept. */
   private offerRetransmitted = false;
+  /** Peer in the current/last transfer — refresh presence after quiet gaps. */
+  private sessionPeerName = '';
   /** Stable across announces so peers don't churn roster keys every 10s. */
   private readonly instanceId = makeInstanceId();
   private presenceTimer: number | null = null;
@@ -102,7 +111,7 @@ export class SessionOrchestrator {
   }
 
   constructor(
-    private readonly usb: FabricTransport,
+    private readonly usb: RocketBoxTransport,
     private readonly callbacks: OrchestratorCallbacks,
   ) {}
 
@@ -133,11 +142,11 @@ export class SessionOrchestrator {
     const leg = this.callbacks.getPortIndex();
     const identity = this.callbacks.getIdentity();
     const name = identity.display_name.trim();
-    boothLog(leg, 'listener_started', name || 'display_name not set');
+    eventLog(leg, 'listener_started', name || 'display_name not set');
     this.startPresenceLoop();
     this.startRetransmitLoop();
-    const intervalMs = (identity.announce_interval_sec ?? 10) * 1000;
-    const staggerMs = leg * (intervalMs / FABRIC_LEG_COUNT);
+    const intervalMs = (identity.announce_interval_sec ?? 30) * 1000;
+    const staggerMs = leg * (intervalMs / PORT_COUNT);
     void (async () => {
       await sleep(staggerMs + Math.floor(Math.random() * ANNOUNCE_JITTER_MS));
       if (this.sessionUnsubscribe) {
@@ -177,7 +186,7 @@ export class SessionOrchestrator {
     }
     const prev = this.linkActivity;
     this.linkActivity = next;
-    boothLog(this.callbacks.getPortIndex(), 'link_activity', `${prev}→${next}`);
+    eventLog(this.callbacks.getPortIndex(), 'link_activity', `${prev}→${next}`);
     this.syncListenMode();
   }
 
@@ -250,6 +259,7 @@ export class SessionOrchestrator {
       bytesDone: 0,
       bytesTotal: 0,
     });
+    void this.releaseCircuitAfterTransfer();
   }
 
   /**
@@ -261,7 +271,7 @@ export class SessionOrchestrator {
     const idle = !this.busy && !this.outboundOffer && !this.pendingInbound;
     if (idle && this.linkActivity !== 'idle') {
       console.warn('[RocketBox] clearing stuck link activity while idle');
-      boothLog(this.callbacks.getPortIndex(), 'stuck_activity_reset', this.linkActivity);
+      eventLog(this.callbacks.getPortIndex(), 'stuck_activity_reset', this.linkActivity);
       this.setLinkActivity('idle');
     }
   }
@@ -286,7 +296,8 @@ export class SessionOrchestrator {
       // Never invent "open" — that lied about peers who ask before accepting.
       const receive =
         sys.receive ?? (sys.status === 'busy' ? 'busy' : 'ask_first');
-      roster.touchPeer(sys.name || sys.id, '', receive, peerLeg, sys.id);
+      // Do not pass sys.id as instance — that collided with real announce instance keys.
+      roster.touchPeer(sys.name || sys.id, '', receive, peerLeg);
     }
     roster.markStalePeersOffline();
     this.publishRoster();
@@ -307,6 +318,7 @@ export class SessionOrchestrator {
     this.pendingInboundAt = 0;
     this.outboundOffer = null;
     this.awaitingReady = false;
+    this.sessionPeerName = '';
     this.offerReceiveGraceUntil = 0;
     this.offerRetransmitted = false;
     this.setLinkActivity('idle');
@@ -314,6 +326,7 @@ export class SessionOrchestrator {
   }
 
   private rejectWaiters(err: Error): void {
+    this.waiterEpoch += 1;
     this.acceptWaiter?.reject(err);
     this.readyWaiter?.reject(err);
     this.acceptWaiter = null;
@@ -368,6 +381,13 @@ export class SessionOrchestrator {
   ): void {
     this.busy = false;
     this.setLinkActivity('idle');
+    void this.releaseCircuitAfterTransfer();
+    // Keep announcing — silencing both sides after transfer made the partner
+    // fall out of the 45s roster TTL (announce_quiet).
+    if (this.sessionPeerName) {
+      this.notePeerAlive(this.sessionPeerName);
+      this.sessionPeerName = '';
+    }
     this.callbacks.patch({
       busy: false,
       waitingForPartner: false,
@@ -386,14 +406,97 @@ export class SessionOrchestrator {
     }
   }
 
+  /** Leave EP4 aimed at last peer after transfer so reverse offers still land. */
+  private async releaseCircuitAfterTransfer(): Promise<void> {
+    const dest = this.usb.switchDest?.() ?? 0;
+    if (dest >= 1 && dest <= 4) {
+      eventLog(this.callbacks.getPortIndex(), 'transfer_leave', `dest=${dest}`);
+    } else {
+      eventLog(this.callbacks.getPortIndex(), 'transfer_leave', 'none');
+    }
+    this.clearLinkUi();
+  }
+
+  private notePeerAlive(displayName: string): void {
+    const name = displayName.trim();
+    if (!name) return;
+    this.callbacks.getRoster().touchPeerPresence(name, '');
+    this.publishRoster();
+  }
+
   private boothDisplayRate(identity: IdentityProfile): number {
     const base = identity.booth_display_mib_s;
-    return base > 0 ? rollBoothDisplayMibS(base, identity.booth_display_jitter_pct) : 0;
+    return base > 0 ? rollDisplayMibS(base, identity.booth_display_jitter_pct) : 0;
   }
 
   private bumpSessionActivity(): void {
     this.fabricActivitySeq += 1;
     this.callbacks.patch({ fabricActivitySeq: this.fabricActivitySeq });
+  }
+
+  private setLinkUi(linkState: LinkUiState, linkedPort: number): void {
+    this.callbacks.patch({
+      linkState,
+      linkedPort: linkState === 'none' ? 0 : linkedPort,
+    });
+  }
+
+  private clearLinkUi(): void {
+    this.setLinkUi('none', 0);
+  }
+
+  /** Switch toward offer sender; linking → linked when both sides can aim. */
+  private async ensureCircuitTowardPeer(fromName: string): Promise<void> {
+    const peer = this.callbacks.getRoster().findByName(fromName);
+    if (!peer) {
+      return;
+    }
+    const port = toDisplayPort(peer.port_index);
+    this.setLinkUi('linking', port);
+    try {
+      await this.switchTowardPeer(peer);
+      this.setLinkUi('linked', port);
+      eventLog(this.callbacks.getPortIndex(), 'circuit_inbound', `dest=${port}`);
+    } catch (err) {
+      eventLog(
+        this.callbacks.getPortIndex(),
+        'circuit_inbound_fail',
+        (err as Error).message,
+      );
+      this.clearLinkUi();
+    }
+  }
+
+  /** Aim at a peer without changing the link icon (presence listen path). */
+  private async aimForListen(fromName: string): Promise<void> {
+    if (this.busy || this.outboundOffer || this.pendingInbound || this.linkActivity !== 'idle') {
+      return;
+    }
+    const peer = this.callbacks.getRoster().findByName(fromName);
+    if (!peer) {
+      return;
+    }
+    try {
+      await this.switchTowardPeer(peer);
+      eventLog(
+        this.callbacks.getPortIndex(),
+        'circuit_listen',
+        `dest=${toDisplayPort(peer.port_index)}`,
+      );
+    } catch (err) {
+      eventLog(
+        this.callbacks.getPortIndex(),
+        'circuit_listen_fail',
+        (err as Error).message,
+      );
+    }
+  }
+
+  private async switchTowardPeer(peer: { port_index: number; instance_id: string }): Promise<void> {
+    const systemId = peer.instance_id.startsWith('sys-port-')
+      ? peer.instance_id
+      : `sys-port-${peer.port_index + 1}`;
+    await this.usb.ensureCircuit(systemId);
   }
 
   private patchTransferProgress(partial: Partial<AppUiState>): void {
@@ -411,15 +514,12 @@ export class SessionOrchestrator {
       return;
     }
     this.lastAnnounceSkipReason = reason;
-    boothLog(this.callbacks.getPortIndex(), 'announce_skip', reason);
+    eventLog(this.callbacks.getPortIndex(), 'announce_skip', reason);
   }
 
   private async maybeSendAnnounce(force: boolean): Promise<void> {
     // Prefer USB fabric leg over UI ref — stale portIndex makes peers ignore us as "self".
-    const leg =
-      typeof this.usb.getFabricLeg === 'function'
-        ? this.usb.getFabricLeg()
-        : this.callbacks.getPortIndex();
+    const leg = portIndexOf(this.usb, this.callbacks.getPortIndex());
     if (!this.sessionUnsubscribe || !this.usb.connected) {
       if (!this.usb.connected) {
         this.logAnnounceSkip('usb disconnected', force);
@@ -430,7 +530,7 @@ export class SessionOrchestrator {
       if (force) {
         this.logAnnounceSkip(`suppressed:${this.linkActivity}`, true);
       } else {
-        boothLog(leg, 'announce_suppressed', this.linkActivity);
+        eventLog(leg, 'announce_suppressed', this.linkActivity);
       }
       return;
     }
@@ -454,7 +554,7 @@ export class SessionOrchestrator {
       return;
     }
     const now = Date.now();
-    const intervalMs = (identity.announce_interval_sec ?? 10) * 1000;
+    const intervalMs = (identity.announce_interval_sec ?? 30) * 1000;
     // LED/force: short gap after a *successful* announce (native parity). Scheduled: full interval.
     const forceMinGapMs = 1000;
     if (force) {
@@ -470,7 +570,7 @@ export class SessionOrchestrator {
     }
     this.lastAnnounceAttemptMs = now;
     this.announceInFlight = true;
-    boothLog(leg, 'announce_attempt', force ? 'forced' : 'scheduled');
+    eventLog(leg, 'announce_attempt', force ? 'forced' : 'scheduled');
     try {
       const announce = buildAnnounceMessage(
         identity.display_name,
@@ -479,7 +579,12 @@ export class SessionOrchestrator {
         effectiveReceiveStatus(identity.receive_status),
         this.instanceId,
       );
-      await this.usb.sendSessionMessage(announce);
+      const mode = force ? 'burst' : 'rotate';
+      if (this.usb.sendAnnouncePresence) {
+        await this.usb.sendAnnouncePresence(announce, mode);
+      } else {
+        await this.usb.sendSessionMessage(announce);
+      }
       await this.usb.syncSystems((systems) => {
         this.applySystemsToRoster(systems);
       });
@@ -487,12 +592,18 @@ export class SessionOrchestrator {
       this.lastAnnounceSkipReason = '';
       this.bumpSessionActivity();
       this.callbacks.patch({ lastAnnounceMs: now });
-      boothLog(leg, 'systems_announce', identity.display_name);
-      boothLog(leg, 'systems_synced', identity.display_name);
+      eventLog(leg, 'systems_announce', identity.display_name);
+      const online = this.callbacks.getRoster().visiblePeers(true);
+      const remotes = online.filter((p) => p.port_index !== leg);
+      if (remotes.length === 0) {
+        eventLog(leg, 'roster_waiting', 'sent ok — need peer announce inbound');
+      } else {
+        eventLog(leg, 'systems_synced', identity.display_name);
+      }
       console.log(`[RocketBox] systems synced as "${identity.display_name}"`);
     } catch (err) {
       const message = (err as Error).message;
-      boothLog(leg, 'announce_fail', message);
+      eventLog(leg, 'announce_fail', message);
       console.warn('[RocketBox] announce/presence failed:', message);
     } finally {
       this.announceInFlight = false;
@@ -516,7 +627,7 @@ export class SessionOrchestrator {
    * ServiceWorkerRegistration.showNotification()), and a throw here would abort
    * offer handling before the receive dialog is shown.
    */
-  private notifyIncomingOffer(message: FabricSessionMessage): void {
+  private notifyIncomingOffer(message: SessionMessage): void {
     const body = `${message.from_name} wants to send ${message.payload_name || 'a file'}`;
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -534,14 +645,19 @@ export class SessionOrchestrator {
     }
   }
 
-  private onSessionMessage(message: FabricSessionMessage): void {
-    boothLog(
-      this.callbacks.getPortIndex(),
+  private onSessionMessage(message: SessionMessage): void {
+    const myLeg = portIndexOf(this.usb, this.callbacks.getPortIndex());
+    eventLog(
+      myLeg,
       'session_received',
       `${message.kind} from=${message.from_name || '?'}`,
     );
     console.log(`[RocketBox] session message received: kind=${message.kind} from="${message.from_name}"`);
     this.bumpSessionActivity();
+
+    if (message.from_name && message.kind !== 'announce') {
+      this.notePeerAlive(message.from_name);
+    }
 
     if (message.session_id && this.completedSessionIds.has(message.session_id)) {
       console.log(`[RocketBox] session message ignored: session_id "${message.session_id}" was already completed/handled`);
@@ -564,15 +680,27 @@ export class SessionOrchestrator {
       case 'announce': {
         const portMatch = message.note?.match(/(?:^|;)\s*port=(\d+)/);
         const wire = portMatch ? Number.parseInt(portMatch[1]!, 10) : NaN;
-        const peerLeg = legFromWirePort(wire);
-        if (peerLeg != null && peerLeg !== this.callbacks.getPortIndex()) {
-          const receive = receiveStatusFromAnnounceNote(message.note);
-          const instance = message.note?.match(/instance=([^;]+)/)?.[1] ?? '';
-          this.callbacks
-            .getRoster()
-            .touchPeer(message.from_name, message.team, receive, peerLeg, instance);
-          this.publishRoster();
+        const peerLeg = portIndexFromWire(wire);
+        if (peerLeg == null || peerLeg === myLeg) {
+          eventLog(
+            myLeg,
+            'announce_echo_reject',
+            `${message.from_name || '?'} port=${Number.isFinite(wire) ? wire : '?'}`,
+          );
+          break;
         }
+        const receive = receiveStatusFromAnnounceNote(message.note);
+        const instance = message.note?.match(/instance=([^;]+)/)?.[1] ?? '';
+        this.callbacks
+          .getRoster()
+          .touchPeer(message.from_name, message.team, receive, peerLeg, instance);
+        this.publishRoster();
+        eventLog(
+          myLeg,
+          'announce_received',
+          `${message.from_name} port=${peerLeg + 1}`,
+        );
+        void this.aimForListen(message.from_name);
         break;
       }
       default:
@@ -580,9 +708,10 @@ export class SessionOrchestrator {
     }
   }
 
-  private async handleOffer(message: FabricSessionMessage): Promise<void> {
+  private async handleOffer(message: SessionMessage): Promise<void> {
     const identity = this.callbacks.getIdentity();
     const myLeg = this.callbacks.getPortIndex();
+    this.sessionPeerName = message.from_name;
 
     // Check if the offer specifically targets our physical port index (to_port=X)
     const toPortMatch = message.note?.match(/to_port=(\d+)/);
@@ -619,6 +748,7 @@ export class SessionOrchestrator {
     if (effective === 'open') {
       this.pauseListener();
       try {
+        await this.ensureCircuitTowardPeer(message.from_name);
         await this.runInboundAccept(message, false);
       } finally {
         this.resumeListener();
@@ -627,6 +757,7 @@ export class SessionOrchestrator {
     }
 
     console.log(`[RocketBox] incoming offer from "${message.from_name}": ${message.payload_name}`);
+    await this.ensureCircuitTowardPeer(message.from_name);
     this.pendingInbound = message;
     this.pendingInboundAt = Date.now();
     // Show the dialog BEFORE attempting any notification — on Android Chrome the
@@ -644,11 +775,15 @@ export class SessionOrchestrator {
     this.notifyIncomingOffer(message);
   }
 
-  private handleAccept(message: FabricSessionMessage): void {
+  private handleAccept(message: SessionMessage): void {
     if (!this.outboundOffer || this.outboundOffer.session_id !== message.session_id) {
       return;
     }
     this.awaitingReady = true;
+    const peer = this.callbacks.getRoster().findByName(message.from_name);
+    if (peer) {
+      this.setLinkUi('linked', toDisplayPort(peer.port_index));
+    }
     this.callbacks.patch({
       waitingForPartner: true,
       statusMessage: 'Accepted — waiting for receiver to prepare…',
@@ -657,7 +792,7 @@ export class SessionOrchestrator {
     this.acceptWaiter = null;
   }
 
-  private handleDecline(message: FabricSessionMessage): void {
+  private handleDecline(message: SessionMessage): void {
     if (!this.outboundOffer || this.outboundOffer.session_id !== message.session_id) {
       return;
     }
@@ -668,13 +803,17 @@ export class SessionOrchestrator {
     this.finishTransfer(false, `Transfer declined by ${from}`, 'Declined');
   }
 
-  private handleReady(message: FabricSessionMessage): void {
+  private handleReady(message: SessionMessage): void {
     if (!this.outboundOffer || this.outboundOffer.session_id !== message.session_id) {
       return;
     }
     if (!this.awaitingReady) {
       // Accept may have been dropped on the no-buffer fabric; ready implies acceptance.
       this.awaitingReady = true;
+      const peer = this.callbacks.getRoster().findByName(message.from_name);
+      if (peer) {
+        this.setLinkUi('linked', toDisplayPort(peer.port_index));
+      }
       this.callbacks.patch({
         waitingForPartner: true,
         statusMessage: 'Accepted — waiting for receiver to prepare…',
@@ -705,10 +844,15 @@ export class SessionOrchestrator {
     this.offerRetransmitted = true;
     this.lastOfferRetransmitMs = now;
     try {
-      console.log('[RocketBox] retransmitting offer once (no accept yet)');
-      boothLog(this.callbacks.getPortIndex(), 'offer_retransmit', this.outboundOffer.session_id);
       this.pauseListener();
       await sleep(50);
+      // Accept may arrive while pausing IN — do not clobber the ready path.
+      if (this.awaitingReady || !this.outboundOffer || !this.acceptWaiter) {
+        this.resumeListener();
+        return;
+      }
+      console.log('[RocketBox] retransmitting offer once (no accept yet)');
+      eventLog(this.callbacks.getPortIndex(), 'offer_retransmit', this.outboundOffer.session_id);
       await this.usb.sendSessionMessage(this.outboundOffer);
       this.bumpSessionActivity();
       this.offerReceiveGraceUntil = Date.now() + this.handshake().accept_ready_gap_ms;
@@ -721,31 +865,35 @@ export class SessionOrchestrator {
   }
 
   private waitForAccept(timeoutMs: number): Promise<void> {
+    const epoch = this.waiterEpoch;
     return new Promise((resolve, reject) => {
       this.acceptWaiter = { resolve, reject };
-      window.setTimeout(() => {
-        if (this.acceptWaiter) {
-          this.acceptWaiter.reject(new Error('Accept timeout'));
-          this.acceptWaiter = null;
+      setTimeout(() => {
+        if (this.waiterEpoch !== epoch || !this.acceptWaiter) {
+          return;
         }
+        this.acceptWaiter.reject(new Error('Accept timeout'));
+        this.acceptWaiter = null;
       }, timeoutMs);
     });
   }
 
   private waitForReady(timeoutMs: number): Promise<void> {
+    const epoch = this.waiterEpoch;
     return new Promise((resolve, reject) => {
       this.readyWaiter = { resolve, reject };
-      window.setTimeout(() => {
-        if (this.readyWaiter) {
-          this.readyWaiter.reject(new Error('Ready timeout'));
-          this.readyWaiter = null;
+      setTimeout(() => {
+        if (this.waiterEpoch !== epoch || !this.readyWaiter) {
+          return;
         }
+        this.readyWaiter.reject(new Error('Ready timeout'));
+        this.readyWaiter = null;
       }, timeoutMs);
     });
   }
 
   private async sendSessionReply(
-    request: FabricSessionMessage,
+    request: SessionMessage,
     kind: 'accept' | 'decline' | 'ready',
   ): Promise<void> {
     const identity = this.callbacks.getIdentity();
@@ -754,13 +902,13 @@ export class SessionOrchestrator {
     this.bumpSessionActivity();
   }
 
-  private async sendAcceptReady(offer: FabricSessionMessage): Promise<void> {
+  private async sendAcceptReady(offer: SessionMessage): Promise<void> {
     await this.sendSessionReply(offer, 'accept');
     await sleep(this.handshake().accept_ready_gap_ms);
     await this.sendSessionReply(offer, 'ready');
   }
 
-  private async runInboundAccept(offer: FabricSessionMessage, fromDialog: boolean): Promise<void> {
+  private async runInboundAccept(offer: SessionMessage, fromDialog: boolean): Promise<void> {
     const identity = this.callbacks.getIdentity();
     const boothDisplayRate = this.boothDisplayRate(identity);
     this.cancelDismissTimer();
@@ -788,6 +936,9 @@ export class SessionOrchestrator {
       // Let the sender re-arm USB IN after the offer (and one possible retransmit).
       await sleep(this.handshake().accept_reply_delay_ms);
       await this.sendAcceptReady(offer);
+      // Re-aim after accept/ready USB churn so the payload path is live.
+      await this.ensureCircuitTowardPeer(offer.from_name);
+      await sleep(30);
 
       this.callbacks.patch({
         statusMessage: `Receiving ${offer.payload_name}…`,
@@ -827,9 +978,8 @@ export class SessionOrchestrator {
         { peak: boothDisplayRate > 0 ? boothDisplayRate : resultMbps, result: resultMbps },
       );
     } catch (err) {
-      if (!this.callbacks.isDisconnecting()) {
-        this.finishTransfer(false, 'Receive failed', formatTransferError(err));
-      }
+      // Always finish — skipping left sticky switch + "Receiving…" forever.
+      this.finishTransfer(false, 'Receive failed', formatTransferError(err));
     } finally {
       if (offer?.session_id) {
         this.addCompletedSession(offer.session_id);
@@ -882,6 +1032,7 @@ export class SessionOrchestrator {
     } catch (err) {
       this.callbacks.patch({ errorMessage: formatTransferError(err) });
     } finally {
+      await this.releaseCircuitAfterTransfer();
       try {
         const desc = await this.usb.resetConnection();
         this.callbacks.onUsbDescription(desc);
@@ -899,6 +1050,33 @@ export class SessionOrchestrator {
     }
     const desc = await this.usb.resetConnection();
     this.callbacks.onUsbDescription(desc);
+  }
+
+  /** User released EP4 link via roster icon (after confirm). */
+  async releaseLinkedCircuit(): Promise<void> {
+    const leg = this.callbacks.getPortIndex();
+    eventLog(leg, 'link_release', 'user');
+    this.outboundOffer = null;
+    this.awaitingReady = false;
+    this.rejectWaiters(new Error('Link released'));
+    this.busy = false;
+    this.setLinkActivity('idle');
+    this.resumeListener();
+    if (this.usb.clearCircuit) {
+      try {
+        await this.usb.clearCircuit();
+        eventLog(leg, 'link_clear', 'dest=0');
+      } catch (err) {
+        eventLog(leg, 'link_clear_fail', (err as Error).message);
+      }
+    }
+    this.clearLinkUi();
+    this.callbacks.patch({
+      busy: false,
+      waitingForPartner: false,
+      statusMessage: 'Link released',
+      errorMessage: '',
+    });
   }
 
   async sendToPeer(peerId: string, file: File): Promise<void> {
@@ -930,7 +1108,7 @@ export class SessionOrchestrator {
     await sleep(50);
     this.setLinkActivity('handshake');
 
-    const offer: FabricSessionMessage = {
+    const offer: SessionMessage = {
       kind: 'offer',
       session_id: makeSessionId(),
       from_name: identity.display_name,
@@ -947,6 +1125,7 @@ export class SessionOrchestrator {
     this.busy = true;
     this.outboundOffer = offer;
     this.awaitingReady = false;
+    this.sessionPeerName = peerName;
 
     this.callbacks.patch({
       busy: true,
@@ -969,6 +1148,7 @@ export class SessionOrchestrator {
           ? peer.instance_id
           : `sys-port-${peer.port_index + 1}`;
       await this.usb.ensureCircuit(systemId);
+      this.setLinkUi('linking', toDisplayPort(peer.port_index));
       await this.usb.sendSessionMessage(offer);
       this.bumpSessionActivity();
     } catch (err) {
@@ -976,6 +1156,7 @@ export class SessionOrchestrator {
       this.busy = false;
       this.offerReceiveGraceUntil = 0;
       this.resumeListener();
+      this.clearLinkUi();
       this.finishTransfer(false, 'Send failed', formatTransferError(err));
       return;
     }

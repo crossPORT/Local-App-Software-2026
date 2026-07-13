@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createFabricTransport } from '@rocketbox/sdk';
+import { createRocketBoxTransport } from '@rocketbox/sdk';
 
 describe('RocketBox transport mixins', () => {
-  it('createFabricTransport real returns connect/disconnect surface', () => {
-    const t = createFabricTransport({ simulate: false });
+  it('createRocketBoxTransport real returns connect/disconnect surface', () => {
+    const t = createRocketBoxTransport({ simulate: false });
     expect(typeof t.connect).toBe('function');
     expect(typeof t.disconnect).toBe('function');
     expect(typeof t.syncSystems).toBe('function');
@@ -11,10 +11,10 @@ describe('RocketBox transport mixins', () => {
     expect(typeof t.setListenMode).toBe('function');
   });
 
-  it('createFabricTransport sim returns same FabricTransport surface', () => {
-    const t = createFabricTransport({ simulate: true, port: 2 });
+  it('createRocketBoxTransport sim returns same RocketBoxTransport surface', () => {
+    const t = createRocketBoxTransport({ simulate: true, port: 2 });
     expect(typeof t.connect).toBe('function');
     expect(typeof t.listSystems).toBe('function');
-    expect(t.getFabricPortIndex()).toBe(1);
+    expect(t.getPortIndex()).toBe(1);
   });
 });

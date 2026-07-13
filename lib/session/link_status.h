@@ -24,7 +24,7 @@ struct ConnectBannerLine {
     bool visible = false;
 };
 
-constexpr int64_t kAnnounceIntervalMs = 15000;
+constexpr int64_t kAnnounceIntervalMs = 30000;
 constexpr int64_t kPeerStaleMs = 45000;
 constexpr int64_t kTransferDoneDismissMs = 2000;
 

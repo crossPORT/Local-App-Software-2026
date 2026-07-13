@@ -4,6 +4,7 @@
 /RocketBox-pwa.zip
 /*.conf
 /apps/web/node_modules/
+/sdks/typescript/node_modules/
 /apps/web/dist/
 /::buf
 *.o

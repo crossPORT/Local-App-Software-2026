@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { boothDisplayPresetLabel, receiveStatusToString } from '../lib/config';
-import { getBoothLogLevel, setBoothLogLevel, type BoothLogLevel } from '../lib/booth_log';
+import { getEventLogLevel, setEventLogLevel, type EventLogLevel } from '../lib/event_log';
 import { theme } from '../lib/theme';
 import type { IdentityProfile, ReceiveStatus } from '../lib/types';
 
@@ -8,11 +8,12 @@ interface SettingsDialogProps {
   identity: IdentityProfile;
   onClose: () => void;
   onSave: (identity: IdentityProfile) => void;
+  onOpenEventLog?: () => void;
 }
 
-export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProps) {
+export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: SettingsDialogProps) {
   const [boothDisplayEnabled, setBoothDisplayEnabled] = useState(identity.booth_display_enabled);
-  const [debugLogLevel, setDebugLogLevel] = useState<BoothLogLevel>(() => getBoothLogLevel());
+  const [debugLogLevel, setDebugLogLevel] = useState<EventLogLevel>(() => getEventLogLevel());
   const [usbReadBufferSize, setUsbReadBufferSize] = useState(identity.usb_read_buffer_size ?? '256kb');
   const [error, setError] = useState('');
 
@@ -33,7 +34,7 @@ export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProp
       booth_display_enabled: boothDisplayEnabled,
       peers: [],
       usb_read_buffer_size: usbReadBufferSize,
-      announce_interval_sec: parseInt(String(data.get('announce_interval_sec') ?? '10'), 10) || 10,
+      announce_interval_sec: parseInt(String(data.get('announce_interval_sec') ?? '30'), 10) || 30,
     });
   };
 
@@ -99,12 +100,12 @@ export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProp
 
           <label>
             Announcement Period
-            <select name="announce_interval_sec" defaultValue={String(identity.announce_interval_sec ?? 10)}>
+            <select name="announce_interval_sec" defaultValue={String(identity.announce_interval_sec ?? 30)}>
               <option value="3">3 Seconds (High responsiveness)</option>
-              <option value="5">5 Seconds (Normal active matrix)</option>
-              <option value="10">10 Seconds (Standard balanced)</option>
-              <option value="30">30 Seconds (Low overhead bandwidth)</option>
-              <option value="60">1 Minute (Conservative broadcast)</option>
+              <option value="5">5 Seconds (Fast discovery)</option>
+              <option value="10">10 Seconds (Active matrix)</option>
+              <option value="30">30 Seconds (Standard — less contention)</option>
+              <option value="60">1 Minute (Conservative)</option>
             </select>
           </label>
 
@@ -130,9 +131,9 @@ export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProp
               <select
                 value={debugLogLevel}
                 onChange={(e) => {
-                  const next = e.target.value as BoothLogLevel;
+                  const next = e.target.value as EventLogLevel;
                   setDebugLogLevel(next);
-                  setBoothLogLevel(next);
+                  setEventLogLevel(next);
                 }}
               >
                 <option value="off">Off</option>
@@ -141,6 +142,14 @@ export function SettingsDialog({ identity, onClose, onSave }: SettingsDialogProp
               </select>
             </label>
           </div>
+
+          {onOpenEventLog && (
+            <div className="settings-advanced-row">
+              <button type="button" onClick={onOpenEventLog}>
+                Event log…
+              </button>
+            </div>
+          )}
 
           {error && (
             <p className="settings-error" style={{ color: theme.error }}>

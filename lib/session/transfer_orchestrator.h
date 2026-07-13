@@ -17,6 +17,9 @@
 
 enum class TransferDoneKind { None, Sent, Received };
 
+/** Peer-card link icon: absent / attempting / established (both sides). */
+enum class LinkUiState { None, Linking, Linked };
+
 struct PendingOffer {
     FabricSessionMessage message;
 };
@@ -45,6 +48,9 @@ struct OrchestratorUiState {
     std::string fabric_device_label;
     int64_t last_announce_ms = 0;
     uint32_t fabric_activity_seq = 0;
+    /** Display port 1–4 when link_state ≠ None; 0 = cleared. */
+    int linked_port = 0;
+    LinkUiState link_state = LinkUiState::None;
 };
 
 class TransferOrchestrator {
@@ -84,6 +90,9 @@ public:
     /** Send an announce now (bypasses the normal interval). No-op if not connected. */
     void request_announce();
 
+    /** User released EP4 link (after UI confirm). Clears switch; aborts outbound wait. */
+    void release_link();
+
 private:
     void tick_presence();
     void start_presence_loop();
@@ -118,6 +127,7 @@ private:
     void invalidate_dismiss();
     void schedule_dismiss_transfer_display();
     void bump_fabric_activity();
+    void note_peer_alive(const std::string& display_name);
 
     struct StagedPayload {
         std::string path;
@@ -162,8 +172,11 @@ private:
     bool fabric_was_connected_ = false;
     int64_t last_announce_ms_ = 0;
     std::mutex announce_mutex_;
+    int announce_rotate_index_ = 0;
 
     std::string instance_id_;
+    /** Peer we are/were transferring with — keep presence fresh across quiet gaps. */
+    std::string session_peer_name_;
 
     /** Set while accept→ready→receive runs; suppresses duplicate offer retransmits. */
     std::optional<std::string> accepting_inbound_session_id_;

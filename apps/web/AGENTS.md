@@ -10,18 +10,18 @@ RocketBox App (Vite PWA). UI + hooks + transfer orchestrator only.
 
 ## Hard rule
 
-**No USB or fabric wire implementation here.** All WebUSB, endpoints, VID/PID, claim/transfer, and codecs live in `@rocketbox/sdk`.
+**No USB or wire implementation here.** Use `@rocketbox/sdk`.
 
 Allowed:
 
-- Capture `?simulate=` / `?port=` and pass into `createFabricTransport`
-- Call SDK `FabricTransport` APIs, session codecs, port helpers
+- Capture `?simulate=` / `?port=` and pass into `createRocketBoxTransport`
+- Call SDK `RocketBoxTransport` APIs, session codecs, port helpers
 - UI, identity/settings, `useRocketBox`, `session_orchestrator`
 
 Forbidden in `apps/web/src` (except via `@rocketbox/sdk` imports):
 
 - `navigator.usb`, `claimInterface`, `transferIn` / `transferOut`
-- Local fabric/USB implementation
+- Local USB or wire codecs
 
 ## Verify
 

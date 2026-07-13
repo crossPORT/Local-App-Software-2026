@@ -9,14 +9,14 @@ One place to clone the repo, understand the main sections, and run/test against 
 | `simulated-hardware/` | Crossport stand-in (TCP **1772** + WebSocket **1773** + dashboard) | Yes | — |
 | `apps/web/` | RocketBox App PWA (UI; USB via SDK) | `?simulate=1` → SDK | SDK WebUSB |
 | `apps/wx/` | RocketBox App desktop (wxWidgets) | No | libusb |
-| `sdks/typescript/` | TS SDK: `createFabricTransport`, ROCKETBX + IntelliConnex | WS 1773 | WebUSB |
+| `sdks/typescript/` | TS SDK: `createRocketBoxTransport`, ROCKETBX + session codecs | WS 1773 | WebUSB |
 | `sdks/cpp/` | C++ Session/Connection + sim/USB transports | TCP 1772 | libusb |
 | `fabric-tunnel/` | Fabric ↔ host IP bridge | `--transport sim` | `--transport usb` |
 | `core/` + `lib/session/` | Native USB engine + session orchestration (wx / CLIs) | — | Yes |
 | `tools/` | `usb-probe`, `booth-cli`, loopback, … | — | Mostly USB |
 | `tests/` | CTest unit + integration; web vitest | Some | Hardware labels |
 
-**Rule of thumb:** PWA captures `?simulate=` / `?port=` and calls `@rocketbox/sdk` `createFabricTransport` — all WebUSB/ROCKETBX/sim I/O is in the SDK. The **wx desktop app talks to real USB only** today.
+**Rule of thumb:** PWA captures `?simulate=` / `?port=` and calls `@rocketbox/sdk` `createRocketBoxTransport` — all WebUSB/ROCKETBX/sim I/O is in the SDK. The **wx desktop app talks to real USB only** today.
 
 ---
 

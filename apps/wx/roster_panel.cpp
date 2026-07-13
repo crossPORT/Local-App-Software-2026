@@ -262,10 +262,13 @@ PeerDropZonePanel::PeerDropZonePanel(RosterPanel* roster,
     choose_sizer->Add(choose_label_, 0, wxALIGN_CENTER_VERTICAL);
     choose_sizer->AddStretchSpacer();
     choose_row_->SetSizer(choose_sizer);
-    choose_row_->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& event) {
+    // Label sits on top of the row and eats mouse events unless it also binds.
+    auto on_choose_click = [this](wxMouseEvent& event) {
         event.StopPropagation();
         OnChooseFile();
-    });
+    };
+    choose_row_->Bind(wxEVT_LEFT_UP, on_choose_click);
+    choose_label_->Bind(wxEVT_LEFT_UP, on_choose_click);
 
     root->AddStretchSpacer(1);
     root->Add(hint_row_, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
@@ -466,7 +469,7 @@ public:
         SetMinSize(wxSize(8, 8));
         SetMaxSize(wxSize(8, 8));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
-        SetBackgroundColour(colour);
+        SetBackgroundColour(parent->GetBackgroundColour());
         Bind(wxEVT_PAINT, &PresenceDotPanel::OnPaint, this);
     }
 
@@ -477,12 +480,63 @@ private:
         if (sz.x <= 0 || sz.y <= 0) {
             return;
         }
+        dc.SetBackground(wxBrush(GetBackgroundColour()));
+        dc.Clear();
         dc.SetPen(*wxTRANSPARENT_PEN);
         dc.SetBrush(wxBrush(colour_));
-        dc.DrawRectangle(0, 0, sz.x, sz.y);
+        dc.DrawEllipse(0, 0, sz.x, sz.y);
     }
 
     wxColour colour_;
+};
+
+/** Chain-link glyph (linking attempt or established circuit). */
+class LinkIconPanel : public wxPanel {
+public:
+    LinkIconPanel(wxWindow* parent, bool linking)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(16, 16), wxBORDER_NONE)
+        , linking_(linking) {
+        SetMinSize(wxSize(16, 16));
+        SetMaxSize(wxSize(16, 16));
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetBackgroundColour(parent->GetBackgroundColour());
+        SetCursor(wxCURSOR_HAND);
+        SetToolTip(linking_ ? "Linking… — click to release" : "Linked — click to release");
+        Bind(wxEVT_PAINT, &LinkIconPanel::OnPaint, this);
+        Bind(wxEVT_LEFT_UP, &LinkIconPanel::OnClick, this);
+    }
+
+    void SetClickHandler(std::function<void()> handler) { on_click_ = std::move(handler); }
+
+private:
+    void OnClick(wxMouseEvent& event) {
+        event.Skip(false);
+        if (on_click_) {
+            on_click_();
+        }
+    }
+
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        const wxSize sz = GetClientSize();
+        if (sz.x <= 0 || sz.y <= 0) {
+            return;
+        }
+        dc.SetBackground(wxBrush(GetBackgroundColour()));
+        dc.Clear();
+        wxColour colour = linking_ ? wxColour(0x5a, 0xaa, 0x90) : kAccent;
+        wxPen pen(colour, linking_ ? 1 : 2);
+        if (linking_) {
+            pen.SetStyle(wxPENSTYLE_SHORT_DASH);
+        }
+        dc.SetPen(pen);
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        dc.DrawEllipse(1, 4, 9, 7);
+        dc.DrawEllipse(6, 4, 9, 7);
+    }
+
+    bool linking_ = false;
+    std::function<void()> on_click_;
 };
 
 class PeerRowPanel : public wxPanel {
@@ -520,11 +574,13 @@ private:
 RosterPanel::RosterPanel(wxWindow* parent,
                          PeerSelectedCallback on_peer_selected,
                          FilesDroppedOnPeerCallback on_files_dropped,
-                         OpenSettingsCallback on_open_settings)
+                         OpenSettingsCallback on_open_settings,
+                         ReleaseLinkCallback on_release_link)
     : wxPanel(parent, wxID_ANY)
     , on_peer_selected_(std::move(on_peer_selected))
     , on_files_dropped_(std::move(on_files_dropped))
-    , on_open_settings_(std::move(on_open_settings)) {
+    , on_open_settings_(std::move(on_open_settings))
+    , on_release_link_(std::move(on_release_link)) {
     SetBackgroundColour(kPanel);
 
     auto* root = new wxBoxSizer(wxVERTICAL);
@@ -599,7 +655,11 @@ void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
                                int port_index,
                                bool transfer_busy,
                                int64_t last_announce_ms,
-                               const std::string& transfer_status) {
+                               const std::string& transfer_status,
+                               int linked_display_port,
+                               RosterLinkIcon link_icon) {
+    const bool linked_changed =
+        linked_display_port != linked_display_port_ || link_icon != link_icon_;
     peers_ = peers;
     self_ = self;
     fabric_connected_ = fabric_connected;
@@ -608,9 +668,11 @@ void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
     transfer_busy_ = transfer_busy;
     transfer_status_ = transfer_status;
     last_announce_ms_ = last_announce_ms;
+    linked_display_port_ = linked_display_port;
+    link_icon_ = link_icon;
 
     const std::vector<std::string> slot_signature = SlotSignature();
-    if (LayoutNeedsRebuild(slot_signature)) {
+    if (LayoutNeedsRebuild(slot_signature) || linked_changed) {
         layout_key_.fabric_connected = fabric_connected_;
         layout_key_.local_leg = port_index_;
         layout_key_.slot_signature = slot_signature;
@@ -746,7 +808,11 @@ void RosterPanel::RebuildList() {
 
         auto* meta_row = new wxBoxSizer(wxHORIZONTAL);
         auto* presence_dot = new PresenceDotPanel(row, offline ? kOfflineDot : kOnlineDot);
-        meta_row->Add(presence_dot, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
+        // PWA: circular dot, top-aligned with the peer name (not centered on name+sub).
+        auto* dot_col = new wxBoxSizer(wxVERTICAL);
+        dot_col->AddSpacer(5);
+        dot_col->Add(presence_dot, 0);
+        meta_row->Add(dot_col, 0, wxALIGN_TOP | wxLEFT, 10);
         meta_row->AddSpacer(10);
 
         auto* name_col = new wxBoxSizer(wxVERTICAL);
@@ -766,6 +832,19 @@ void RosterPanel::RebuildList() {
             name_col->Add(sub_label, 0, wxTOP, 2);
         }
         meta_row->Add(name_col, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+        if (!offline && link_icon_ != RosterLinkIcon::None
+            && display_port_from_leg(peer.port_index) == linked_display_port_) {
+            const int linked_port = display_port_from_leg(peer.port_index);
+            const std::string peer_name = peer.display_name;
+            const bool linking = link_icon_ == RosterLinkIcon::Linking;
+            auto* link_icon = new LinkIconPanel(row, linking);
+            link_icon->SetClickHandler([this, peer_name, linked_port]() {
+                if (on_release_link_) {
+                    on_release_link_(peer_name, linked_port);
+                }
+            });
+            meta_row->Add(link_icon, 0, wxALIGN_TOP | wxRIGHT, 10);
+        }
 
         row_sizer->Add(meta_row, 0, wxEXPAND | wxTOP, 8);
 

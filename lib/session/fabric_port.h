@@ -17,5 +17,8 @@ int fabric_leg_from_serial(const std::string& serial);
 /** Default remote-leg guess when an announce note omits port=. */
 int default_remote_guess_leg(int my_leg);
 
+/** State-1 idle partner display port (1–4): 1↔2, 3↔4. Returns 0 if invalid. */
+int default_pair_display_port(int display_port);
+
 /** The three fabric legs that are not {@a my_leg}, ascending order. */
 std::vector<int> remote_fabric_legs(int my_leg);

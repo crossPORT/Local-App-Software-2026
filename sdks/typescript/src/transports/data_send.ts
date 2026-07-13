@@ -1,8 +1,8 @@
-import { fabricDebugLog } from '../fabric/debug_log';
-import { FabricUsbError } from '../fabric/errors';
-import { CHUNK_SIZE, buildHeader } from '../fabric/protocol';
-import { serializeSessionMessage } from '../fabric/session_codec';
-import type { FabricSessionMessage } from '../fabric/session_types';
+import { debugLog } from '../debug_log';
+import { RocketBoxError } from '../errors';
+import { CHUNK_SIZE, buildHeader } from '../protocol';
+import { serializeSessionMessage } from '../session_codec';
+import type { SessionMessage } from '../session_types';
 import { sleep, transferOutWithRetry } from './bulk_io';
 import type { DataListen } from './data_listen';
 import type { UsbEndpoints } from './usb_ids';
@@ -91,28 +91,30 @@ export class DataSend {
   }
 
   private async prepareBus(): Promise<void> {
-    fabricDebugLog(this.getLeg(), 'session_send_prep', 'wait_in');
+    debugLog(this.getLeg(), 'session_send_prep', 'wait_in');
     await Promise.race([this.listen.getActiveInPoll(), sleep(ACTIVE_IN_WAIT_MS)]);
     // Full reclaim cancels any outstanding transferIn — clearHalt alone left IN
     // pending and peers often missed announces on the no-buffer fabric.
-    fabricDebugLog(this.getLeg(), 'session_send_prep', 'abort_iface');
+    debugLog(this.getLeg(), 'session_send_prep', 'abort_iface');
     await this.abortStuck();
     await sleep(IN_SETTLE_MS);
-    fabricDebugLog(this.getLeg(), 'session_send_prep', 'ready');
+    debugLog(this.getLeg(), 'session_send_prep', 'ready');
   }
 
   /** Light prep for payload — avoid iface reclaim after handshake. */
   private async preparePayloadBus(device: USBDevice, eps: UsbEndpoints): Promise<void> {
-    fabricDebugLog(this.getLeg(), 'payload_send_prep', 'wait_in');
+    debugLog(this.getLeg(), 'payload_send_prep', 'wait_in');
     await Promise.race([this.listen.getActiveInPoll(), sleep(ACTIVE_IN_WAIT_MS)]);
     await this.clearHalts(device, eps);
     await sleep(IN_SETTLE_MS);
-    fabricDebugLog(this.getLeg(), 'payload_send_prep', 'ready');
+    debugLog(this.getLeg(), 'payload_send_prep', 'ready');
   }
 
-  async sendSessionMessage(message: FabricSessionMessage): Promise<void> {
+  async sendSessionMessage(message: SessionMessage): Promise<void> {
     const bytes = serializeSessionMessage(message);
-    if (bytes.length > MAX_SESSION_BYTES) throw new FabricUsbError('Session message too large');
+    if (bytes.length > MAX_SESSION_BYTES) {
+      throw new RocketBoxError('Session message too large', 'protocol');
+    }
     const run = this.sessionTail.then(
       () => this.runSessionSend(message, bytes),
       () => this.runSessionSend(message, bytes),
@@ -124,11 +126,11 @@ export class DataSend {
     return run;
   }
 
-  private async runSessionSend(message: FabricSessionMessage, bytes: Uint8Array): Promise<void> {
+  private async runSessionSend(message: SessionMessage, bytes: Uint8Array): Promise<void> {
     await this.runUsb(async () => {
       const device = this.getDevice();
       const eps = this.getEps();
-      if (!device || !eps) throw new FabricUsbError('USB not connected');
+      if (!device || !eps) throw new RocketBoxError('USB not connected', 'usb');
       const recover = () => this.abortStuck();
       this.listen.beginOutbound();
       try {
@@ -141,7 +143,7 @@ export class DataSend {
           recover,
         );
         await transferOutWithRetry(device, eps.ep1Out, bytes, SESSION_OUT_MS, recover);
-        fabricDebugLog(this.getLeg(), 'session_sent', message.kind);
+        debugLog(this.getLeg(), 'session_sent', message.kind);
       } finally {
         this.listen.endOutbound();
       }
@@ -156,12 +158,12 @@ export class DataSend {
     await this.runUsb(async () => {
       const device = this.getDevice();
       const eps = this.getEps();
-      if (!device || !eps) throw new FabricUsbError('USB not connected');
+      if (!device || !eps) throw new RocketBoxError('USB not connected', 'usb');
       const recover = () => this.abortStuck();
       this.listen.beginOutbound();
       try {
         await this.preparePayloadBus(device, eps);
-        fabricDebugLog(this.getLeg(), 'payload_header_out', `bytes=${payload.length}`);
+        debugLog(this.getLeg(), 'payload_header_out', `bytes=${payload.length}`);
         await transferOutWithRetry(
           device,
           eps.ep1Out,
@@ -169,7 +171,7 @@ export class DataSend {
           PAYLOAD_CHUNK_MS,
           recover,
         );
-        fabricDebugLog(this.getLeg(), 'payload_header_ok', String(payload.length));
+        debugLog(this.getLeg(), 'payload_header_ok', String(payload.length));
         onProgress?.(0, payload.length);
         let offset = 0;
         while (offset < payload.length) {
@@ -180,7 +182,7 @@ export class DataSend {
           offset += n;
           onProgress?.(offset, payload.length);
         }
-        fabricDebugLog(this.getLeg(), 'payload_sent', String(payload.length));
+        debugLog(this.getLeg(), 'payload_sent', String(payload.length));
       } finally {
         this.listen.endOutbound();
       }

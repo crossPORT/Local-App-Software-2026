@@ -63,6 +63,22 @@ class VirtualPort {
 
 const ports = Array.from({ length: 4 }, (_, i) => new VirtualPort(i));
 
+/** State-1 default pairs: 1↔2, 3↔4 when both ends are online and unlinked. */
+function applyState1DefaultPairs() {
+  const pairs = [[0, 1], [2, 3]];
+  for (const [a, b] of pairs) {
+    const pa = ports[a];
+    const pb = ports[b];
+    if (pa.status === 'offline' || pb.status === 'offline') continue;
+    if (pa.connectedTo !== -1 || pb.connectedTo !== -1) continue;
+    pa.connectedTo = b;
+    pb.connectedTo = a;
+    pa.lastConnectedTo = b;
+    pb.lastConnectedTo = a;
+    logEvent(`State-1 default pair: Port ${a + 1} <═══> Port ${b + 1}`);
+  }
+}
+
 // --- Live Dashboard Visualization ---
 const logHistory = [];
 const controlEvents = []; // visual control events queue for dashboard tracing
@@ -202,15 +218,32 @@ function handleCrossbarSwitchRequest(port, destPort) {
   if (destPort >= 1 && destPort <= 4) {
     const targetIdx = destPort - 1;
     const targetPort = ports[targetIdx];
-    
+
+    // HW EP4 parity: empty dest is not an error (no NAK). Record intent only.
     if (targetPort.status === 'offline') {
-      logEvent(`[Port ${port.id + 1}] Switch failed: Target Port ${destPort} is offline`);
-      sendControlPacket(port, MSG_NAK, 0, NAK_DOWN);
+      logEvent(`[Port ${port.id + 1}] Switch to offline Port ${destPort} (accepted, silence)`);
+      if (port.connectedTo !== -1 && port.connectedTo !== targetIdx) {
+        const prev = ports[port.connectedTo];
+        if (prev && prev.connectedTo === port.id) {
+          prev.connectedTo = -1;
+          if (prev.status === 'busy') prev.status = 'reachable';
+        }
+      }
+      port.connectedTo = targetIdx;
+      port.lastConnectedTo = targetIdx;
       return;
     }
     
-    // Wire them together in the switching matrix
-    port.status = 'busy';
+    // Wire them together in the switching matrix (bidirectional).
+    if (port.connectedTo !== -1 && port.connectedTo !== targetIdx) {
+      const prev = ports[port.connectedTo];
+      if (prev && prev.connectedTo === port.id) {
+        prev.connectedTo = -1;
+        if (prev.status === 'busy') prev.status = 'reachable';
+      }
+    }
+    port.status = port.status === 'offline' ? 'reachable' : port.status;
+    if (port.status === 'reachable') port.status = 'busy';
     targetPort.status = 'busy';
     port.connectedTo = targetPort.id;
     targetPort.connectedTo = port.id;
@@ -221,13 +254,8 @@ function handleCrossbarSwitchRequest(port, destPort) {
     targetPort.lastConnectTime = now;
     targetPort.lastConnectedTo = port.id;
     
-    logEvent(`Crossbar Matrix Connected: Port ${port.id + 1} <═══> Port ${targetPort.id + 1}`);
-    
-    // Notify initiator with ACK
-    sendControlPacket(port, MSG_ACK, 0, 0, Buffer.from(targetPort.systemId));
-    // Notify target with CIRCUIT_UP
-    sendControlPacket(targetPort, MSG_CIRCUIT_UP, 0, 0, Buffer.from(port.systemId));
-    
+    logEvent(`Crossbar Matrix Connected: Port ${port.id + 1} <═══> Port ${port.connectedTo + 1}`);
+    // No ACK/CIRCUIT_UP for HW-style presence path (silence model).
     broadcastSystems();
   } else {
     // Disconnect
@@ -512,6 +540,7 @@ const tcpServer = createServer(socket => {
   port.status = 'reachable';
   const activePortRef = { current: port };
 
+  applyState1DefaultPairs();
   replayAnnouncements(port);
   broadcastSystems();
 
@@ -1363,6 +1392,7 @@ wsServer.on('connection', (ws, req) => {
 
   logEvent(`WS Connected to Port ${port.id + 1}`);
   sendControlPacket(port, MSG_ATTACHED, 0, port.id);
+  applyState1DefaultPairs();
   replayAnnouncements(port);
   broadcastSystems();
 

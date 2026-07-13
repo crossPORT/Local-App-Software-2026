@@ -1,5 +1,5 @@
 /** Subscribe to WebUSB disconnect via SDK (PWA must not touch navigator.usb). */
-export function subscribeFabricUsbDisconnect(
+export function subscribeUsbDisconnect(
   handler: (device: USBDevice) => void,
 ): () => void {
   const usb = typeof navigator !== 'undefined' ? navigator.usb : undefined;

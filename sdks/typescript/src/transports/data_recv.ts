@@ -1,17 +1,17 @@
-import { FabricUsbError } from '../fabric/errors';
-import { fabricDebugLog } from '../fabric/debug_log';
+import { RocketBoxError } from '../errors';
+import { debugLog } from '../debug_log';
 import {
   CHUNK_SIZE,
   HEADER_SIZE,
   concatChunks,
   parseHeader,
-} from '../fabric/protocol';
-import { parseSessionPayload } from '../fabric/session_codec';
-import type { FabricSessionMessage } from '../fabric/session_types';
+} from '../protocol';
+import { parseSessionPayload } from '../session_codec';
+import type { SessionMessage } from '../session_types';
 import type { DataListen } from './data_listen';
 import type { UsbEndpoints } from './usb_ids';
 
-type SessionEmit = (m: FabricSessionMessage) => void;
+type SessionEmit = (m: SessionMessage) => void;
 
 /** ROCKETBX payload IN (skip stray session frames). */
 export class DataRecv {
@@ -37,13 +37,13 @@ export class DataRecv {
   private async readExact(n: number): Promise<Uint8Array> {
     const device = this.getDevice();
     const eps = this.getEps();
-    if (!device || !eps) throw new FabricUsbError('USB not connected');
+    if (!device || !eps) throw new RocketBoxError('USB not connected', 'usb');
     const out = new Uint8Array(n);
     let off = 0;
     while (off < n) {
       const r = await device.transferIn(eps.ep2In, Math.min(CHUNK_SIZE, n - off));
       if (r.status !== 'ok' || !r.data?.byteLength) {
-        throw new FabricUsbError(`Payload transferIn failed: ${r.status}`);
+        throw new RocketBoxError(`Payload transferIn failed: ${r.status}`, 'usb');
       }
       const part = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
       const take = Math.min(part.length, n - off);
@@ -61,8 +61,8 @@ export class DataRecv {
     return this.runUsb(async () => {
       const device = this.getDevice();
       const eps = this.getEps();
-      if (!device || !eps) throw new FabricUsbError('USB not connected');
-      fabricDebugLog(this.getLeg(), 'payload_recv_arm', `timeout_ms=${headerTimeoutMs}`);
+      if (!device || !eps) throw new RocketBoxError('USB not connected', 'usb');
+      debugLog(this.getLeg(), 'payload_recv_arm', `timeout_ms=${headerTimeoutMs}`);
       this.listen.beginOutbound();
       try {
         const deadline = Date.now() + headerTimeoutMs;
@@ -72,7 +72,7 @@ export class DataRecv {
           const headerBuf = await Promise.race([
             this.readExact(HEADER_SIZE),
             new Promise<never>((_, rej) => {
-              window.setTimeout(() => rej(new FabricUsbError('payload header timeout')), remaining);
+              window.setTimeout(() => rej(new RocketBoxError('payload header timeout', 'timeout')), remaining);
             }),
           ]);
           const header = parseHeader(headerBuf);
@@ -80,20 +80,21 @@ export class DataRecv {
             const data = await this.readExact(header.fileSize);
             const parsed = parseSessionPayload(data);
             if (parsed) {
-              fabricDebugLog(this.getLeg(), 'stray_session_skipped', parsed.kind);
+              debugLog(this.getLeg(), 'stray_session_skipped', parsed.kind);
               this.onSession(parsed);
             }
             skipped += 1;
             continue;
           }
           if (header.frameKind !== 'payload' || header.fileSize === 0) {
-            fabricDebugLog(this.getLeg(), 'payload_hdr_skip', header.frameKind);
+            debugLog(this.getLeg(), 'payload_hdr_skip', header.frameKind);
             skipped += 1;
             continue;
           }
           if (expectedBytes > 0 && header.fileSize !== expectedBytes) {
-            throw new FabricUsbError(
+            throw new RocketBoxError(
               `Expected ${expectedBytes} byte payload but header announced ${header.fileSize}`,
+              'protocol',
             );
           }
           const track = expectedBytes > 0 && header.fileSize === expectedBytes;
@@ -106,15 +107,15 @@ export class DataRecv {
             received += chunk.length;
             if (track) onProgress?.(received, header.fileSize);
           }
-          fabricDebugLog(this.getLeg(), 'payload_recv_ok', String(header.fileSize));
+          debugLog(this.getLeg(), 'payload_recv_ok', String(header.fileSize));
           return {
             data: concatChunks(parts, header.fileSize),
             filename: header.filename || 'download.bin',
           };
         }
-        throw new FabricUsbError('payload header timeout');
+        throw new RocketBoxError('payload header timeout', 'timeout');
       } catch (err) {
-        fabricDebugLog(this.getLeg(), 'payload_recv_fail', (err as Error).message);
+        debugLog(this.getLeg(), 'payload_recv_fail', (err as Error).message);
         throw err;
       } finally {
         this.listen.endOutbound();

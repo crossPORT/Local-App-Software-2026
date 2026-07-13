@@ -1,4 +1,4 @@
-import { remoteFabricLegs } from '@rocketbox/sdk';
+import { remotePortIndexes } from '@rocketbox/sdk';
 import type { IdentityProfile, PeerEntry } from './types';
 
 export interface RosterSlot {
@@ -16,7 +16,7 @@ export function rosterSlots(
   if (!fabricConnected || localLeg < 0) {
     return [];
   }
-  return remoteFabricLegs(localLeg).map((leg) => {
+  return remotePortIndexes(localLeg).map((leg) => {
     const peer =
       peers.find(
         (entry) =>

@@ -76,6 +76,14 @@ public:
     // Port switch (TS writeSwitch / HwPlane.switchPort parity).
     // dest_port 1–4 links, 0 clears.
     TransferResult switch_port(int dest_port);
+    /** Switch only when dest changed; settle briefly after a real switch. */
+    TransferResult switch_port_if_needed(int dest_port);
+    /** Last EP4 dest (1–4 linked, 0 cleared, -1 unknown). */
+    int last_switch_dest() const { return last_switch_dest_; }
+    /** Sticky hold — scheduled announce must not rotate away. */
+    bool switch_preserve() const { return switch_preserve_; }
+    void mark_switch_preserve();
+    void clear_switch_dest_cache();
     void run_payload_send(const std::string& path, ProgressCallback progress_cb = nullptr);
     void run_payload_receive(const std::string& out_path,
                              ProgressCallback progress_cb = nullptr);
@@ -116,4 +124,6 @@ private:
     mutable int cached_fabric_leg_ = -1;
     mutable std::string cached_device_serial_;
     std::string transfer_detail_;
+    int last_switch_dest_ = -1;
+    bool switch_preserve_ = false;
 };

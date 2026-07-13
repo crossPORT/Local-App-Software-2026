@@ -1,11 +1,10 @@
-import { displayPortFromLeg } from '@rocketbox/sdk';
-import { useEffect, useRef, useState } from 'react';
-import { collectDropFiles } from '../lib/collect_drop_files';
-import { isOutboundHandshakeWait, peerRosterLabel, receiveStatusLabel } from '../lib/format';
-import { DEFAULT_STALE_MS } from '../lib/peer_roster';
+import { toDisplayPort } from '@rocketbox/sdk';
+import { useEffect, useState } from 'react';
+import { peerRosterLabel } from '../lib/format';
 import { rosterSlots } from '../lib/roster_slots';
 import { theme } from '../lib/theme';
-import type { PeerEntry } from '../lib/types';
+import type { LinkUiState, PeerEntry } from '../lib/types';
+import { PeerRow } from './PeerRow';
 
 interface RosterPanelProps {
   peers: PeerEntry[];
@@ -17,17 +16,17 @@ interface RosterPanelProps {
   statusMessage: string;
   selectedPeer: string;
   lastAnnounceMs: number;
+  linkedPort?: number;
+  linkState?: LinkUiState;
   announceIntervalSec?: number;
   onSelectPeer: (peerId: string) => void;
   onDropFiles: (peerId: string, files: File[]) => void | Promise<void>;
   onOpenSettings?: () => void;
   onDropError?: (message: string) => void;
+  onRequestReleaseLink?: (peer: PeerEntry) => void;
 }
 
-function rosterEmptyMessage(
-  fabricConnected: boolean,
-  identityConfigured: boolean,
-): string {
+function rosterEmptyMessage(fabricConnected: boolean, identityConfigured: boolean): string {
   if (!fabricConnected) {
     return identityConfigured
       ? 'Connect USB to discover other stations'
@@ -45,11 +44,6 @@ function useTickSeconds(): number {
   return tick;
 }
 
-function formatSecondsLeft(ms: number): string {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${s}s`;
-}
-
 export function RosterPanel({
   peers,
   fabricConnected,
@@ -60,11 +54,14 @@ export function RosterPanel({
   statusMessage,
   selectedPeer,
   lastAnnounceMs,
+  linkedPort = 0,
+  linkState = 'none',
   announceIntervalSec = 10,
   onSelectPeer,
   onDropFiles,
   onOpenSettings,
   onDropError,
+  onRequestReleaseLink,
 }: RosterPanelProps) {
   const now = useTickSeconds();
   const slots = rosterSlots(
@@ -75,18 +72,17 @@ export function RosterPanel({
   );
   const onlinePeers = slots.flatMap((slot) => (slot.peer ? [slot.peer] : []));
   const empty = rosterEmptyMessage(fabricConnected, identityConfigured);
-  const showSettingsAction = !identityConfigured && onOpenSettings;
-
-  const intervalMs = announceIntervalSec * 1000;
-  const nextAnnounceIn = lastAnnounceMs > 0
-    ? Math.max(0, intervalMs - (now - lastAnnounceMs))
-    : 0;
-  const announceStalled =
-    lastAnnounceMs > 0 && now - lastAnnounceMs > intervalMs * 2;
+  const intervalMs = (announceIntervalSec ?? 10) * 1000;
+  const nextAnnounceIn =
+    lastAnnounceMs > 0 ? Math.max(0, intervalMs - (now - lastAnnounceMs)) : 0;
+  const announceStalled = lastAnnounceMs > 0 && now - lastAnnounceMs > intervalMs * 2;
 
   return (
     <section className="roster panel-inner">
-      <div className="section-label" style={{ color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        className="section-label"
+        style={{ color: theme.accent, display: 'flex', justifyContent: 'space-between' }}
+      >
         <span>Connected peers</span>
         {fabricConnected && lastAnnounceMs > 0 && (
           <span
@@ -98,7 +94,7 @@ export function RosterPanel({
           >
             {announceStalled
               ? 'Discovery stalled — reconnect'
-              : `Next sync in ${formatSecondsLeft(nextAnnounceIn)}`}
+              : `Next sync in ${Math.ceil(nextAnnounceIn / 1000)}s`}
           </span>
         )}
       </div>
@@ -108,7 +104,7 @@ export function RosterPanel({
             <p className="empty-hint" style={{ color: theme.muted }}>
               {empty}
             </p>
-            {showSettingsAction && (
+            {!identityConfigured && onOpenSettings && (
               <button type="button" className="settings-inline-btn" onClick={onOpenSettings}>
                 Open Settings
               </button>
@@ -117,20 +113,28 @@ export function RosterPanel({
         ) : (
           slots.map((slot) => {
             if (slot.peer) {
-              const label = peerRosterLabel(slot.peer, onlinePeers);
+              const port = toDisplayPort(slot.peer.port_index);
+              const rowLink: LinkUiState =
+                linkState !== 'none' && linkedPort === port ? linkState : 'none';
               return (
                 <PeerRow
                   key={`leg-${slot.leg}`}
                   peer={slot.peer}
-                  label={label}
+                  label={peerRosterLabel(slot.peer, onlinePeers)}
                   offline={false}
                   selected={selectedPeer === slot.peer.id}
                   busy={busy && selectedPeer === slot.peer.id}
+                  linkState={rowLink}
                   statusMessage={statusMessage}
                   now={now}
                   onSelect={() => onSelectPeer(slot.peer!.id)}
                   onFiles={(files) => onDropFiles(slot.peer!.id, files)}
                   onDropError={onDropError}
+                  onReleaseLink={
+                    rowLink !== 'none' && onRequestReleaseLink
+                      ? () => onRequestReleaseLink(slot.peer!)
+                      : undefined
+                  }
                 />
               );
             }
@@ -138,11 +142,12 @@ export function RosterPanel({
               <PeerRow
                 key={`leg-${slot.leg}`}
                 peer={null}
-                label={`Port ${displayPortFromLeg(slot.leg)}`}
+                label={`Port ${toDisplayPort(slot.leg)}`}
                 offline
                 leg={slot.leg}
                 selected={false}
                 busy={false}
+                linkState="none"
                 statusMessage=""
                 now={now}
                 onSelect={() => {}}
@@ -153,184 +158,5 @@ export function RosterPanel({
         )}
       </div>
     </section>
-  );
-}
-
-function peerTimerLabel(lastSeenMs: number, now: number): string {
-  if (lastSeenMs <= 0) return '';
-  const age = now - lastSeenMs;
-  const remaining = DEFAULT_STALE_MS - age;
-  if (remaining <= 0) return 'expiring…';
-  return `expires in ${formatSecondsLeft(remaining)}`;
-}
-
-function PeerRow({
-  peer,
-  label,
-  offline,
-  leg = -1,
-  selected,
-  busy,
-  statusMessage,
-  now,
-  onSelect,
-  onFiles,
-  onDropError,
-}: {
-  peer: PeerEntry | null;
-  label: string;
-  offline: boolean;
-  leg?: number;
-  selected: boolean;
-  busy: boolean;
-  statusMessage: string;
-  now: number;
-  onSelect: () => void;
-  onFiles: (files: File[]) => void | Promise<void>;
-  onDropError?: (message: string) => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragActive, setDragActive] = useState(false);
-  const dragDepthRef = useRef(0);
-
-  const allowDrop = !busy && !offline;
-
-  const onDragEnter = (e: React.DragEvent) => {
-    if (!allowDrop) {
-      return;
-    }
-    e.preventDefault();
-    dragDepthRef.current += 1;
-    setDragActive(true);
-  };
-
-  const onDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    dragDepthRef.current -= 1;
-    if (dragDepthRef.current <= 0) {
-      dragDepthRef.current = 0;
-      setDragActive(false);
-    }
-  };
-
-  const onDragOver = (e: React.DragEvent) => {
-    if (!allowDrop) {
-      return;
-    }
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragDepthRef.current = 0;
-    setDragActive(false);
-    if (!allowDrop) {
-      return;
-    }
-    const files = await collectDropFiles(e.dataTransfer);
-    if (files.length === 0) {
-      onDropError?.('Could not read that drop — try Choose file instead');
-      return;
-    }
-    await onFiles(files);
-  };
-
-  const onChooseFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const list = e.target.files;
-    if (!list?.length) {
-      return;
-    }
-    void onFiles(Array.from(list));
-    e.target.value = '';
-  };
-
-  return (
-    <div
-      className={`peer-row${selected ? ' selected' : ''}${dragActive ? ' drag-active' : ''}${busy ? ' busy' : ''}${offline ? ' offline' : ''}`}
-      style={{ background: offline ? theme.offlineRow : selected ? theme.rowSelected : theme.row }}
-      onClick={offline ? undefined : onSelect}
-      role={offline ? undefined : 'button'}
-      tabIndex={offline ? -1 : 0}
-      onKeyDown={
-        offline
-          ? undefined
-          : (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                onSelect();
-              }
-            }
-      }
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      onDragOver={onDragOver}
-      onDrop={(e) => {
-        void handleDrop(e);
-      }}
-    >
-      <span
-        className="presence-dot"
-        style={{ background: offline ? theme.offlineDot : theme.ok }}
-        aria-hidden
-      />
-      <div className="peer-meta">
-        <div className="peer-name" style={{ color: offline ? theme.muted : theme.text }}>
-          {label}
-        </div>
-        <div className="peer-sub" style={{ color: theme.muted }}>
-          {offline ? (
-            <>Not connected — waiting for peer · port {displayPortFromLeg(leg)}</>
-          ) : (
-            <>
-              {receiveStatusLabel(peer!.receive_status)} · port {displayPortFromLeg(peer!.port_index)}
-              {peer!.lastSeenMs > 0 && <> · {peerTimerLabel(peer!.lastSeenMs, now)}</>}
-            </>
-          )}
-        </div>
-      </div>
-      <div
-        className={`drop-zone${busy || offline ? ' disabled' : ''}${dragActive ? ' drag-active' : ''}`}
-        style={{
-          background: offline ? theme.offlineDropZone : theme.dropZone,
-          borderColor: dragActive ? theme.accent : theme.accent + '66',
-        }}
-      >
-        {offline ? (
-          <span style={{ color: theme.muted }}>Not connected</span>
-        ) : busy ? (
-          <span style={{ color: theme.muted }}>
-            {isOutboundHandshakeWait(statusMessage)
-              ? statusMessage.replace(/\s*\(\d+s\)\s*$/, '…')
-              : 'Transfer in progress…'}
-          </span>
-        ) : (
-          <>
-            <span style={{ color: theme.accent }}>
-              {dragActive ? 'Release to send' : `Drop a file to send to ${label}`}
-            </span>
-            <button
-              type="button"
-              className="choose-file-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                fileInputRef.current?.click();
-              }}
-            >
-              Choose file…
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="*/*"
-              hidden
-              multiple
-              onChange={onChooseFile}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </>
-        )}
-      </div>
-    </div>
   );
 }

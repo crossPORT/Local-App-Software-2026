@@ -1,20 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ANNOUNCE_INTERVAL_MS, SessionOrchestrator } from './session_orchestrator';
 import type { OrchestratorCallbacks } from './session_orchestrator';
-import type { FabricTransport } from '@rocketbox/sdk';
-import type { FabricSessionMessage } from '@rocketbox/sdk';
+import type { RocketBoxTransport } from '@rocketbox/sdk';
+import type { SessionMessage } from '@rocketbox/sdk';
 import { PeerRoster } from './peer_roster';
 import { defaultIdentityProfile } from './config';
 import type { AppUiState } from './types';
 
-function makeTransport(): FabricTransport & {
-  sent: FabricSessionMessage[];
+function makeTransport(): RocketBoxTransport & {
+  sent: SessionMessage[];
   syncCount: number;
-  sessionHandler: ((message: FabricSessionMessage) => void) | null;
+  sessionHandler: ((message: SessionMessage) => void) | null;
 } {
-  const sent: FabricSessionMessage[] = [];
+  const sent: SessionMessage[] = [];
   let syncCount = 0;
-  let sessionHandler: ((message: FabricSessionMessage) => void) | null = null;
+  let sessionHandler: ((message: SessionMessage) => void) | null = null;
   return {
     sent,
     get syncCount() {
@@ -30,8 +30,7 @@ function makeTransport(): FabricTransport & {
       sessionHandler = v;
     },
     connected: true,
-    getFabricPortIndex: () => 0,
-    getFabricLeg: () => 0,
+    getPortIndex: () => 0,
     getSerialNumber: () => '0000000000000001',
     getSystemId: () => 'sys-port-1',
     connect: async () => '',
@@ -61,7 +60,10 @@ function makeTransport(): FabricTransport & {
     receivePayload: async () => new Uint8Array(),
     discardPayload: async () => {},
     receiveBytes: async () => new Uint8Array(),
-    sendSessionMessage: async (message: FabricSessionMessage) => {
+    sendSessionMessage: async (message: SessionMessage) => {
+      sent.push(message);
+    },
+    sendAnnouncePresence: async (message: SessionMessage) => {
       sent.push(message);
     },
     tryReceiveSessionMessage: async () => null,
@@ -70,7 +72,7 @@ function makeTransport(): FabricTransport & {
   };
 }
 
-function makeOffer(sessionId: string, from = 'Alice'): FabricSessionMessage {
+function makeOffer(sessionId: string, from = 'Alice'): SessionMessage {
   return {
     kind: 'offer',
     session_id: sessionId,
@@ -119,7 +121,7 @@ describe('SessionOrchestrator presence recovery', () => {
       releaseSend = resolve;
     });
     let started = 0;
-    transport.sendSessionMessage = async () => {
+    transport.sendAnnouncePresence = async () => {
       started += 1;
       await sendGate;
     };
@@ -180,9 +182,9 @@ describe('SessionOrchestrator incoming offer handling', () => {
   it('replaces a stale pending offer with a newer one instead of silently rejecting', async () => {
     const { orchestrator, patch } = makeOrchestrator('ask_first');
     const orch = orchestrator as unknown as {
-      pendingInbound: FabricSessionMessage | null;
+      pendingInbound: SessionMessage | null;
       pendingInboundAt: number;
-      handleOffer: (message: FabricSessionMessage) => Promise<void>;
+      handleOffer: (message: SessionMessage) => Promise<void>;
     };
 
     orch.pendingInbound = makeOffer('old-session');
@@ -199,9 +201,9 @@ describe('SessionOrchestrator incoming offer handling', () => {
   it('refreshes (does not re-notify) when the same offer is retransmitted', async () => {
     const { orchestrator, patch } = makeOrchestrator('ask_first');
     const orch = orchestrator as unknown as {
-      pendingInbound: FabricSessionMessage | null;
+      pendingInbound: SessionMessage | null;
       pendingInboundAt: number;
-      handleOffer: (message: FabricSessionMessage) => Promise<void>;
+      handleOffer: (message: SessionMessage) => Promise<void>;
     };
 
     orch.pendingInbound = makeOffer('same-session');
@@ -226,8 +228,8 @@ describe('SessionOrchestrator incoming offer handling', () => {
     try {
       const { orchestrator, patch } = makeOrchestrator('ask_first');
       const orch = orchestrator as unknown as {
-        pendingInbound: FabricSessionMessage | null;
-        handleOffer: (message: FabricSessionMessage) => Promise<void>;
+        pendingInbound: SessionMessage | null;
+        handleOffer: (message: SessionMessage) => Promise<void>;
       };
 
       await orch.handleOffer(makeOffer('notif-session'));
@@ -244,7 +246,7 @@ describe('SessionOrchestrator incoming offer handling', () => {
   it('expires a wedged unanswered offer so announcing resumes', async () => {
     const { orchestrator, transport, patch } = makeOrchestrator('ask_first');
     const orch = orchestrator as unknown as {
-      pendingInbound: FabricSessionMessage | null;
+      pendingInbound: SessionMessage | null;
       pendingInboundAt: number;
       lastAnnounceMs: number;
       sessionUnsubscribe: (() => void) | null;
@@ -276,5 +278,38 @@ describe('SessionOrchestrator activity gate', () => {
     orch.linkActivity = 'handshake';
     await orch.maybeSendAnnounce(true);
     expect(transport.sent.some((m) => m.kind === 'announce')).toBe(false);
+  });
+});
+
+describe('SessionOrchestrator accept waiters', () => {
+  it('does not let a cancelled send Accept timeout kill the next send', async () => {
+    vi.useFakeTimers();
+    const { orchestrator } = makeOrchestrator();
+    const orch = orchestrator as unknown as {
+      acceptWaiter: { resolve: () => void; reject: (err: Error) => void } | null;
+      waitForAccept: (ms: number) => Promise<void>;
+      rejectWaiters: (err: Error) => void;
+    };
+
+    const first = orch.waitForAccept(60_000);
+    const firstCatch = first.then(
+      () => 'resolved',
+      (e: Error) => e.message,
+    );
+    orch.rejectWaiters(new Error('Link released'));
+    await expect(firstCatch).resolves.toBe('Link released');
+
+    // Retry before the cancelled wait's 60s timer fires (matches Bob log: cancel then resend).
+    await vi.advanceTimersByTimeAsync(44_000);
+    const second = orch.waitForAccept(60_000);
+    const secondCatch = second.then(
+      () => 'resolved',
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(16_000); // stale first timer — must not reject second
+    expect(orch.acceptWaiter).not.toBeNull();
+    orch.rejectWaiters(new Error('cleanup'));
+    await expect(secondCatch).resolves.toBe('cleanup');
+    vi.useRealTimers();
   });
 });

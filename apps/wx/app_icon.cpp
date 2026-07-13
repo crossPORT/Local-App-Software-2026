@@ -13,37 +13,57 @@ bool TryLoadIcon(wxIcon& icon, const wxString& path, wxBitmapType type) {
     return icon.LoadFile(path, type);
 }
 
+wxFileName ExeDir() {
+    wxFileName exe(wxStandardPaths::Get().GetExecutablePath());
+    exe.SetFullName(wxEmptyString);
+    return exe;
+}
+
+/** Path relative to the install prefix (exe in <prefix>/bin → ../share/...). */
+wxString BesideExe(const wxString& filename) {
+    wxFileName path = ExeDir();
+    path.SetFullName(filename);
+    return path.GetFullPath();
+}
+
+wxString SharePath(std::initializer_list<wxString> parts, const wxString& filename) {
+    wxFileName path = ExeDir();
+    path.RemoveLastDir();  // leave bin/
+    for (const wxString& part : parts) {
+        path.AppendDir(part);
+    }
+    path.SetFullName(filename);
+    return path.GetFullPath();
+}
+
 }  // namespace
 
 wxIcon LoadRocketBoxIcon() {
     wxIcon icon;
 
 #if defined(__WXMSW__)
-    wxFileName exe(wxStandardPaths::Get().GetExecutablePath());
-    exe.SetFullName(wxT("rocketbox.ico"));
-    if (TryLoadIcon(icon, exe.GetFullPath(), wxBITMAP_TYPE_ICO)) {
+    if (TryLoadIcon(icon, BesideExe(wxT("rocketbox.ico")), wxBITMAP_TYPE_ICO)) {
         return icon;
     }
 #elif defined(__WXOSX__)
-    wxString resources = wxStandardPaths::Get().GetResourcesDir();
-    if (TryLoadIcon(icon, resources + wxFileName::GetPathSeparator() + wxT("rocketbox.icns"),
+    const wxString resources = wxStandardPaths::Get().GetResourcesDir();
+    if (TryLoadIcon(icon,
+                    resources + wxFileName::GetPathSeparator() + wxT("rocketbox.icns"),
                     wxBITMAP_TYPE_ICON)) {
         return icon;
     }
 #else
-    static const wxChar* kIconPaths[] = {
-        wxT("/usr/share/icons/hicolor/256x256/apps/rocketbox.png"),
-        wxT("/usr/share/pixmaps/rocketbox.png"),
+    // Prefer install-layout paths from the binary, then a copy next to the exe (dev builds).
+    const wxString candidates[] = {
+        SharePath({wxT("share"), wxT("icons"), wxT("hicolor"), wxT("256x256"), wxT("apps")},
+                  wxT("rocketbox.png")),
+        SharePath({wxT("share"), wxT("pixmaps")}, wxT("rocketbox.png")),
+        BesideExe(wxT("rocketbox.png")),
     };
-    for (const wxChar* path : kIconPaths) {
+    for (const wxString& path : candidates) {
         if (TryLoadIcon(icon, path, wxBITMAP_TYPE_PNG)) {
             return icon;
         }
-    }
-    wxFileName exe(wxStandardPaths::Get().GetExecutablePath());
-    exe.SetFullName(wxT("rocketbox.png"));
-    if (TryLoadIcon(icon, exe.GetFullPath(), wxBITMAP_TYPE_PNG)) {
-        return icon;
     }
 #endif
 
@@ -54,8 +74,8 @@ void ApplyRocketBoxFrameIcon(wxFrame* frame) {
     if (frame == nullptr) {
         return;
     }
-    const wxIcon icon = LoadRocketBoxIcon();
-    if (icon.IsOk()) {
-        frame->SetIcon(icon);
+    const wxIcon loaded = LoadRocketBoxIcon();
+    if (loaded.IsOk()) {
+        frame->SetIcon(loaded);
     }
 }

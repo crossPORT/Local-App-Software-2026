@@ -33,6 +33,22 @@ int default_remote_guess_leg(int my_leg) {
     return (my_leg + 1) % kFabricLegCount;
 }
 
+/** State-1 idle partner display port (1–4): 1↔2, 3↔4. */
+int default_pair_display_port(int display_port) {
+    switch (display_port) {
+        case 1:
+            return 2;
+        case 2:
+            return 1;
+        case 3:
+            return 4;
+        case 4:
+            return 3;
+        default:
+            return 0;
+    }
+}
+
 std::vector<int> remote_fabric_legs(int my_leg) {
     std::vector<int> legs;
     legs.reserve(kFabricLegCount - 1);

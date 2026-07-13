@@ -44,6 +44,7 @@ private:
     void OnUsbDiagnostics();
     void OnEventLog(wxWindow* parent = nullptr);
     void OnEventLogMenu(wxCommandEvent& event);
+    void OnReleaseLinkRequested(const std::string& peer_name, int display_port);
     void OnResetConnection();
     void OnAnnounceLedClick();
     void OnConnectUsb();

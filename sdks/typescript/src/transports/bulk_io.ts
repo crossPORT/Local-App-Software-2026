@@ -53,11 +53,11 @@ export async function transferInWithTimeout(
 export async function transferOutWithTimeout(
   device: USBDevice,
   epOut: number,
-  data: BufferSource,
+  data: Uint8Array | ArrayBuffer,
   timeoutMs: number,
 ): Promise<void> {
   const result = await Promise.race([
-    device.transferOut(epOut, data),
+    device.transferOut(epOut, data as BufferSource),
     sleep(timeoutMs).then(() => {
       throw new Error('USB OUT timeout');
     }),
@@ -70,7 +70,7 @@ export async function transferOutWithTimeout(
 export async function transferOutWithRetry(
   device: USBDevice,
   epOut: number,
-  data: BufferSource,
+  data: Uint8Array | ArrayBuffer,
   timeoutMs: number,
   recover: () => Promise<void>,
 ): Promise<void> {

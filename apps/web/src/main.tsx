@@ -2,10 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { LandingPage } from './components/LandingPage';
-import { startBoothLogShipper } from './lib/booth_log_shipper';
+import { startEventLogShipper } from './lib/event_log_shipper';
 import './index.css';
 
-startBoothLogShipper();
+startEventLogShipper();
 
 function routePathname(): string {
   const path = window.location.pathname.replace(/\/+$/, '');

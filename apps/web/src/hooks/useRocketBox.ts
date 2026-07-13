@@ -12,11 +12,11 @@ import {
   transportHasSavedSerial,
 } from '../transport_factory';
 import {
-  setFabricDebugLog,
-  subscribeFabricUsbDisconnect,
+  setDebugLog,
+  subscribeUsbDisconnect,
   webUsbBlockedReason,
 } from '@rocketbox/sdk';
-import { boothLog, getBoothLogLevel } from '../lib/booth_log';
+import { eventLog, getEventLogLevel } from '../lib/event_log';
 
 export function identityNeedsSetup(identity: IdentityProfile): boolean {
   return !identity.display_name.trim();
@@ -45,7 +45,7 @@ function syncFabricPortIndex(
   session: ReturnType<typeof createTransportSession>,
   portIndexRef: { current: number },
 ): number {
-  const fabricPort = session.getFabricPortIndex();
+  const fabricPort = session.getPortIndex();
   portIndexRef.current = fabricPort;
   return fabricPort;
 }
@@ -215,13 +215,13 @@ export function useRocketBox() {
         setUsbDescription('');
       }
     };
-    return subscribeFabricUsbDisconnect(onDisconnect);
+    return subscribeUsbDisconnect(onDisconnect);
   }, [clearTransferState, patch]);
 
   useEffect(() => {
-    setFabricDebugLog(
-      (port, event, detail = '') => boothLog(port, event, detail),
-      getBoothLogLevel() === 'off' ? 'normal' : getBoothLogLevel(),
+    setDebugLog(
+      (port, event, detail = '') => eventLog(port, event, detail),
+      getEventLogLevel() === 'off' ? 'normal' : getEventLogLevel(),
     );
   }, []);
 
@@ -503,6 +503,10 @@ export function useRocketBox() {
     ensureOrchestrator().sendAnnounceNow();
   }, [ensureOrchestrator, state?.fabricConnected, state?.usbConnected]);
 
+  const releaseLinkedCircuit = useCallback(async () => {
+    await ensureOrchestrator().releaseLinkedCircuit();
+  }, [ensureOrchestrator]);
+
   return {
     state,
     settingsOpen,
@@ -520,6 +524,7 @@ export function useRocketBox() {
     recoverUsb,
     resetTransfer,
     requestAnnounce,
+    releaseLinkedCircuit,
     patch,
   };
 }

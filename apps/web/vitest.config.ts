@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts', '../../sdks/typescript/src/fabric/**/*.test.ts'],
+    include: ['src/**/*.test.ts'],
     environment: 'node',
     typecheck: {
       enabled: false,

@@ -6,7 +6,6 @@ interface HeaderProps {
   state: AppUiState;
   ledPulse: boolean;
   onOpenSettings: () => void;
-  onOpenEventLog?: () => void;
   onAnnounce?: () => void;
 }
 
@@ -14,7 +13,6 @@ export function Header({
   state,
   ledPulse,
   onOpenSettings,
-  onOpenEventLog,
   onAnnounce,
 }: HeaderProps) {
   const led = deriveLinkLed(state.usbConnected, state.fabricConnected, state.busy);
@@ -46,11 +44,6 @@ export function Header({
         <button type="button" className="icon-btn" onClick={onOpenSettings} title="Settings">
           ⚙
         </button>
-        {onOpenEventLog && (
-          <button type="button" className="icon-btn" onClick={onOpenEventLog} title="Event log">
-            📋
-          </button>
-        )}
       </div>
     </header>
   );

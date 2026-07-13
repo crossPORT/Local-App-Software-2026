@@ -12,6 +12,7 @@ add_executable(rocketbox
     speed_monitor.cpp
     speed_monitor_chart.cpp
     incoming_dialog.cpp
+    link_release_dialog.cpp
     settings_dialog.cpp
     event_log_dialog.cpp
 )
@@ -46,6 +47,16 @@ target_link_libraries(rocketbox PRIVATE
 )
 
 target_compile_features(rocketbox PRIVATE cxx_std_17)
+
+# Dev runs load icons from next to the binary (see app_icon.cpp).
+if(UNIX AND NOT APPLE)
+    add_custom_command(TARGET rocketbox POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+            "$<TARGET_FILE_DIR:rocketbox>/rocketbox.png"
+        COMMENT "Copy rocketbox.png next to RocketBox for header/frame icon"
+    )
+endif()
 
 if(APPLE)
     set(_rb_icns "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.icns")
