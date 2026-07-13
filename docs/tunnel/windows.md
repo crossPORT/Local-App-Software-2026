@@ -10,6 +10,10 @@ Tunnel component is installed).
 Run `RocketBox-<tag>-setup.exe`. Enable **Tunnel** (includes **Tray** by default).
 Uncheck Tray for server-only.
 
+Before upgrading: Quit tray (right-click → Quit tray) and close RocketBox App.
+If Setup says “Error opening file for writing” on a `.dll`, something is still
+running — Abort, end those tasks, then run Setup again (do not Ignore).
+
 Installer adds:
 - Start Menu → **RocketBox App** and **RocketBox Tunnel Tray** (branded icons)
 - Desktop → **RocketBox App**

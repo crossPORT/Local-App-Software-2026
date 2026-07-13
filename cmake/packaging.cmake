@@ -9,16 +9,21 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY "RocketBox")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_CONTACT "support@crossport.io")
 
-set(CPACK_COMPONENTS_ALL RocketBoxApp RocketBoxTunnel RocketBoxTunnelTray)
+set(CPACK_COMPONENTS_ALL RocketBoxRuntime RocketBoxApp RocketBoxTunnel RocketBoxTunnelTray)
+set(CPACK_COMPONENT_ROCKETBOXRUNTIME_DISPLAY_NAME "Shared runtime")
+set(CPACK_COMPONENT_ROCKETBOXRUNTIME_DESCRIPTION "Bundled DLLs (libusb, wxWidgets, zlib) required by App and Tunnel Tray")
+set(CPACK_COMPONENT_ROCKETBOXRUNTIME_REQUIRED ON)
+set(CPACK_COMPONENT_ROCKETBOXRUNTIME_HIDDEN ON)
 set(CPACK_COMPONENT_ROCKETBOXAPP_DISPLAY_NAME "RocketBox App")
 set(CPACK_COMPONENT_ROCKETBOXAPP_DESCRIPTION "File transfer for RocketBox hardware")
+set(CPACK_COMPONENT_ROCKETBOXAPP_DEPENDS RocketBoxRuntime)
 set(CPACK_COMPONENT_ROCKETBOXTUNNEL_DISPLAY_NAME "RocketBox Tunnel")
 set(CPACK_COMPONENT_ROCKETBOXTUNNEL_DESCRIPTION
   "IP tunnel over USB. Cannot use the same USB cable as RocketBox App at the same time.")
 set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DISPLAY_NAME "Tunnel Tray")
 set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DESCRIPTION
   "System tray control for Tunnel (uncheck for server-only). Autostarts at login.")
-set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DEPENDS RocketBoxTunnel)
+set(CPACK_COMPONENT_ROCKETBOXTUNNELTRAY_DEPENDS RocketBoxTunnel RocketBoxRuntime)
 set(CPACK_COMPONENT_ROCKETBOXAPP_REQUIRED ON)
 
 if(WIN32)
@@ -33,6 +38,14 @@ if(WIN32)
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MODIFY_PATH OFF)
     set(CPACK_NSIS_COMPONENT_INSTALL ON)
+    # Quit locked binaries before overwrite (tray Startup often holds libusb/wx DLLs).
+    set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS "
+      nsExec::ExecToLog 'taskkill /F /IM rocketbox-tunnel-tray.exe /T'
+      nsExec::ExecToLog 'taskkill /F /IM RocketBox.exe /T'
+      nsExec::ExecToLog 'taskkill /F /IM rocketbox-tunnel.exe /T'
+      nsExec::ExecToLog 'taskkill /F /IM rocketbox-tunnel-helper.exe /T'
+      Sleep 1500
+    ")
     # Custom shortcuts with rocketbox.ico (CPack PACKAGE_EXECUTABLES omits icon args).
     set(CPACK_NSIS_CREATE_ICONS_EXTRA "
       CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\RocketBox App.lnk' '$INSTDIR\\\\bin\\\\RocketBox.exe' '' '$INSTDIR\\\\bin\\\\rocketbox.ico' 0

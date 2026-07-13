@@ -85,16 +85,13 @@ elseif(WIN32)
     message(STATUS "Windows: bundle ${_rb_dll_count} runtime DLL(s) from ${_rb_vcpkg_bin}")
 
     install(TARGETS rocketbox RUNTIME DESTINATION bin COMPONENT RocketBoxApp)
-    install(FILES ${_rb_runtime_dlls} DESTINATION bin COMPONENT RocketBoxApp)
+    install(FILES ${_rb_runtime_dlls} DESTINATION bin COMPONENT RocketBoxRuntime)
     install(FILES "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico" DESTINATION bin
-            COMPONENT RocketBoxApp)
+            COMPONENT RocketBoxRuntime)
 
     # Post-install sanity check only — no file(GET_RUNTIME_DEPENDENCIES).
     install(CODE [[
         set(_bin "${CMAKE_INSTALL_PREFIX}/bin")
-        if(NOT EXISTS "${_bin}/RocketBox.exe")
-            message(FATAL_ERROR "Windows install missing RocketBox.exe in ${_bin}")
-        endif()
         if(NOT EXISTS "${_bin}/libusb-1.0.dll")
             message(FATAL_ERROR "Windows install missing libusb-1.0.dll in ${_bin}")
         endif()
@@ -110,7 +107,13 @@ elseif(WIN32)
         endif()
         file(GLOB _all "${_bin}/*.dll")
         list(LENGTH _all _n)
-        message(STATUS "Windows install verified: RocketBox.exe + ${_n} bundled DLL(s) in ${_bin}")
+        message(STATUS "Windows install verified: ${_n} bundled runtime DLL(s) in ${_bin}")
+    ]] COMPONENT RocketBoxRuntime)
+    install(CODE [[
+        set(_bin "${CMAKE_INSTALL_PREFIX}/bin")
+        if(NOT EXISTS "${_bin}/RocketBox.exe")
+            message(FATAL_ERROR "Windows install missing RocketBox.exe in ${_bin}")
+        endif()
     ]] COMPONENT RocketBoxApp)
 
     install(FILES
