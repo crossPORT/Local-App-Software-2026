@@ -69,7 +69,9 @@ jobs:
             -DROCKETBOX_RELEASE_TAG="$ROCKETBOX_RELEASE_TAG"
 
       - name: Build
-        run: cmake --build build --config Release --target rocketbox --parallel
+        run: >
+          cmake --build build --config Release --parallel
+          --target rocketbox rocketbox-tunnel rocketbox-tunnel-helper rocketbox-tunnel-tray
 
       - name: Install staging tree
         run: cmake --install build --config Release --prefix "${{ runner.temp }}/install"
