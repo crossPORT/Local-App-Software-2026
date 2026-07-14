@@ -89,12 +89,18 @@ void TrayPanel::sync_from_host(const TrayControls& ctrls, bool running) {
   syncing_ = false;
 }
 
-void TrayPanel::sync_running(bool running) {
+void TrayPanel::sync_running(bool running, int display_port) {
   syncing_ = true;
   running_ = running;
+  if (display_port >= 1 && display_port <= 4) ctrls_.port = display_port;
   if (enable_->GetValue() != running) enable_->SetValue(running);
   status_->SetLabel(tray_status_label(running, ctrls_.port));
-  refill_ports();
+  // Do not refill_ports() every tick — USB enum flicker was resetting Port to 0
+  // and flipping Status between Starting… and Connected.
+  usb_->Enable(!running);
+  sim_->Enable(!running);
+  if (port_) port_->Enable(!running);
+  enable_->Enable(true);
   syncing_ = false;
 }
 

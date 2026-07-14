@@ -63,7 +63,7 @@ void TunnelTrayIcon::on_tick(wxTimerEvent&) {
   // Keep Enable + Status in lockstep with live helper/stats (orphan-safe).
   if (panel_ && panel_->is_shown()) {
     if (up != last_up_) panel_->sync_from_host(controls_now(), up);
-    else panel_->sync_running(up);
+    else panel_->sync_running(up, port_);
   }
   traffic_ = false;
   if (up) {

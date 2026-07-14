@@ -36,7 +36,7 @@ public:
   bool is_shown() const { return IsShown(); }
   void sync_from_host(const TrayControls& ctrls, bool running);
   /** Update Enable checkbox + status only (safe while editing expose). */
-  void sync_running(bool running);
+  void sync_running(bool running, int display_port = 0);
   bool enable_checked() const;
   TrayControls controls() const { return ctrls_; }
 

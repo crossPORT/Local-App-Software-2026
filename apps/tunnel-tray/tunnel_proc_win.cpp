@@ -90,7 +90,12 @@ bool TunnelProcess::running() const {
 }
 
 bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
-  if (running()) return true;  // Helper still owns tunnel after tray restart.
+  if (running()) {
+    const int live = live_tunnel_port();
+    if (live > 0) port_ = live;
+    else if (cfg.port >= 1 && cfg.port <= 4) port_ = cfg.port;
+    return true;
+  }
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
   TunnelConfig run = cfg;
   run.use_netns = false;
@@ -108,6 +113,9 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
     while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
     if (error.find("already running") != std::string::npos) {
       helper_managed_ = true;
+      const int live = live_tunnel_port();
+      if (live > 0) port_ = live;
+      else if (cfg.port >= 1 && cfg.port <= 4) port_ = cfg.port;
       return true;
     }
     if (error.rfind("ERR ", 0) == 0) error.erase(0, 4);
