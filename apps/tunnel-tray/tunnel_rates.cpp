@@ -89,7 +89,10 @@ bool live_tunnel_holds_port(int display_port) {
   if (!r.ok || r.pid <= 0) return false;
 #if defined(_WIN32)
   HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(r.pid));
-  if (!h) return false;
+  if (!h) {
+    // Elevated tunnel: non-admin tray often gets ACCESS_DENIED while the pid is live.
+    return GetLastError() == ERROR_ACCESS_DENIED;
+  }
   DWORD code = 0;
   const bool alive = GetExitCodeProcess(h, &code) && code == STILL_ACTIVE;
   CloseHandle(h);
@@ -99,6 +102,7 @@ bool live_tunnel_holds_port(int display_port) {
   return errno == EPERM;
 #endif
 }
+
 
 int live_tunnel_port() {
   for (int p = 1; p <= 4; ++p) {

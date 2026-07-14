@@ -81,7 +81,12 @@ void TrayPanel::sync_from_host(const TrayControls& ctrls, bool running) {
   enable_->SetValue(running);
   usb_->SetValue(ctrls.usb);
   sim_->SetValue(!ctrls.usb);
+  const int keep_port = ctrls_.port;
   refill_ports();
+  // refill_ports may clear Port when USB is hidden by our own tunnel claim.
+  if (keep_port >= 1 && keep_port <= 4 && (ctrls_.port < 1 || ctrls_.port > 4)) {
+    ctrls_.port = keep_port;
+  }
   rows_ = build_expose_rows(ctrls_.expose);
   fill_expose_list(list_, rows_, ctrls_.expose);
   status_->SetLabel(tray_status_label(running, ctrls_.port));
@@ -149,8 +154,9 @@ void TrayPanel::on_enable(wxCommandEvent& ev) {
   const bool want = ev.IsChecked();
   if (want && ctrls_.usb) {
     if (ctrls_.port <= 0) ctrls_.port = sole_available_display_port();
-    if (ctrls_.port <= 0 ||
-        (!display_port_available(ctrls_.port) && !live_tunnel_holds_port(ctrls_.port))) {
+    // live_tunnel_holds_port: our elevated tunnel may hide the device from libusb.
+    if (!live_tunnel_holds_port(ctrls_.port) &&
+        (ctrls_.port <= 0 || !display_port_available(ctrls_.port))) {
       enable_->SetValue(false);
       wxMessageBox(usb_enable_blocked_message(ctrls_.port), wxT("RocketBox Tunnel"),
                    wxOK | wxICON_ERROR);
