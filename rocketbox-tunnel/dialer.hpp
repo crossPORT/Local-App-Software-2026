@@ -26,6 +26,8 @@ public:
     void send_message(const std::vector<uint8_t>& msg);
     void on_message(MsgHandler handler);
     void note_activity();
+    /** Remember peer from an inbound IP packet (avoids blank active_peer on reply path). */
+    void note_inbound_peer(int peer_port);
     void tick_idle();
     void shutdown();
     bool circuit_open() const;

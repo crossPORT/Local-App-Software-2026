@@ -18,6 +18,7 @@
 namespace {
 
 constexpr const char* kIp = "/sbin/ip";
+constexpr const char* kSys = "/usr/sbin/sysctl";
 
 void run_or_throw(const std::string& cmd) {
   const int rc = ::system(cmd.c_str());
@@ -90,6 +91,8 @@ void TunDevice::isolate_in_netns(const std::string& netns, const std::string& lo
                "/24 dev " + name_);
   run_or_throw(std::string(kIp) + " netns exec " + netns + " " + kIp +
                " route replace 10.64.0.0/24 dev " + name_);
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.ipv4.conf." + name_ + ".rp_filter=0");
   netns_ = netns;
   gateway_ = std::make_unique<HostGateway>();
   gateway_->install(local_port, netns, expose);

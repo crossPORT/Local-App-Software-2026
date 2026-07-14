@@ -1,4 +1,5 @@
 #include "bridge.hpp"
+#include "fabric_source.hpp"
 #include "peer_map.hpp"
 
 #include <chrono>
@@ -17,6 +18,8 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
   if (stop_ || msg.empty()) {
     return;
   }
+  const int src = rocketbox_lan::src_port_from_ip_packet(msg.data(), msg.size());
+  if (src > 0) dialer_.note_inbound_peer(src);
   dialer_.note_activity();
   down_bytes_.fetch_add(msg.size(), std::memory_order_relaxed);
   std::lock_guard<std::mutex> lock(write_mu_);
@@ -26,8 +29,9 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
 void TunnelBridge::run() {
   std::cerr << "[rocketbox-tunnel] bridging (Ctrl+C to stop)" << std::endl;
   auto last_idle_check = std::chrono::steady_clock::now();
+  bool logged_src_fix = false;
   while (!stop_) {
-    auto pkt = tun_.read_packet();  // blocks/polls — must not busy-spin
+    auto pkt = tun_.read_packet();
     if (pkt.empty()) {
       const auto now = std::chrono::steady_clock::now();
       if (now - last_idle_check > std::chrono::seconds(1)) {
@@ -35,6 +39,12 @@ void TunnelBridge::run() {
         last_idle_check = now;
       }
       continue;
+    }
+
+    if (force_fabric_source(pkt, local_port_) && !logged_src_fix) {
+      std::cerr << "[rocketbox-tunnel] rewrote non-fabric source to 10.64.0." << local_port_
+                << std::endl;
+      logged_src_fix = true;
     }
 
     const int dest = rocketbox_lan::dest_port_from_ip_packet(pkt.data(), pkt.size());

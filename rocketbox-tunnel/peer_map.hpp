@@ -36,4 +36,15 @@ inline int dest_port_from_ip_packet(const uint8_t* pkt, size_t len) {
   return port_from_ipv4_bytes(pkt + 16);
 }
 
+/** Source fabric port from raw IPv4 packet. Returns 0 if not fabric LAN. */
+inline int src_port_from_ip_packet(const uint8_t* pkt, size_t len) {
+  if (!pkt || len < 20) {
+    return 0;
+  }
+  if ((pkt[0] >> 4) != 4) {
+    return 0;
+  }
+  return port_from_ipv4_bytes(pkt + 12);
+}
+
 }  // namespace rocketbox_lan

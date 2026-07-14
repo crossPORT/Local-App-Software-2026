@@ -95,6 +95,13 @@ void CircuitDialer::note_activity() {
     last_activity_ = std::chrono::steady_clock::now();
 }
 
+void CircuitDialer::note_inbound_peer(int peer_port) {
+    if (peer_port < 1 || peer_port > 4 || peer_port == local_port_) return;
+    std::lock_guard<std::mutex> lock(mu_);
+    if (active_peer_port_ == 0) active_peer_port_ = peer_port;
+    last_activity_ = std::chrono::steady_clock::now();
+}
+
 void CircuitDialer::tick_idle() {
     bool clear = false;
     {

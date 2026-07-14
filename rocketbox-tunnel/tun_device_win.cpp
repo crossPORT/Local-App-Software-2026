@@ -58,10 +58,25 @@ void set_ipv4(const NET_LUID& luid, const std::string& local_ip) {
   row.Address.Ipv4.sin_addr.S_un.S_addr = htonl((a << 24) | (b << 16) | (c << 8) | d);
   row.OnLinkPrefixLength = 24;
   row.DadState = IpDadStatePreferred;
+  row.SkipAsSource = 0;
   const DWORD r = CreateUnicastIpAddressEntry(&row);
   if (r != NO_ERROR && r != ERROR_OBJECT_ALREADY_EXISTS) {
     throw std::runtime_error("CreateUnicastIpAddressEntry failed: " + std::to_string(r));
   }
+}
+
+void tune_iface(const NET_LUID& luid) {
+  MIB_IPINTERFACE_ROW row{};
+  InitializeIpInterfaceEntry(&row);
+  row.Family = AF_INET;
+  row.InterfaceLuid = luid;
+  if (GetIpInterfaceEntry(&row) != NO_ERROR) return;
+  row.UseAutomaticMetric = FALSE;
+  row.Metric = 1;
+  row.DisableDefaultRoutes = TRUE;
+  row.WeakHostSend = TRUE;
+  row.WeakHostReceive = TRUE;
+  (void)SetIpInterfaceEntry(&row);
 }
 
 void set_route(const NET_LUID& luid) {
@@ -125,6 +140,7 @@ void TunDevice::configure_lan(const std::string& local_ip) {
   if (!c || !c->session) throw std::runtime_error("TUN not open");
   gateway_.reset();
   set_ipv4(c->luid, local_ip);
+  tune_iface(c->luid);
   set_route(c->luid);
 }
 
