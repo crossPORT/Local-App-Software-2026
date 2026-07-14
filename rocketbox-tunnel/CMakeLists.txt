@@ -44,6 +44,8 @@ target_include_directories(rocketbox-tunnel PRIVATE
 target_link_libraries(rocketbox-tunnel PRIVATE rocketbox_sdk)
 if(WIN32)
   target_link_libraries(rocketbox-tunnel PRIVATE iphlpapi ws2_32 fwpuclnt rpcrt4)
+  # Same tray-mark icon as RocketBox.exe / shortcuts (Explorer + Task Manager).
+  target_sources(rocketbox-tunnel PRIVATE "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")
 endif()
 target_compile_features(rocketbox-tunnel PRIVATE cxx_std_17)
 

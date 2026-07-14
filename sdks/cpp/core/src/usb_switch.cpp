@@ -9,11 +9,12 @@
 #include <libusb-1.0/libusb.h>
 #include <string>
 
-TransferResult switch_port_core(libusb_context* ctx, int port_index, int dest_port) {
+TransferResult switch_port_core(libusb_context* ctx, int port_index, int dest_port,
+                                bool reset_data_endpoints) {
     TransferResult result{};
 
     libusb_device_handle* handle =
-        open_device_by_index(ctx, port_index, &result.error_message);
+        open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
     if (!handle) {
         if (result.error_message.empty()) {
             result.error_message =

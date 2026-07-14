@@ -293,7 +293,8 @@ TransferResult TransferController::switch_port(int dest_port) {
     if (!lock.try_lock_for(kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
-    TransferResult result = switch_port_core(usb_ctx_, port_index_, dest_port);
+    TransferResult result =
+        switch_port_core(usb_ctx_, port_index_, dest_port, !stream_mode_);
     if (result.ok) {
         last_switch_dest_ = dest_port;
         if (dest_port == 0) {

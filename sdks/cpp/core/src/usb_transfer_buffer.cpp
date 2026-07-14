@@ -1,5 +1,6 @@
 #include "usb_transfer.h"
 #include "usb_device_open.h"
+#include "usb_diag.h"
 #include "usb_frame.h"
 #include "usb_protocol.h"
 
@@ -18,9 +19,13 @@ bool bulk_write(libusb_device_handle* h, const uint8_t* data, size_t len, int ti
   while (off < len) {
     int xfer = 0;
     const size_t n = std::min(len - off, usb_protocol::kChunkSize);
+    USB_DIAG("[USB-DIAG] buffer_write EP=0x%02x len=%zu timeout=%dms\n",
+             usb_protocol::kEndpointDataOut, n, timeout_ms);
     const int rc = libusb_bulk_transfer(h, usb_protocol::kEndpointDataOut,
                                         const_cast<uint8_t*>(data + off), static_cast<int>(n), &xfer,
                                         timeout_ms);
+    USB_DIAG("[USB-DIAG] buffer_write rc=%d (%s) xfer=%d\n", rc,
+             libusb_strerror(static_cast<libusb_error>(rc)), xfer);
     if (rc != LIBUSB_SUCCESS) return false;
     off += static_cast<size_t>(xfer);
   }
@@ -35,7 +40,12 @@ bool bulk_read(libusb_device_handle* h, uint8_t* data, size_t len, int timeout_m
     const int rc =
         libusb_bulk_transfer(h, usb_protocol::kEndpointDataIn, data + off, static_cast<int>(n),
                              &xfer, timeout_ms);
-    if (rc != LIBUSB_SUCCESS) return false;
+    if (rc != LIBUSB_SUCCESS) {
+      USB_DIAG("[USB-DIAG] buffer_read EP=0x%02x want=%zu timeout=%dms rc=%d (%s)\n",
+               usb_protocol::kEndpointDataIn, n, timeout_ms, rc,
+               libusb_strerror(static_cast<libusb_error>(rc)));
+      return false;
+    }
     off += static_cast<size_t>(xfer);
   }
   return true;
@@ -114,6 +124,7 @@ TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* ou
     if (rem <= 0) break;
     if (!bulk_read(handle, reinterpret_cast<uint8_t*>(&hdr), sizeof(hdr), rem)) break;
     if (std::memcmp(hdr.magic, usb_protocol::kHeaderMagic, 8) != 0) {
+      USB_DIAG("[USB-DIAG] buffer_recv bad magic; clear_halt IN\n");
       (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
       continue;
     }
@@ -153,6 +164,9 @@ TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* ou
     }
   }
   close_device(handle);
+  USB_DIAG("[USB-DIAG] buffer_recv ok kind=%u bytes=%llu\n",
+           static_cast<unsigned>(hdr.frame_kind),
+           static_cast<unsigned long long>(hdr.file_size));
   result.ok = true;
   result.bytes_transferred = hdr.file_size;
   return result;

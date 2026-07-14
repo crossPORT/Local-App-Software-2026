@@ -94,8 +94,9 @@ bool rocketbox_device_bus_addr(libusb_context* ctx,
 std::string rocketbox_device_serial(libusb_context* ctx, int port_index);
 
 // Port switch on EP4 (TS writeSwitch parity). dest_port 1–4 links, 0 clears.
-// No EP3 reply.
-TransferResult switch_port_core(libusb_context* ctx, int port_index, int dest_port);
+// No EP3 reply. reset_data_endpoints: App true; tunnel stream mode false.
+TransferResult switch_port_core(libusb_context* ctx, int port_index, int dest_port,
+                                bool reset_data_endpoints = true);
 
 // Send on send_port_index, receive on recv_port_index in parallel (same-PC loopback).
 TransferResult loopback_transfer_core(libusb_context* ctx,
