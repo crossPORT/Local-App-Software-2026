@@ -1,9 +1,12 @@
 #include "bridge.hpp"
 #include "fabric_source.hpp"
+#include "icmp_ping.hpp"
 #include "peer_map.hpp"
+#include "tunnel_log.hpp"
 
 #include <chrono>
 #include <iostream>
+#include <utility>
 
 TunnelBridge::TunnelBridge(TunDevice& tun, CircuitDialer& dialer, int local_port)
     : tun_(tun), dialer_(dialer), local_port_(local_port) {
@@ -26,8 +29,42 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
   }
   dialer_.note_activity();
   down_bytes_.fetch_add(msg.size(), std::memory_order_relaxed);
+
+  // Answer fabric ICMP here so peers get a reply without host firewall/stack.
+  if (rocketbox_icmp::is_echo_request(msg.data(), msg.size(), local_port_)) {
+    auto reply = rocketbox_icmp::make_echo_reply(msg.data(), msg.size());
+    if (!reply.empty()) {
+      std::lock_guard<std::mutex> lock(reply_mu_);
+      pending_reply_ = std::move(reply);
+    }
+    return;  // do not inject into TUN (avoids double reply)
+  }
+
   std::lock_guard<std::mutex> lock(write_mu_);
   tun_.write_packet(msg.data(), msg.size());
+}
+
+bool TunnelBridge::send_pending_icmp_reply() {
+  std::vector<uint8_t> reply;
+  {
+    std::lock_guard<std::mutex> lock(reply_mu_);
+    if (pending_reply_.empty()) return false;
+    reply = std::move(pending_reply_);
+    pending_reply_.clear();
+  }
+  const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
+  if (dest == 0 || dest == local_port_ || !dialer_.ensure(dest)) {
+    rocketbox_tunnel_log("drop ICMP reply: ensure failed dest=" + std::to_string(dest));
+    return true;
+  }
+  dialer_.note_activity();
+  dialer_.send_message(reply);
+  up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
+  if (!logged_icmp_reply_) {
+    rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
+    logged_icmp_reply_ = true;
+  }
+  return true;
 }
 
 void TunnelBridge::run() {
@@ -37,6 +74,10 @@ void TunnelBridge::run() {
   while (!stop_) {
     const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
     if (want > 0) (void)dialer_.ensure(want);
+
+    if (send_pending_icmp_reply()) {
+      continue;
+    }
 
     auto pkt = tun_.read_packet();
     if (pkt.empty()) {

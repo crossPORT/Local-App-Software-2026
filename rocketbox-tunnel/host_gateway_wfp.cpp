@@ -133,26 +133,18 @@ void wfp_expose_apply(WfpExposeSession* s, const std::vector<ExposeRule>& expose
       s->cond_bufs.push_back(std::move(buf));
     };
 
-    // Inbound ICMP to fabric IP (echo request + reply through Wintun).
-    {
-      auto b = make_local(s->port);
+    auto add_icmp = [&](const GUID& layer, std::unique_ptr<CondBuf> b, const wchar_t* name) {
       b->conds[1].fieldKey = FWPM_CONDITION_IP_PROTOCOL;
       b->conds[1].matchType = FWP_MATCH_EQUAL;
       b->conds[1].conditionValue.type = FWP_UINT8;
       b->conds[1].conditionValue.uint8 = IPPROTO_ICMP;
-      add_owned(FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, FWP_ACTION_PERMIT, 15, std::move(b), 2,
-                L"RocketBox ICMP in");
-    }
-    // Outbound ICMP to fabric LAN (Windows -> peer ping).
-    {
-      auto b = make_remote_fabric();
-      b->conds[1].fieldKey = FWPM_CONDITION_IP_PROTOCOL;
-      b->conds[1].matchType = FWP_MATCH_EQUAL;
-      b->conds[1].conditionValue.type = FWP_UINT8;
-      b->conds[1].conditionValue.uint8 = IPPROTO_ICMP;
-      add_owned(FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWP_ACTION_PERMIT, 15, std::move(b), 2,
-                L"RocketBox ICMP out");
-    }
+      add_owned(layer, FWP_ACTION_PERMIT, 15, std::move(b), 2, name);
+    };
+    // ALE + transport so kernel ICMP on Wintun is not dropped by Firewall.
+    add_icmp(FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, make_local(s->port), L"RocketBox ICMP in");
+    add_icmp(FWPM_LAYER_INBOUND_TRANSPORT_V4, make_local(s->port), L"RocketBox ICMP in xport");
+    add_icmp(FWPM_LAYER_ALE_AUTH_CONNECT_V4, make_remote_fabric(), L"RocketBox ICMP out");
+    add_icmp(FWPM_LAYER_OUTBOUND_TRANSPORT_V4, make_remote_fabric(), L"RocketBox ICMP out xport");
 
     for (const ExposeRule& r : expose) {
       if (r.port <= 0 || r.port > 65535) continue;

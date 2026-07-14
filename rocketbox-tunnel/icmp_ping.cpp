@@ -79,4 +79,53 @@ bool is_echo_reply(const uint8_t* pkt, size_t len, uint16_t id) {
   return rid == id;
 }
 
+bool is_echo_request(const uint8_t* pkt, size_t len, int local_port) {
+  if (!pkt || local_port < 1 || local_port > 4 || len < 28) {
+    return false;
+  }
+  if ((pkt[0] >> 4) != 4 || pkt[9] != 1) {
+    return false;
+  }
+  const size_t ihl = static_cast<size_t>(pkt[0] & 0x0f) * 4;
+  if (ihl < 20 || len < ihl + 8) {
+    return false;
+  }
+  if (pkt[16] != 10 || pkt[17] != 64 || pkt[18] != 0 || pkt[19] != static_cast<uint8_t>(local_port)) {
+    return false;
+  }
+  return pkt[ihl] == 8;  // ICMP echo request
+}
+
+std::vector<uint8_t> make_echo_reply(const uint8_t* request, size_t len) {
+  if (!request || len < 28 || (request[0] >> 4) != 4 || request[9] != 1) {
+    return {};
+  }
+  const size_t ihl = static_cast<size_t>(request[0] & 0x0f) * 4;
+  if (ihl < 20 || len < ihl + 8 || request[ihl] != 8) {
+    return {};
+  }
+  std::vector<uint8_t> out(request, request + len);
+  // Swap IPv4 src/dst.
+  for (int i = 0; i < 4; ++i) {
+    const uint8_t t = out[12 + i];
+    out[12 + i] = out[16 + i];
+    out[16 + i] = t;
+  }
+  out[8] = 64;  // TTL
+  out[10] = 0;
+  out[11] = 0;
+  const uint16_t ip_csum = checksum(out.data(), ihl);
+  out[10] = static_cast<uint8_t>(ip_csum >> 8);
+  out[11] = static_cast<uint8_t>(ip_csum & 0xff);
+
+  uint8_t* icmp = out.data() + ihl;
+  icmp[0] = 0;  // echo reply
+  icmp[2] = 0;
+  icmp[3] = 0;
+  const uint16_t icmp_csum = checksum(icmp, len - ihl);
+  icmp[2] = static_cast<uint8_t>(icmp_csum >> 8);
+  icmp[3] = static_cast<uint8_t>(icmp_csum & 0xff);
+  return out;
+}
+
 }  // namespace rocketbox_icmp
