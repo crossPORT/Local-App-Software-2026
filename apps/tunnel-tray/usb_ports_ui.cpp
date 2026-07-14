@@ -75,7 +75,18 @@ int fill_port_choice(wxChoice* choice, int preferred_port, bool enable, bool usb
                      std::vector<int>* ports_out) {
   choice->Clear();
   if (ports_out) ports_out->clear();
-  const auto ports = usb ? usb_port_choices() : sim_port_choices();
+  auto ports = usb ? usb_port_choices() : sim_port_choices();
+  // Right after Enable, tunnel claims USB so libusb is empty before stats exist.
+  // Keep the known Port in the dropdown (status already shows it).
+  if (ports.empty() && usb && preferred_port >= 1 && preferred_port <= 4) {
+    UsbPortChoice c;
+    c.display_port = preferred_port;
+    c.present = true;
+    c.available = false;
+    c.label = "Port " + std::to_string(preferred_port) + " - 10.64.0." +
+              std::to_string(preferred_port) + " (tunnel)";
+    ports.push_back(std::move(c));
+  }
   if (ports.empty()) {
     choice->Append(wxT("No USB cable"));
     if (ports_out) ports_out->push_back(0);
