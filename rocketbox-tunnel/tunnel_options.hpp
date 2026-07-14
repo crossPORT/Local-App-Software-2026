@@ -21,5 +21,5 @@ struct TunnelOptions {
 
 const char* tunnel_transport_name(rocketbox::TransportMode t);
 void tunnel_usage(const char* argv0);
-/** Returns false if --help. Throws on bad args. */
+/** Returns false if --help / --version. Throws on bad args. */
 bool tunnel_parse_args(int argc, char** argv, TunnelOptions& out);

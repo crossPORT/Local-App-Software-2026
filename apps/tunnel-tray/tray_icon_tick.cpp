@@ -3,6 +3,8 @@
 #include "tray_theme.hpp"
 #include "tunnel_proc.hpp"
 
+#include "rocketbox_version.h"
+
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
 #include <wx/wx.h>
@@ -11,7 +13,8 @@ namespace {
 constexpr uint64_t kPulseThresholdBps = 1000;
 
 wxString tooltip_for(int port, bool up) {
-  wxString tip = wxString::Format("RocketBox Tunnel - Port %d", port);
+  wxString tip = wxString::Format("RocketBox Tunnel %s - Port %d",
+                                  ROCKETBOX_RELEASE_TAG_STR, port);
   if (!up) return tip + " - stopped";
   const auto rates = tunnel_tray::read_tunnel_rates(port);
   if (!rates.ok || rates.up_bps + rates.down_bps == 0) return tip + " - idle";

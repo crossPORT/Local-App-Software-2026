@@ -23,6 +23,17 @@ if [[ -n "$PWA_VERSION" ]]; then
   "
 fi
 
+# Embed release tag in the PWA Settings UI (Vite exposes VITE_*).
+if [[ -z "${VITE_ROCKETBOX_RELEASE_TAG:-}" ]]; then
+  if [[ -n "${ROCKETBOX_RELEASE_TAG:-}" ]]; then
+    export VITE_ROCKETBOX_RELEASE_TAG="$ROCKETBOX_RELEASE_TAG"
+  elif [[ -n "$PWA_VERSION" ]]; then
+    export VITE_ROCKETBOX_RELEASE_TAG="v$PWA_VERSION"
+  else
+    export VITE_ROCKETBOX_RELEASE_TAG="$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)"
+  fi
+fi
+
 cd "$WEB"
 npm ci
 npm test

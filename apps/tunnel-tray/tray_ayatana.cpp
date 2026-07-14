@@ -8,7 +8,7 @@ namespace tunnel_tray {
 namespace {
 
 #if defined(ROCKETBOX_TRAY_HAS_AYATANA)
-enum Act { kOpen = 1, kEnable, kDisable, kLog, kQuit };
+enum Act { kOpen = 1, kEnable, kDisable, kLog, kAbout, kQuit };
 
 void on_activate(GtkMenuItem*, gpointer data) {
   const auto act = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(data), "rb-act"));
@@ -28,6 +28,9 @@ void on_activate(GtkMenuItem*, gpointer data) {
       break;
     case kLog:
       if (cbs->open_log) cbs->open_log();
+      break;
+    case kAbout:
+      if (cbs->about) cbs->about();
       break;
     case kQuit:
       if (cbs->quit) cbs->quit();
@@ -106,6 +109,7 @@ void AyatanaTray::refresh_menu() {
   if (up) add_item(menu, "Disable tunnel", kDisable, &cbs_);
   else add_item(menu, "Enable tunnel", kEnable, &cbs_);
   add_item(menu, "Open log", kLog, &cbs_);
+  add_item(menu, "About", kAbout, &cbs_);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   add_item(menu, "Quit tray", kQuit, &cbs_);
   gtk_widget_show_all(menu);

@@ -151,6 +151,10 @@ export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: Se
             </div>
           )}
 
+          <p className="settings-hint" style={{ color: theme.muted }}>
+            Release {import.meta.env.VITE_ROCKETBOX_RELEASE_TAG ?? 'dev'}
+          </p>
+
           {error && (
             <p className="settings-error" style={{ color: theme.error }}>
               {error}

@@ -3,11 +3,16 @@
 #include "tray_theme.hpp"
 #include "tunnel_log_ui.hpp"
 
+#include "rocketbox_version.h"
+
+#include <wx/msgdlg.h>
+
 namespace {
 enum {
   ID_TRAY_ENABLE = wxID_HIGHEST + 1,
   ID_TRAY_DISABLE,
   ID_TRAY_LOG,
+  ID_TRAY_ABOUT,
   ID_TRAY_QUIT,
   ID_TRAY_OPEN,
 };
@@ -55,6 +60,7 @@ void TunnelTrayIcon::start_ayatana() {
   cbs.enable = [this] { CallAfter([this] { set_enabled(true); }); };
   cbs.disable = [this] { CallAfter([this] { set_enabled(false); }); };
   cbs.open_log = [this] { CallAfter([this] { open_log(); }); };
+  cbs.about = [this] { CallAfter([this] { show_about(); }); };
   cbs.quit = [this] { CallAfter([this] { quit_app(); }); };
   cbs.is_running = [this] { return proc_.running(); };
   if (!ayatana_.start(std::move(cbs))) return;
@@ -97,6 +103,7 @@ wxMenu* TunnelTrayIcon::build_menu() {
   if (proc_.running()) m->Append(ID_TRAY_DISABLE, wxT("Disable tunnel"));
   else m->Append(ID_TRAY_ENABLE, wxT("Enable tunnel"));
   m->Append(ID_TRAY_LOG, wxT("Open log"));
+  m->Append(ID_TRAY_ABOUT, wxT("About"));
   m->AppendSeparator();
   m->Append(ID_TRAY_QUIT, wxT("Quit tray"));
   return m;
@@ -118,6 +125,9 @@ void TunnelTrayIcon::on_menu(wxCommandEvent& ev) {
     case ID_TRAY_LOG:
       open_log();
       break;
+    case ID_TRAY_ABOUT:
+      show_about();
+      break;
     case ID_TRAY_QUIT:
       CallAfter([this] { quit_app(); });
       break;
@@ -127,6 +137,11 @@ void TunnelTrayIcon::on_menu(wxCommandEvent& ev) {
 }
 
 void TunnelTrayIcon::open_log() { tunnel_tray::show_tunnel_log(nullptr); }
+
+void TunnelTrayIcon::show_about() {
+  wxMessageBox(wxString::Format("RocketBox Tunnel Tray\n%s", ROCKETBOX_RELEASE_TAG_STR),
+               wxT("About"), wxOK | wxICON_INFORMATION);
+}
 
 void TunnelTrayIcon::quit_app() {
   proc_.stop();

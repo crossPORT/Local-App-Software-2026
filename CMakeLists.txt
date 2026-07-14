@@ -1,8 +1,24 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Release CI passes -DROCKETBOX_VERSION / -DROCKETBOX_RELEASE_TAG from the git tag.
+# Local builds: prefer git describe so binaries still show a useful tag.
 if(NOT DEFINED ROCKETBOX_VERSION OR ROCKETBOX_VERSION STREQUAL "")
-  set(ROCKETBOX_VERSION "0.1.0")
+  execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE _rb_git_desc
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  if(_rb_git_desc)
+    if(NOT DEFINED ROCKETBOX_RELEASE_TAG OR ROCKETBOX_RELEASE_TAG STREQUAL "")
+      set(ROCKETBOX_RELEASE_TAG "${_rb_git_desc}")
+    endif()
+    string(REGEX REPLACE "^v" "" _rb_raw "${_rb_git_desc}")
+    string(REGEX MATCH "^[0-9]+(\\.[0-9]+){0,2}" ROCKETBOX_VERSION "${_rb_raw}")
+  endif()
+  if(NOT ROCKETBOX_VERSION)
+    set(ROCKETBOX_VERSION "0.1.0")
+  endif()
 endif()
 if(NOT DEFINED ROCKETBOX_RELEASE_TAG OR ROCKETBOX_RELEASE_TAG STREQUAL "")
   set(ROCKETBOX_RELEASE_TAG "v${ROCKETBOX_VERSION}")
@@ -17,6 +33,8 @@ if(WIN32)
     # Prevent Windows.h min/max macros from breaking std::min/std::max.
     add_compile_definitions(NOMINMAX)
 endif()
+
+include("${CMAKE_SOURCE_DIR}/cmake/rocketbox_version.cmake")
 
 find_package(Threads REQUIRED)
 

@@ -84,6 +84,7 @@ target_link_libraries(rocketbox-tunnel-tray PRIVATE
   ${wxWidgets_LIBRARIES}
   ${_tray_gtk_libs}
 )
+rocketbox_target_version(rocketbox-tunnel-tray)
 # Prefer helper when available; protocol client shared with tunnel-helper.
 target_sources(rocketbox-tunnel-tray PRIVATE
   ${CMAKE_SOURCE_DIR}/rocketbox-tunnel/helper/protocol.cpp

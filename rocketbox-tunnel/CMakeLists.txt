@@ -42,6 +42,7 @@ target_include_directories(rocketbox-tunnel PRIVATE
   ${CMAKE_SOURCE_DIR}/third_party/wintun/include
 )
 target_link_libraries(rocketbox-tunnel PRIVATE rocketbox_sdk)
+rocketbox_target_version(rocketbox-tunnel)
 if(WIN32)
   target_link_libraries(rocketbox-tunnel PRIVATE iphlpapi ws2_32 fwpuclnt rpcrt4)
   # Same tray-mark icon as RocketBox.exe / shortcuts (Explorer + Task Manager).
@@ -60,7 +61,11 @@ add_executable(rocketbox-tunnel-helper
   ${_helper_server}
 )
 target_include_directories(rocketbox-tunnel-helper PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+rocketbox_target_version(rocketbox-tunnel-helper)
 target_compile_features(rocketbox-tunnel-helper PRIVATE cxx_std_17)
+if(WIN32)
+  target_sources(rocketbox-tunnel-helper PRIVATE "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")
+endif()
 
 install(TARGETS rocketbox-tunnel rocketbox-tunnel-helper
         RUNTIME DESTINATION bin COMPONENT RocketBoxTunnel)

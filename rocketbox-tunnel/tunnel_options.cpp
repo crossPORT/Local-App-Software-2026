@@ -1,5 +1,7 @@
 #include "tunnel_options.hpp"
 
+#include "rocketbox_version.h"
+
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -9,7 +11,7 @@ const char* tunnel_transport_name(rocketbox::TransportMode t) {
 }
 
 void tunnel_usage(const char* argv0) {
-  std::cerr << "RocketBox tunnel (USB ↔ host IP)\n"
+  std::cerr << "RocketBox tunnel (USB ↔ host IP) " << ROCKETBOX_RELEASE_TAG_STR << "\n"
             << "Usage: " << argv0 << " [options]\n"
             << "  (USB default)      Port from cable serial → 10.64.0.N\n"
             << "  --port N           USB: pick among multiple cables; sim: required\n"
@@ -18,6 +20,7 @@ void tunnel_usage(const char* argv0) {
             << "  --iface NAME       TUN interface name (default: rbN)\n"
             << "  --no-netns         Keep TUN in the host network namespace\n"
             << "  --ping M           ICMP echo to peer port M, then exit\n"
+            << "  -V, --version      Print release tag and exit\n"
             << "  SIGHUP / expose file  Reload expose (Linux SIGHUP; all OS: rewrite expose file)\n";
 }
 
@@ -49,6 +52,9 @@ bool tunnel_parse_args(int argc, char** argv, TunnelOptions& out) {
       out.iface = need("--iface");
     } else if (a == "--no-netns") {
       out.use_netns = false;
+    } else if (a == "-V" || a == "--version") {
+      std::cout << "rocketbox-tunnel " << ROCKETBOX_RELEASE_TAG_STR << "\n";
+      return false;
     } else if (a == "-h" || a == "--help") {
       tunnel_usage(argv[0]);
       return false;

@@ -11,6 +11,7 @@
 #include "tunnel_stats.hpp"
 
 #include "rocketbox/sdk.h"
+#include "rocketbox_version.h"
 
 #include <atomic>
 #include <chrono>
@@ -42,7 +43,7 @@ int main(int argc, char** argv) {
   TunnelOptions opt;
   try {
     if (!tunnel_parse_args(argc, argv, opt)) {
-      return 1;
+      return 0;  // --help / --version
     }
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
@@ -57,6 +58,7 @@ int main(int argc, char** argv) {
 #endif
 
   try {
+    rocketbox_tunnel_log(std::string("rocketbox-tunnel ") + ROCKETBOX_RELEASE_TAG_STR);
     rocketbox_tunnel_log(std::string("connect transport ") + tunnel_transport_name(opt.transport) +
                          (opt.port ? " prefer Port " + std::to_string(opt.port) : " (auto Port)"));
     auto transport = open_tunnel_transport(opt.transport, opt.port);

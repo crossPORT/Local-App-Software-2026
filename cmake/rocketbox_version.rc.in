@@ -1,0 +1,29 @@
+/* Windows PE version resource — Explorer Properties → Details. */
+1 VERSIONINFO
+FILEVERSION @ROCKETBOX_FILEVERSION_CSV@
+PRODUCTVERSION @ROCKETBOX_FILEVERSION_CSV@
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "crossPORT\0"
+      VALUE "FileDescription", "RocketBox\0"
+      VALUE "FileVersion", "@ROCKETBOX_VERSION@\0"
+      VALUE "InternalName", "RocketBox\0"
+      VALUE "LegalCopyright", "Copyright (C) crossPORT\0"
+      VALUE "OriginalFilename", "RocketBox.exe\0"
+      VALUE "ProductName", "RocketBox\0"
+      VALUE "ProductVersion", "@ROCKETBOX_RELEASE_TAG@\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

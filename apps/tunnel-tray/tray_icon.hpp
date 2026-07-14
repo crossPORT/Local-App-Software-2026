@@ -36,6 +36,7 @@ private:
   bool apply_expose();
   void quit_app();
   void open_log();
+  void show_about();
   void start_ayatana();
   void write_icon_files();
   tunnel_tray::TunnelConfig config_from_ui() const;

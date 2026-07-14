@@ -14,6 +14,7 @@ add_executable(rocketbox
     incoming_dialog.cpp
     link_release_dialog.cpp
     settings_dialog.cpp
+    settings_ui_style.cpp
     event_log_dialog.cpp
 )
 
@@ -47,6 +48,7 @@ target_link_libraries(rocketbox PRIVATE
     rocketbox_sdk
     ${wxWidgets_LIBRARIES}
 )
+rocketbox_target_version(rocketbox)
 
 target_compile_features(rocketbox PRIVATE cxx_std_17)
 

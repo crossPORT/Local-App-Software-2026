@@ -10,6 +10,7 @@ struct AyatanaCallbacks {
   std::function<void()> enable;
   std::function<void()> disable;
   std::function<void()> open_log;
+  std::function<void()> about;
   std::function<void()> quit;
   std::function<bool()> is_running;
 };

@@ -1,0 +1,6 @@
+#pragma once
+
+/** Numeric semver for CMake/project (e.g. 0.1.22). */
+#define ROCKETBOX_VERSION_STR "@ROCKETBOX_VERSION@"
+/** Full release tag as shipped (e.g. v0.1.22-tunnel). */
+#define ROCKETBOX_RELEASE_TAG_STR "@ROCKETBOX_RELEASE_TAG@"
