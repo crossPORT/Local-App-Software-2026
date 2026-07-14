@@ -44,13 +44,13 @@ add_executable(rocketbox-tunnel-tray
   usb_ports_ui.cpp
   expose_presets.cpp
   tunnel_args.cpp
+  tray_gnome.cpp
   platform/stats_paths.cpp
 )
 if(NOT WIN32)
   target_sources(rocketbox-tunnel-tray PRIVATE
     tunnel_hup.cpp
     tunnel_proc_reload.cpp
-    tray_gnome.cpp
     ${CMAKE_SOURCE_DIR}/rocketbox-tunnel/expose_file.cpp
   )
 endif()
