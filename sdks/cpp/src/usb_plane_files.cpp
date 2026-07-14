@@ -42,6 +42,16 @@ void UsbPlane::send_bytes(const std::vector<uint8_t>& payload, const std::string
     send_raw_file(payload, usb_protocol::kFrameKindPayload, filename);
 }
 
+bool UsbPlane::exchange_bytes(const std::vector<uint8_t>& request, std::vector<uint8_t>* reply,
+                              unsigned reply_timeout_ms) {
+    if (!controller_ || !reply) {
+        return false;
+    }
+    auto r = controller_->exchange_buffer(port_index(), request.data(), request.size(), reply,
+                                          reply_timeout_ms, usb_protocol::kFrameKindPayload);
+    return r.ok;
+}
+
 void UsbPlane::send_session_message(const std::vector<uint8_t>& message) {
     send_raw_file(message, usb_protocol::kFrameKindSession, {});
 }

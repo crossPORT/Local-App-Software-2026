@@ -46,6 +46,13 @@ void UsbPlane::connect() {
         controller_.reset();
         throw std::runtime_error("no RocketBox USB device");
     }
+    if (stream_mode_) {
+        std::string warm_err;
+        if (!controller_->warm_stream_device(&warm_err)) {
+            controller_.reset();
+            throw std::runtime_error(warm_err.empty() ? "stream USB open failed" : warm_err);
+        }
+    }
     // Eager serial→leg while the interface is still free (693da0a fabric_leg).
     (void)controller_->rocketbox_device_serial();
     (void)controller_->resolved_port_index();

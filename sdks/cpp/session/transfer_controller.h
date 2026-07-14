@@ -14,6 +14,7 @@
 #include <thread>
 
 struct libusb_context;
+struct libusb_device_handle;
 
 enum class TransferKind {
     Send,
@@ -75,6 +76,10 @@ public:
     TransferResult receive_buffer(int port_index, std::vector<uint8_t>* out,
                                   unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
                                   uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
+    /** Stream: one lock, send then wait for a payload frame (tunnel --ping). */
+    TransferResult exchange_buffer(int port_index, const uint8_t* data, size_t len,
+                                   std::vector<uint8_t>* reply, unsigned reply_timeout_ms,
+                                   uint8_t frame_kind = usb_protocol::kFrameKindPayload);
     TransferResult loopback_on_ports(const std::string& path,
                                      int send_port_index,
                                      int recv_port_index,
@@ -93,8 +98,9 @@ public:
     void run_payload_send(const std::string& path, ProgressCallback progress_cb = nullptr);
     void run_payload_receive(const std::string& out_path,
                              ProgressCallback progress_cb = nullptr);
-    /** Tunnel: skip clear_halt on each open so streaming reopen stays in sync. */
-    void set_stream_mode(bool enabled) { stream_mode_ = enabled; }
+    /** Tunnel: skip clear_halt; keep one claimed handle for datagrams. */
+    void set_stream_mode(bool enabled);
+    bool warm_stream_device(std::string* err = nullptr);
     int device_count() const;
     bool rocketbox_port_available() const;
     std::string device_label() const;
@@ -106,6 +112,8 @@ public:
     std::vector<RocketBoxUsbDevice> list_rocketbox_devices() const;
 
 private:
+    bool ensure_stream_device(std::string* err);
+    void release_stream_device();
     void start_worker(TransferKind kind,
                       const std::string& path,
                       const SendMeta& meta = {},
@@ -135,4 +143,5 @@ private:
     int last_switch_dest_ = -1;
     bool switch_preserve_ = false;
     bool stream_mode_ = false;
+    libusb_device_handle* stream_dev_ = nullptr;
 };

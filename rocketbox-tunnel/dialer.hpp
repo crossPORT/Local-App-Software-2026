@@ -24,6 +24,9 @@ public:
     bool ensure(int dest_port);
 
     void send_message(const std::vector<uint8_t>& msg);
+    /** Send and wait for one framed reply (uses transport exchange when available). */
+    bool exchange_message(const std::vector<uint8_t>& msg, std::vector<uint8_t>* reply,
+                          unsigned timeout_ms);
     void on_message(MsgHandler handler);
     void note_activity();
     /** Remember peer from an inbound IP packet (avoids blank active_peer on reply path). */

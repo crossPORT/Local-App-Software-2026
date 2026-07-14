@@ -97,6 +97,17 @@ public:
                                               FileProgressFn progress);
     /** Tunnel streaming: skip clear_halt on each USB open (default: App clears). */
     virtual void set_stream_mode(bool) {}
+    /**
+     * Send payload and wait for one data frame (tunnel --ping).
+     * Default: unsupported (returns false).
+     */
+    virtual bool exchange_bytes(const std::vector<uint8_t>& request, std::vector<uint8_t>* reply,
+                                unsigned reply_timeout_ms) {
+        (void)request;
+        (void)reply;
+        (void)reply_timeout_ms;
+        return false;
+    }
 };
 
 std::unique_ptr<RocketBoxTransport> create_rocketbox_transport(TransportMode mode,

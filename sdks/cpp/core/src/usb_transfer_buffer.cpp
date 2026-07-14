@@ -1,4 +1,5 @@
 #include "usb_transfer.h"
+#include "usb_transfer_handle.h"
 #include "usb_device_open.h"
 #include "usb_diag.h"
 #include "usb_frame.h"
@@ -9,7 +10,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <string>
 #include <vector>
 
 namespace {
@@ -64,34 +64,30 @@ bool discard_bytes(libusb_device_handle* h, uint64_t nbytes, int timeout_ms) {
 
 }  // namespace
 
-TransferResult send_buffer_core(libusb_context* ctx, const uint8_t* data, size_t len, int port_index,
-                                unsigned timeout_ms, uint8_t frame_kind, const char* filename,
-                                bool reset_data_endpoints) {
+TransferResult send_buffer_on_handle(libusb_device_handle* handle, const uint8_t* data, size_t len,
+                                     unsigned timeout_ms, uint8_t frame_kind, const char* filename) {
   TransferResult result{};
   result.expected_bytes = len;
+  if (!handle) {
+    result.error_message = "null handle";
+    return result;
+  }
   if (!data && len > 0) {
     result.error_message = "null buffer";
     return result;
   }
-  libusb_device_handle* handle =
-      open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
-  if (!handle) return result;
-
   RocketBxHeader hdr{};
   fill_rocketbx_header(&hdr, len, frame_kind, filename);
   const auto t0 = std::chrono::steady_clock::now();
   if (!bulk_write(handle, reinterpret_cast<const uint8_t*>(&hdr), sizeof(hdr),
                   static_cast<int>(timeout_ms))) {
     result.error_message = "Header send failed";
-    close_device(handle);
     return result;
   }
   if (len > 0 && !bulk_write(handle, data, len, static_cast<int>(timeout_ms))) {
     result.error_message = "Payload send failed";
-    close_device(handle);
     return result;
   }
-  close_device(handle);
   const double sec =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   result.ok = true;
@@ -101,19 +97,14 @@ TransferResult send_buffer_core(libusb_context* ctx, const uint8_t* data, size_t
   return result;
 }
 
-TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* out, int port_index,
-                                   unsigned header_timeout_ms, uint8_t expected_frame_kind,
-                                   bool reset_data_endpoints) {
+TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vector<uint8_t>* out,
+                                        unsigned header_timeout_ms, uint8_t expected_frame_kind) {
   TransferResult result{};
-  if (!out) {
-    result.error_message = "null out";
+  if (!handle || !out) {
+    result.error_message = "null handle/out";
     return result;
   }
   out->clear();
-  libusb_device_handle* handle =
-      open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
-  if (!handle) return result;
-
   using Clock = std::chrono::steady_clock;
   const auto deadline = Clock::now() + std::chrono::milliseconds(header_timeout_ms);
   RocketBxHeader hdr{};
@@ -134,14 +125,12 @@ TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* ou
           std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count());
       if (!discard_bytes(handle, hdr.file_size, std::max(r2, 1))) {
         result.error_message = "Stray session frame read failed";
-        close_device(handle);
         return result;
       }
       continue;
     }
     if (expected_frame_kind != 0 && hdr.frame_kind != expected_frame_kind) {
       result.error_message = "Unexpected frame kind in header";
-      close_device(handle);
       return result;
     }
     got = true;
@@ -149,25 +138,48 @@ TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* ou
   }
   if (!got) {
     result.error_message = "Header read failed";
-    close_device(handle);
     return result;
   }
-
   result.expected_bytes = hdr.file_size;
   out->resize(static_cast<size_t>(hdr.file_size));
-  if (hdr.file_size > 0) {
-    if (!bulk_read(handle, out->data(), out->size(), static_cast<int>(payload_timeout_ms()))) {
-      result.error_message = "Payload read failed";
-      out->clear();
-      close_device(handle);
-      return result;
-    }
+  if (hdr.file_size > 0 &&
+      !bulk_read(handle, out->data(), out->size(), static_cast<int>(payload_timeout_ms()))) {
+    result.error_message = "Payload read failed";
+    out->clear();
+    return result;
   }
-  close_device(handle);
   USB_DIAG("[USB-DIAG] buffer_recv ok kind=%u bytes=%llu\n",
            static_cast<unsigned>(hdr.frame_kind),
            static_cast<unsigned long long>(hdr.file_size));
   result.ok = true;
   result.bytes_transferred = hdr.file_size;
+  return result;
+}
+
+TransferResult send_buffer_core(libusb_context* ctx, const uint8_t* data, size_t len, int port_index,
+                                unsigned timeout_ms, uint8_t frame_kind, const char* filename,
+                                bool reset_data_endpoints) {
+  TransferResult result{};
+  libusb_device_handle* handle =
+      open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
+  if (!handle) return result;
+  result = send_buffer_on_handle(handle, data, len, timeout_ms, frame_kind, filename);
+  close_device(handle);
+  return result;
+}
+
+TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* out, int port_index,
+                                   unsigned header_timeout_ms, uint8_t expected_frame_kind,
+                                   bool reset_data_endpoints) {
+  TransferResult result{};
+  if (!out) {
+    result.error_message = "null out";
+    return result;
+  }
+  libusb_device_handle* handle =
+      open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
+  if (!handle) return result;
+  result = receive_buffer_on_handle(handle, out, header_timeout_ms, expected_frame_kind);
+  close_device(handle);
   return result;
 }

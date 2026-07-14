@@ -86,6 +86,26 @@ void CircuitDialer::send_message(const std::vector<uint8_t>& msg) {
     note_activity();
 }
 
+bool CircuitDialer::exchange_message(const std::vector<uint8_t>& msg, std::vector<uint8_t>* reply,
+                                     unsigned timeout_ms) {
+    if (!reply) return false;
+    std::vector<uint8_t> framed(4 + msg.size());
+    write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
+    if (!msg.empty()) {
+        std::memcpy(framed.data() + 4, msg.data(), msg.size());
+    }
+    std::vector<uint8_t> raw;
+    if (!transport_.exchange_bytes(framed, &raw, timeout_ms)) {
+        return false;
+    }
+    if (raw.size() < 4) return false;
+    const uint32_t len = read_u32_be(raw.data());
+    if (raw.size() < 4u + len) return false;
+    reply->assign(raw.begin() + 4, raw.begin() + 4 + static_cast<std::ptrdiff_t>(len));
+    note_activity();
+    return true;
+}
+
 void CircuitDialer::on_message(MsgHandler handler) {
     std::lock_guard<std::mutex> lock(mu_);
     on_msg_ = std::move(handler);

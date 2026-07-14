@@ -42,6 +42,8 @@ public:
     bool try_receive_session_message(unsigned header_timeout_ms, std::vector<uint8_t>* out) override;
 
     void send_bytes(const std::vector<uint8_t>& payload, const std::string& filename) override;
+    bool exchange_bytes(const std::vector<uint8_t>& request, std::vector<uint8_t>* reply,
+                        unsigned reply_timeout_ms) override;
     ParsedHeader receive_header() override;
     std::vector<uint8_t> receive_payload(uint64_t file_size) override;
     std::vector<uint8_t> receive_bytes() override;
