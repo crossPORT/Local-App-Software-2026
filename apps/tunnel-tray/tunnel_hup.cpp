@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cstring>
 #include <map>
+#include <csignal>
 #include <unistd.h>
 
 namespace tunnel_tray {
