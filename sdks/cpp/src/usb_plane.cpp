@@ -46,6 +46,11 @@ void UsbPlane::connect() {
         controller_.reset();
         throw std::runtime_error("no RocketBox USB device");
     }
+    // Cache serial→leg BEFORE stream claim. Windows often cannot reopen the same
+    // device for a string descriptor while stream_dev_ holds it — empty serial
+    // then falls back to libusb index and looks like the wrong Port.
+    (void)controller_->rocketbox_device_serial();
+    (void)controller_->resolved_port_index();
     if (stream_mode_) {
         std::string warm_err;
         if (!controller_->warm_stream_device(&warm_err)) {
@@ -53,9 +58,6 @@ void UsbPlane::connect() {
             throw std::runtime_error(warm_err.empty() ? "stream USB open failed" : warm_err);
         }
     }
-    // Eager serial→leg while the interface is still free (693da0a fabric_leg).
-    (void)controller_->rocketbox_device_serial();
-    (void)controller_->resolved_port_index();
     connected_ = true;
     bool want_listen = false;
     {
