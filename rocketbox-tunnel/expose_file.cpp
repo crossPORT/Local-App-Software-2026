@@ -1,17 +1,39 @@
 #include "expose_file.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 
+namespace {
+
+std::string expose_dir() {
+#if defined(_WIN32)
+  if (const char* p = std::getenv("PROGRAMDATA")) return std::string(p) + "\\RocketBox";
+  return "C:\\ProgramData\\RocketBox";
+#else
+  return "/tmp/rocketbox";
+#endif
+}
+
+std::string join_path(const std::string& dir, const std::string& file) {
+#if defined(_WIN32)
+  return dir + "\\" + file;
+#else
+  return dir + "/" + file;
+#endif
+}
+
+}  // namespace
+
 std::string rocketbox_expose_path(int display_port) {
-  return "/tmp/rocketbox/tunnel-" + std::to_string(display_port) + ".expose";
+  return join_path(expose_dir(), "tunnel-" + std::to_string(display_port) + ".expose");
 }
 
 void write_expose_file(int display_port, const std::vector<ExposeRule>& rules) {
   if (display_port < 1 || display_port > 4) return;
   std::error_code ec;
-  std::filesystem::create_directories("/tmp/rocketbox", ec);
+  std::filesystem::create_directories(expose_dir(), ec);
   const auto path = rocketbox_expose_path(display_port);
   std::ofstream out(path, std::ios::trunc);
   if (!out) return;

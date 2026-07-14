@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -91,16 +92,31 @@ int main(int argc, char** argv) {
       rocketbox_tunnel_log(tun.name() + " " + local_ip + "/24 netns " + ns);
     } else {
       tun.configure_lan(local_ip);
-      rocketbox_tunnel_log(tun.name() + " " + local_ip + "/24");
+      tun.install_expose_filter(port, opt.expose);
+      rocketbox_tunnel_log(tun.name() + " " + local_ip + "/24 expose " +
+                           std::to_string(opt.expose.size()) + " rules");
     }
 
     CircuitDialer dialer(*transport, port);
     TunnelBridge bridge(tun, dialer, port);
     TunnelStatsPublisher stats(port, bridge, transport->serial());
-    rocketbox_tunnel_log("bridging (Ctrl+C to stop; SIGHUP reloads expose)");
+    rocketbox_tunnel_log("bridging (Ctrl+C to stop; reload expose via SIGHUP or expose file)");
     std::thread stopper([&] {
+      std::error_code ec0;
+      auto last_expose = std::filesystem::last_write_time(rocketbox_expose_path(port), ec0);
+      bool have_mtime = !ec0;
       while (!g_stop) {
-        if (g_reload.exchange(false)) {
+        bool do_reload = g_reload.exchange(false);
+        std::error_code ec;
+        const auto mtime = std::filesystem::last_write_time(rocketbox_expose_path(port), ec);
+        if (!ec && have_mtime && mtime != last_expose) {
+          last_expose = mtime;
+          do_reload = true;
+        } else if (!ec && !have_mtime) {
+          last_expose = mtime;
+          have_mtime = true;
+        }
+        if (do_reload) {
           try {
             const auto rules = read_expose_file(port);
             tun.reload_expose(rules);

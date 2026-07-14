@@ -95,6 +95,13 @@ void TunDevice::isolate_in_netns(const std::string& netns, const std::string& lo
   gateway_->install(local_port, netns, expose);
 }
 
+void TunDevice::install_expose_filter(int local_port, const std::vector<ExposeRule>& expose) {
+  // Without netns, Linux has no DNAT path; empty filter = no host publish (same as default).
+  (void)local_port;
+  (void)expose;
+  gateway_.reset();
+}
+
 void TunDevice::reload_expose(const std::vector<ExposeRule>& expose) {
   if (gateway_) {
     gateway_->set_expose(expose);

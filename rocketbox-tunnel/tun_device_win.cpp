@@ -2,6 +2,7 @@
 #include "wintun_load.hpp"
 
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -97,7 +98,10 @@ void TunDevice::open(const std::string& iface_name) {
   }
   const std::wstring wname = to_wide(iface_name.empty() ? "rb" : iface_name);
   GUID guid = {0x52b0c1a1, 0x0b64, 0x4e01, {0x9a, 0x0a, 0x52, 0x6f, 0x63, 0x6b, 0x42, 0x78}};
-  c->adapter = c->fns.CreateAdapter(wname.c_str(), L"RocketBox", &guid);
+  c->adapter = c->fns.OpenAdapter ? c->fns.OpenAdapter(wname.c_str()) : nullptr;
+  if (!c->adapter) {
+    c->adapter = c->fns.CreateAdapter(wname.c_str(), L"RocketBox", &guid);
+  }
   if (!c->adapter) {
     const DWORD e = GetLastError();
     destroy_ctx(c);
@@ -129,9 +133,18 @@ void TunDevice::isolate_in_netns(const std::string&, const std::string&, int,
   throw std::runtime_error("netns isolation is Linux-only; use --no-netns on Windows");
 }
 
-void TunDevice::reload_expose(const std::vector<ExposeRule>&) {}
+void TunDevice::install_expose_filter(int local_port, const std::vector<ExposeRule>& expose) {
+  gateway_.reset();
+  gateway_ = std::make_unique<HostGateway>();
+  gateway_->install(local_port, name_, expose);
+}
+
+void TunDevice::reload_expose(const std::vector<ExposeRule>& expose) {
+  if (gateway_) gateway_->set_expose(expose);
+}
 
 void TunDevice::close() {
+  gateway_.reset();
   if (win_) {
     destroy_ctx(ctx(win_));
     win_ = nullptr;

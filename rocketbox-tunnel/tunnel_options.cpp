@@ -18,7 +18,7 @@ void tunnel_usage(const char* argv0) {
             << "  --iface NAME       TUN interface name (default: rbN)\n"
             << "  --no-netns         Keep TUN in the host network namespace\n"
             << "  --ping M           ICMP echo to peer port M, then exit\n"
-            << "  SIGHUP             Reload expose from /tmp/rocketbox/tunnel-N.expose\n";
+            << "  SIGHUP / expose file  Reload expose (Linux SIGHUP; all OS: rewrite expose file)\n";
 }
 
 bool tunnel_parse_args(int argc, char** argv, TunnelOptions& out) {

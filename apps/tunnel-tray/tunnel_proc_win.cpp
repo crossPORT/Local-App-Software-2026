@@ -2,6 +2,7 @@
 #include "helper_launch_win.hpp"
 #include "platform/stats_paths.hpp"
 #include "tunnel_args.hpp"
+#include "tunnel_hup.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -92,14 +93,18 @@ bool TunnelProcess::running() const {
 bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   if (running()) {
     const int live = live_tunnel_port();
-    if (live > 0) port_ = live;
-    else if (cfg.port >= 1 && cfg.port <= 4) port_ = cfg.port;
+    TunnelConfig adopted = cfg;
+    if (live > 0) {
+      adopted.port = live;
+      port_ = live;
+    }
+    std::string ignore;
+    (void)reload(adopted, ignore);
     return true;
   }
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
   TunnelConfig run = cfg;
   run.use_netns = false;
-  run.expose.clear();
   const std::string tail = build_tunnel_arg_tail(run, bin);
 
   if (!ensure_helper_elevated(error)) return false;
@@ -143,27 +148,19 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   return false;
 }
 
-bool TunnelProcess::reload(const TunnelConfig&, std::string& error) {
-  error = "expose reload is not supported on Windows yet";
-  return false;
-}
-
-void TunnelProcess::stop() {
-  if (helper_managed_) {
-    std::string reply, herr;
-    (void)tunnel_helper::send_command("STOP", reply, herr);
-    helper_managed_ = false;
-    pid_ = 0;
-    return;
+bool TunnelProcess::reload(const TunnelConfig& cfg, std::string& error) {
+  int port = cfg.port;
+  if (!live_tunnel_holds_port(port)) {
+    const int live = live_tunnel_port();
+    if (live > 0) port = live;
   }
-  if (pid_ <= 0) return;
-  HANDLE h = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, static_cast<DWORD>(pid_));
-  if (h) {
-    TerminateProcess(h, 1);
-    WaitForSingleObject(h, 5000);
-    CloseHandle(h);
+  if (port < 1 || port > 4) {
+    error = "no Port to reload expose";
+    return false;
   }
-  pid_ = 0;
+  write_expose_from_endpoints(port, cfg.expose);
+  port_ = port;
+  return true;
 }
 
 }  // namespace tunnel_tray

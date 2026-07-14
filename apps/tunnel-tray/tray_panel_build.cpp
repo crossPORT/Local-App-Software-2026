@@ -38,6 +38,11 @@ void TrayPanel::build_ui() {
   root->Add(expose_lbl, 0, wxLEFT | wxRIGHT, 12);
   list_ = new wxCheckListBox(this, wxID_ANY);
   root->Add(list_, 1, wxEXPAND | wxLEFT | wxRIGHT, 12);
+  auto* fw_note = new wxStaticText(
+      this, wxID_ANY,
+      wxT("OS firewall may need rules so ICMP and exposed services pass through the tunnel."));
+  fw_note->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+  root->Add(fw_note, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
 
   auto* bulk = new wxBoxSizer(wxHORIZONTAL);
   auto* all = new wxButton(this, wxID_ANY, wxT("Select all"));
@@ -66,8 +71,8 @@ void TrayPanel::build_ui() {
   SetBackgroundColour(bg);
   for (wxWindow* w : {static_cast<wxWindow*>(status_), static_cast<wxWindow*>(cable_lbl_),
                        static_cast<wxWindow*>(transport_lbl), static_cast<wxWindow*>(expose_lbl),
-                       static_cast<wxWindow*>(enable_), static_cast<wxWindow*>(usb_),
-                       static_cast<wxWindow*>(sim_)}) {
+                       static_cast<wxWindow*>(fw_note), static_cast<wxWindow*>(enable_),
+                       static_cast<wxWindow*>(usb_), static_cast<wxWindow*>(sim_)}) {
     w->SetBackgroundColour(bg);
   }
 

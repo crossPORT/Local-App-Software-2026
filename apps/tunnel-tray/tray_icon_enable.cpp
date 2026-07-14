@@ -67,7 +67,9 @@ bool TunnelTrayIcon::set_enabled(bool want_on) {
     rocketbox_tunnel_log("[tray] tunnel running");
   } else {
     rocketbox_tunnel_log("[tray] disable");
+    stop_in_progress_ = true;
     proc_.stop();
+    stop_in_progress_ = false;
   }
   persist_settings(want_on);
   refresh_icon();
@@ -95,7 +97,7 @@ bool TunnelTrayIcon::apply_expose() {
     wxMessageBox(err, "RocketBox Tunnel", wxOK | wxICON_ERROR);
     return false;
   }
-  rocketbox_tunnel_log("[tray] expose reloaded (SIGHUP)");
+  rocketbox_tunnel_log("[tray] expose reloaded");
   refresh_icon();
   if (panel_ && panel_->is_shown()) {
     panel_->sync_from_host(controls_now(), proc_.running());

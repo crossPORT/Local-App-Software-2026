@@ -14,6 +14,7 @@
 struct WinTunFns {
   HMODULE dll = nullptr;
   WINTUN_CREATE_ADAPTER_FUNC* CreateAdapter = nullptr;
+  WINTUN_OPEN_ADAPTER_FUNC* OpenAdapter = nullptr;
   WINTUN_CLOSE_ADAPTER_FUNC* CloseAdapter = nullptr;
   WINTUN_GET_ADAPTER_LUID_FUNC* GetAdapterLuid = nullptr;
   WINTUN_START_SESSION_FUNC* StartSession = nullptr;

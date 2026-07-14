@@ -40,6 +40,8 @@ bool wintun_load(WinTunFns& out, std::string& error) {
   // Map short names to Wintun* exports.
   out.CreateAdapter =
       reinterpret_cast<WINTUN_CREATE_ADAPTER_FUNC*>(GetProcAddress(out.dll, "WintunCreateAdapter"));
+  out.OpenAdapter =
+      reinterpret_cast<WINTUN_OPEN_ADAPTER_FUNC*>(GetProcAddress(out.dll, "WintunOpenAdapter"));
   out.CloseAdapter =
       reinterpret_cast<WINTUN_CLOSE_ADAPTER_FUNC*>(GetProcAddress(out.dll, "WintunCloseAdapter"));
   out.GetAdapterLuid = reinterpret_cast<WINTUN_GET_ADAPTER_LUID_FUNC*>(

@@ -6,8 +6,8 @@
 #include <vector>
 
 /**
- * Host↔fabric gateway: routes + optional TCP/UDP port publish (DNAT allowlist).
- * Default expose list is empty — no host services on the fabric IP.
+ * Tunnel expose filter: ICMP on fabric IP always; TCP/UDP allowlist only.
+ * Linux: netns + DNAT. Windows: WFP. macOS: pf. Second arg is netns (Linux) or iface.
  */
 class HostGateway {
 public:
@@ -17,8 +17,9 @@ public:
   HostGateway(const HostGateway&) = delete;
   HostGateway& operator=(const HostGateway&) = delete;
 
-  void install(int local_port, const std::string& netns, const std::vector<ExposeRule>& expose);
-  /** Rebuild DNAT allowlist without tearing down veth/netns (SIGHUP). */
+  void install(int local_port, const std::string& netns_or_iface,
+               const std::vector<ExposeRule>& expose);
+  /** Rebuild allowlist without tearing down the tunnel path. */
   void set_expose(const std::vector<ExposeRule>& expose);
   void remove();
 
@@ -29,4 +30,5 @@ private:
   std::string netns_;
   std::string host_veth_;
   std::string ns_veth_;
+  void* platform_ = nullptr;  // OS filter state (WFP / pf)
 };

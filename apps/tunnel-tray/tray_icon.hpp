@@ -61,4 +61,5 @@ private:
   bool last_up_ = false;
   bool last_traffic_ = false;
   bool last_pulse_ = true;
+  bool stop_in_progress_ = false;
 };

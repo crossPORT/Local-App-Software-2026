@@ -47,17 +47,21 @@ add_executable(rocketbox-tunnel-tray
   tray_gnome.cpp
   platform/stats_paths.cpp
 )
+target_sources(rocketbox-tunnel-tray PRIVATE
+  expose_write.cpp
+  ${CMAKE_SOURCE_DIR}/rocketbox-tunnel/expose_file.cpp
+)
 if(NOT WIN32)
   target_sources(rocketbox-tunnel-tray PRIVATE
     tunnel_hup.cpp
     tunnel_proc_reload.cpp
-    ${CMAKE_SOURCE_DIR}/rocketbox-tunnel/expose_file.cpp
   )
 endif()
 
 if(WIN32)
   target_sources(rocketbox-tunnel-tray PRIVATE
     tunnel_proc_win.cpp
+    tunnel_proc_win_stop.cpp
     helper_launch_win.cpp
     socket_owners_win.cpp
     "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")

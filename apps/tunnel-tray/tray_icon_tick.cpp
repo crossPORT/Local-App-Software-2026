@@ -51,6 +51,11 @@ void TunnelTrayIcon::on_tick(wxTimerEvent&) {
     dark_theme_ = dark;
     reload_icons();
   }
+  if (stop_in_progress_) {
+    if (panel_ && panel_->is_shown()) panel_->sync_running(false, port_);
+    refresh_icon();
+    return;
+  }
   const bool up = proc_.running();
   if (up) {
     const int live = tunnel_tray::live_tunnel_port();

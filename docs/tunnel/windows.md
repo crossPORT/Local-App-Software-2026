@@ -56,8 +56,18 @@ rocketbox-tunnel --port 3
 ```
 
 USB defaults to auto Port from serial. `--port` only disambiguates multiple cables.
-Run elevated (UAC). Only one tunnel per Port (lock file). `--expose` is not enabled
-on Windows yet.
+Run elevated (UAC). Only one tunnel per Port (lock file).
+
+`--expose SPEC` publishes host TCP/UDP on the fabric IP (`10.64.0.N`); ICMP echo is
+always allowed. Empty expose = no host services. Reload by rewriting
+`%PROGRAMDATA%\RocketBox\tunnel-N.expose` (tray Apply does this).
+
+The tray helper runs **one** tunnel child. For a second Port (e.g. peer ping), run
+another elevated CLI:
+
+```text
+rocketbox-tunnel --port 2 --expose 445
+```
 
 ## Troubleshooting
 
@@ -69,3 +79,5 @@ on Windows yet.
   `rocketbox-tunnel-helper.exe` as Administrator, then Enable in the tray.
 - **Helper pipe not available** — start `rocketbox-tunnel-helper` elevated; tray will
   also offer UAC on Enable.
+- **Ping / SMB blocked** — check expose list, then Windows Firewall for ICMP and the
+  service ports on `10.64.0.0/24`.

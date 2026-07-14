@@ -29,14 +29,18 @@ Stats: `$TMPDIR/rocketbox/tunnel-<N>.stats`
 ## CLI
 
 ```bash
-sudo rocketbox-tunnel --port 3 --no-netns
+sudo rocketbox-tunnel --port 3 --no-netns --expose tcp:22,445
 ```
 
-`--expose` / pf NAT is not enabled in the macOS MVP — omit expose or use Linux.
-Default is `--no-netns` (required).
+`--expose SPEC` publishes host TCP/UDP on the fabric IP via a pf anchor; ICMP echo
+is always allowed. Empty expose = no host services. Requires elevated `pfctl`.
+Default is `--no-netns` (required). Reload by updating the expose file (tray Apply)
+or SIGHUP.
 
 ## Troubleshooting
 
 - **Gatekeeper** — right-click → Open on first run.
 - **USB busy** — quit RocketBox App on that cable.
 - **utun / route errors** — run with administrator privileges.
+- **pfctl load failed** — enable pf (`sudo pfctl -e`) and re-run elevated.
+- **Ping / services blocked** — check expose list, then macOS firewall.

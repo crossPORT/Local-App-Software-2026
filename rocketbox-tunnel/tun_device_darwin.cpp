@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -78,6 +79,7 @@ void TunDevice::open(const std::string& /*iface_name*/) {
 
 void TunDevice::configure_lan(const std::string& local_ip) {
   if (fd_ < 0 || name_.empty()) throw std::runtime_error("TUN not open");
+  gateway_.reset();
   run_or_throw("ifconfig " + name_ + " inet " + local_ip + " " + local_ip + " netmask 255.255.255.0 up");
   run_or_throw("route -n add -net 10.64.0.0/24 -interface " + name_);
 }
@@ -87,9 +89,18 @@ void TunDevice::isolate_in_netns(const std::string&, const std::string&, int,
   throw std::runtime_error("netns isolation is Linux-only; use --no-netns on macOS");
 }
 
-void TunDevice::reload_expose(const std::vector<ExposeRule>&) {}
+void TunDevice::install_expose_filter(int local_port, const std::vector<ExposeRule>& expose) {
+  gateway_.reset();
+  gateway_ = std::make_unique<HostGateway>();
+  gateway_->install(local_port, name_, expose);
+}
+
+void TunDevice::reload_expose(const std::vector<ExposeRule>& expose) {
+  if (gateway_) gateway_->set_expose(expose);
+}
 
 void TunDevice::close() {
+  gateway_.reset();
   if (fd_ >= 0) {
     ::close(fd_);
     fd_ = -1;
