@@ -76,13 +76,48 @@ bool CircuitDialer::ensure(int dest_port) {
     return true;
 }
 
+bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
+    if (dest_port < 1 || dest_port > 4 || dest_port == local_port_) {
+        return false;
+    }
+    try {
+        transport_.run_exclusive([this, dest_port, &msg] {
+            if (transport_.switch_dest() != dest_port) {
+                transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
+            }
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                active_peer_port_ = dest_port;
+                last_activity_ = std::chrono::steady_clock::now();
+            }
+            std::vector<uint8_t> framed(4 + msg.size());
+            write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
+            if (!msg.empty()) {
+                std::memcpy(framed.data() + 4, msg.data(), msg.size());
+            }
+            transport_.send_bytes(framed);
+        });
+    } catch (const std::exception& e) {
+        std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port << ": " << e.what()
+                  << std::endl;
+        return false;
+    }
+    note_activity();
+    return true;
+}
+
 void CircuitDialer::send_message(const std::vector<uint8_t>& msg) {
     std::vector<uint8_t> framed(4 + msg.size());
     write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
     if (!msg.empty()) {
         std::memcpy(framed.data() + 4, msg.data(), msg.size());
     }
-    transport_.send_bytes(framed);
+    try {
+        transport_.send_bytes(framed);
+    } catch (const std::exception& e) {
+        std::cerr << "[rocketbox-tunnel] send_message failed: " << e.what() << std::endl;
+        throw;
+    }
     note_activity();
 }
 

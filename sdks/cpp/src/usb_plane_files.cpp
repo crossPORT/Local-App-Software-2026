@@ -17,6 +17,7 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
+    ListenUsbPause pause(*this);
     auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(),
                                       usb_protocol::kFileTimeoutMs, frame_kind);
     if (!r.ok) {
@@ -47,6 +48,7 @@ bool UsbPlane::exchange_bytes(const std::vector<uint8_t>& request, std::vector<u
     if (!controller_ || !reply) {
         return false;
     }
+    ListenUsbPause pause(*this);
     auto r = controller_->exchange_buffer(port_index(), request.data(), request.size(), reply,
                                           reply_timeout_ms, usb_protocol::kFrameKindPayload);
     return r.ok;

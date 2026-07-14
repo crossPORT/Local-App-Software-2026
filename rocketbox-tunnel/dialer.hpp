@@ -23,6 +23,12 @@ public:
     /** Ensure circuit to dest fabric port (1..4). Returns false on failure. */
     bool ensure(int dest_port);
 
+    /**
+     * Switch (if needed) + framed send under one USB exclusion window.
+     * Prefer this over ensure()+send_message() to avoid two pause/turnarounds.
+     */
+    bool deliver(int dest_port, const std::vector<uint8_t>& msg);
+
     void send_message(const std::vector<uint8_t>& msg);
     /** Send and wait for one framed reply (uses transport exchange when available). */
     bool exchange_message(const std::vector<uint8_t>& msg, std::vector<uint8_t>* reply,

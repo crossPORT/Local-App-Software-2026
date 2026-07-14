@@ -98,6 +98,11 @@ public:
     /** Tunnel streaming: skip clear_halt on each USB open (default: App clears). */
     virtual void set_stream_mode(bool) {}
     /**
+     * Run fn without interleaved background USB IN (USB pauses listen; sim is a no-op).
+     * Use to batch switch+send under one exclusion window — no artificial sleeps.
+     */
+    virtual void run_exclusive(const std::function<void()>& fn) { fn(); }
+    /**
      * Send payload and wait for one data frame (tunnel --ping).
      * Default: unsupported (returns false).
      */

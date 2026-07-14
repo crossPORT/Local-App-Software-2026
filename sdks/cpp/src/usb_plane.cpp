@@ -137,8 +137,9 @@ void UsbPlane::sync_systems(std::function<void(const std::vector<SystemInfo>&)> 
 
 void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
     const int dest = peer_port_from_system_id(peer_system_id);
-    // Full duplex: do not tear down the listen thread — EP4 only aims OUT; IN stays live
-    // (matches TS ensureCircuit / sticky preserve). Listen polls yield usb_mutex_ every ~50ms.
+    // Sticky full duplex: keep the listen thread, but pause IN polls so EP4 switch
+    // can take usb_mutex_ (listen holds it for the whole bulk IN timeout otherwise).
+    ListenUsbPause pause(*this);
     auto r = switch_port_if_needed(dest);
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "ensure_circuit failed" : r.error_message);
@@ -149,7 +150,7 @@ void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
 }
 
 void UsbPlane::clear_circuit() {
-    // Full duplex teardown only when releasing the link — keep listen running across the switch.
+    ListenUsbPause pause(*this);
     (void)switch_port(0);
 }
 

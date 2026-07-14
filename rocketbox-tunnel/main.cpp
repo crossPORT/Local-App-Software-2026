@@ -22,6 +22,13 @@
 #include <string>
 #include <thread>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace {
 
 std::atomic<bool> g_stop{false};
@@ -36,6 +43,25 @@ void on_signal(int sig) {
 #endif
   g_stop = true;
 }
+
+#if defined(_WIN32)
+BOOL WINAPI on_console_ctrl(DWORD type) {
+  if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT || type == CTRL_CLOSE_EVENT) {
+    g_stop = true;
+    return TRUE;  // we handle stop; keep process alive until bridge unwinds
+  }
+  return FALSE;
+}
+#endif
+
+/** Join stopper on all exits — ~thread() calls terminate() if still joinable. */
+struct StopperGuard {
+  std::thread& thr;
+  ~StopperGuard() {
+    g_stop = true;
+    if (thr.joinable()) thr.join();
+  }
+};
 
 }  // namespace
 
@@ -55,6 +81,9 @@ int main(int argc, char** argv) {
   std::signal(SIGTERM, on_signal);
 #if defined(SIGHUP)
   std::signal(SIGHUP, on_signal);
+#endif
+#if defined(_WIN32)
+  SetConsoleCtrlHandler(on_console_ctrl, TRUE);
 #endif
 
   try {
@@ -140,13 +169,16 @@ int main(int argc, char** argv) {
       bridge.stop();
       dialer.shutdown();
     });
+    StopperGuard stopper_guard{stopper};
     bridge.run();
-    g_stop = true;
-    if (stopper.joinable()) stopper.join();
+    rocketbox_tunnel_log(g_stop ? "bridge exit (signal)" : "bridge exit (run returned)");
     transport->disconnect();
     rocketbox_tunnel_log("stopped");
   } catch (const std::exception& e) {
     rocketbox_tunnel_log(std::string("error: ") + e.what());
+    return 1;
+  } catch (...) {
+    rocketbox_tunnel_log("error: unknown exception");
     return 1;
   }
   return 0;

@@ -5,6 +5,7 @@
 #include "transfer_controller.h"
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -50,6 +51,7 @@ public:
     void prepare_for_payload_send() override {}
     void wait_for_idle() override;
     void on_data_message(std::function<void(const std::vector<uint8_t>&)> cb) override;
+    void run_exclusive(const std::function<void()>& fn) override;
 
     int device_count() const override;
     bool port_available() const override;
@@ -70,6 +72,7 @@ public:
     void set_stream_mode(bool enabled) override;
 
 private:
+    friend class ListenUsbPause;
     void send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_kind,
                        const std::string& filename);
     std::vector<uint8_t> recv_raw_file(uint8_t expected_kind);
@@ -77,6 +80,8 @@ private:
     void start_listen();
     void stop_listen();
     void listen_loop();
+    void pause_listen_for_usb();
+    void resume_listen_for_usb();
 
     int display_port_;
     int port_index_;
@@ -87,7 +92,23 @@ private:
     std::mutex listen_mu_;
     std::function<void(const std::vector<uint8_t>&)> on_msg_;
     std::atomic<bool> listen_stop_{true};
+    std::mutex pause_mu_;
+    std::condition_variable pause_cv_;
+    int pause_depth_ = 0;
+    bool listen_in_recv_ = false;
     std::thread listen_thread_;
+};
+
+/** RAII: exclude background IN for switch/send (event-driven; no sleep padding). */
+class ListenUsbPause {
+public:
+    explicit ListenUsbPause(UsbPlane& p) : plane_(p) { plane_.pause_listen_for_usb(); }
+    ~ListenUsbPause() { plane_.resume_listen_for_usb(); }
+    ListenUsbPause(const ListenUsbPause&) = delete;
+    ListenUsbPause& operator=(const ListenUsbPause&) = delete;
+
+private:
+    UsbPlane& plane_;
 };
 
 }  // namespace detail

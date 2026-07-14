@@ -53,12 +53,10 @@ bool TunnelBridge::send_pending_icmp_reply() {
     pending_reply_.clear();
   }
   const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
-  if (dest == 0 || dest == local_port_ || !dialer_.ensure(dest)) {
-    rocketbox_tunnel_log("drop ICMP reply: ensure failed dest=" + std::to_string(dest));
+  if (dest == 0 || dest == local_port_ || !dialer_.deliver(dest, reply)) {
+    rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
     return true;
   }
-  dialer_.note_activity();
-  dialer_.send_message(reply);
   up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
   if (!logged_icmp_reply_) {
     rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
@@ -71,47 +69,53 @@ void TunnelBridge::run() {
   std::cerr << "[rocketbox-tunnel] bridging (Ctrl+C to stop)" << std::endl;
   auto last_idle_check = std::chrono::steady_clock::now();
   bool logged_src_fix = false;
-  while (!stop_) {
-    const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
-    if (want > 0) (void)dialer_.ensure(want);
+  try {
+    while (!stop_) {
+      const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
+      if (want > 0) (void)dialer_.ensure(want);
 
-    if (send_pending_icmp_reply()) {
-      continue;
-    }
+      if (send_pending_icmp_reply()) {
+        continue;
+      }
 
-    auto pkt = tun_.read_packet();
-    if (pkt.empty()) {
+      auto pkt = tun_.read_packet();
+      if (pkt.empty()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_idle_check > std::chrono::seconds(1)) {
+          dialer_.tick_idle();
+          last_idle_check = now;
+        }
+        continue;
+      }
+
+      if (force_fabric_source(pkt, local_port_) && !logged_src_fix) {
+        std::cerr << "[rocketbox-tunnel] rewrote non-fabric source to 10.64.0." << local_port_
+                  << std::endl;
+        logged_src_fix = true;
+      }
+
+      const int dest = rocketbox_lan::dest_port_from_ip_packet(pkt.data(), pkt.size());
+      if (dest == 0 || dest == local_port_) {
+        continue;
+      }
+
+      if (!dialer_.deliver(dest, pkt)) {
+        std::cerr << "[rocketbox-tunnel] drop packet: deliver failed dest=" << dest << std::endl;
+        continue;
+      }
+      up_bytes_.fetch_add(pkt.size(), std::memory_order_relaxed);
+
       const auto now = std::chrono::steady_clock::now();
       if (now - last_idle_check > std::chrono::seconds(1)) {
         dialer_.tick_idle();
         last_idle_check = now;
       }
-      continue;
     }
-
-    if (force_fabric_source(pkt, local_port_) && !logged_src_fix) {
-      std::cerr << "[rocketbox-tunnel] rewrote non-fabric source to 10.64.0." << local_port_
-                << std::endl;
-      logged_src_fix = true;
-    }
-
-    const int dest = rocketbox_lan::dest_port_from_ip_packet(pkt.data(), pkt.size());
-    if (dest == 0 || dest == local_port_) {
-      continue;
-    }
-
-    if (!dialer_.ensure(dest)) {
-      std::cerr << "[rocketbox-tunnel] drop packet: ensure failed dest=" << dest << std::endl;
-      continue;
-    }
-    dialer_.note_activity();
-    dialer_.send_message(pkt);
-    up_bytes_.fetch_add(pkt.size(), std::memory_order_relaxed);
-
-    const auto now = std::chrono::steady_clock::now();
-    if (now - last_idle_check > std::chrono::seconds(1)) {
-      dialer_.tick_idle();
-      last_idle_check = now;
-    }
+  } catch (const std::exception& e) {
+    rocketbox_tunnel_log(std::string("bridge abort: ") + e.what());
+    stop_ = true;
+  } catch (...) {
+    rocketbox_tunnel_log("bridge abort: unknown");
+    stop_ = true;
   }
 }
