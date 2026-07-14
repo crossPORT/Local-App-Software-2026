@@ -32,14 +32,63 @@ TunnelPortLock::~TunnelPortLock() { release(); }
 
 #if defined(_WIN32)
 
+namespace {
+
+DWORD stats_pid(int display_port) {
+  std::ifstream in(rocketbox_tunnel_stats_path(display_port));
+  if (!in) return 0;
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.rfind("pid=", 0) == 0) {
+      try {
+        return static_cast<DWORD>(std::stoul(line.substr(4)));
+      } catch (...) {
+        return 0;
+      }
+    }
+  }
+  return 0;
+}
+
+bool pid_alive(DWORD pid) {
+  if (pid == 0) return false;
+  HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (!h) {
+    // Elevated tunnel: ACCESS_DENIED means the process still exists.
+    return GetLastError() == ERROR_ACCESS_DENIED;
+  }
+  DWORD code = 0;
+  const bool alive = GetExitCodeProcess(h, &code) && code == STILL_ACTIVE;
+  CloseHandle(h);
+  return alive;
+}
+
+HANDLE open_lock(const std::string& path) {
+  return CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                     FILE_ATTRIBUTE_NORMAL, nullptr);
+}
+
+}  // namespace
+
 bool TunnelPortLock::try_acquire(int display_port, std::string& error) {
   release();
   const std::string path = rocketbox_tunnel_lock_path(display_port);
   CreateDirectoryA(rocketbox_tunnel_stats_dir().c_str(), nullptr);
-  HANDLE h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                         FILE_ATTRIBUTE_NORMAL, nullptr);
+  HANDLE h = open_lock(path);
   if (h == INVALID_HANDLE_VALUE) {
+    const DWORD holder = stats_pid(display_port);
+    if (holder != 0 && !pid_alive(holder)) {
+      DeleteFileA(path.c_str());
+      h = open_lock(path);
+    }
+  }
+  if (h == INVALID_HANDLE_VALUE) {
+    const DWORD holder = stats_pid(display_port);
     error = "Port " + std::to_string(display_port) + " tunnel already running (lock busy)";
+    if (holder != 0) {
+      error += " — pid " + std::to_string(holder) +
+               " (Task Manager: rocketbox-tunnel / helper, or Quit tray)";
+    }
     return false;
   }
   const DWORD pid = GetCurrentProcessId();
@@ -56,10 +105,7 @@ void TunnelPortLock::release() {
     CloseHandle(static_cast<HANDLE>(handle_));
     handle_ = nullptr;
     port_ = 0;
-    if (port > 0) {
-      const std::string path = rocketbox_tunnel_lock_path(port);
-      DeleteFileA(path.c_str());
-    }
+    if (port > 0) DeleteFileA(rocketbox_tunnel_lock_path(port).c_str());
     return;
   }
   port_ = 0;
@@ -97,7 +143,6 @@ void TunnelPortLock::release() {
     ::close(fd_);
     fd_ = -1;
     port_ = 0;
-    // Drop the file so a dead PID is not left looking like a live lock.
     if (port > 0) (void)::unlink(rocketbox_tunnel_lock_path(port).c_str());
     return;
   }
