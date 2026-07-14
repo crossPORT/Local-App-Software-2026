@@ -15,7 +15,7 @@
 #include <wx/radiobut.h>
 #include <wx/stattext.h>
 
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
 #include <gtk/gtk.h>
 #endif
 
@@ -29,7 +29,7 @@ TrayPanel::TrayPanel(wxWindow* parent, EnableFn set_enabled, ApplyFn on_expose, 
       on_quit_(std::move(on_quit)) {
   build_ui();
   Bind(wxEVT_CLOSE_WINDOW, &TrayPanel::on_close, this);
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
   // Utility / no taskbar; strip CSD close; never demand attention (no GNOME toasts).
   if (GtkWidget* w = static_cast<GtkWidget*>(GetHandle())) {
     if (GTK_IS_WINDOW(w)) {
@@ -103,7 +103,7 @@ bool TrayPanel::enable_checked() const { return enable_ && enable_->GetValue(); 
 void TrayPanel::show_raise(const TrayControls& ctrls, bool running, unsigned user_time) {
   sync_from_host(ctrls, running);
   CentreOnScreen();
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
   // Map only — never present/raise/focus. GNOME toasts “is ready” on focus steal.
   (void)user_time;
   Show(true);

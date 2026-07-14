@@ -180,7 +180,9 @@ void TunnelProcess::stop() {
       if (ensure_helper_elevated(err)) (void)helper_term(p);
       else if (::kill(static_cast<pid_t>(p), SIGTERM) != 0 && errno == EPERM &&
                file_executable("/usr/bin/pkexec")) {
-        (void)::system(("/usr/bin/pkexec kill " + std::to_string(p)).c_str());
+        const int rc =
+            ::system(("/usr/bin/pkexec kill " + std::to_string(p)).c_str());
+        (void)rc;
       }
     }
   }

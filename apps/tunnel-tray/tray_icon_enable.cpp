@@ -5,9 +5,6 @@
 #include "usb_ports_ui.hpp"
 
 #include <wx/msgdlg.h>
-#if defined(__WXGTK__)
-#include <gtk/gtk.h>
-#endif
 
 tunnel_tray::TrayControls TunnelTrayIcon::controls_now() const {
   tunnel_tray::TrayControls c;
@@ -76,7 +73,7 @@ bool TunnelTrayIcon::set_enabled(bool want_on) {
   refresh_icon();
   if (panel_ && panel_->is_shown()) {
     panel_->sync_from_host(controls_now(), proc_.running());
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
     tunnel_tray::suppress_window_attention(panel_->GetHandle());
     // Polkit/pkexec return can set DEMANDS_ATTENTION a beat later — clear again.
     auto* p = panel_.get();
@@ -102,7 +99,7 @@ bool TunnelTrayIcon::apply_expose() {
   refresh_icon();
   if (panel_ && panel_->is_shown()) {
     panel_->sync_from_host(controls_now(), proc_.running());
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
     tunnel_tray::suppress_window_attention(panel_->GetHandle());
 #endif
   }

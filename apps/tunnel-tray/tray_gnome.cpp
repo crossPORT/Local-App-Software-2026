@@ -1,6 +1,6 @@
 #include "tray_gnome.hpp"
 
-#if defined(__WXGTK__) || defined(ROCKETBOX_TRAY_HAS_GTK)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 #ifndef GDK_WINDOW_STATE_DEMANDS_ATTENTION
@@ -11,7 +11,7 @@
 namespace tunnel_tray {
 namespace {
 
-#if defined(__WXGTK__) || defined(ROCKETBOX_TRAY_HAS_GTK)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
 gboolean on_window_state(GtkWidget* widget, GdkEventWindowState* event, gpointer) {
   if (!(event->changed_mask & GDK_WINDOW_STATE_DEMANDS_ATTENTION)) return FALSE;
   if (!(event->new_window_state & GDK_WINDOW_STATE_DEMANDS_ATTENTION)) return FALSE;
@@ -27,13 +27,13 @@ gboolean on_window_state(GtkWidget* widget, GdkEventWindowState* event, gpointer
 }  // namespace
 
 void disable_gtk_startup_notify() {
-#if defined(__WXGTK__) || defined(ROCKETBOX_TRAY_HAS_GTK)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
   gtk_window_set_auto_startup_notification(FALSE);
 #endif
 }
 
 void suppress_window_attention(void* gtk_widget_handle) {
-#if defined(__WXGTK__) || defined(ROCKETBOX_TRAY_HAS_GTK)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
   if (!gtk_widget_handle) return;
   auto* w = static_cast<GtkWidget*>(gtk_widget_handle);
   if (!GTK_IS_WINDOW(w)) return;

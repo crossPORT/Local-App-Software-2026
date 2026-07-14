@@ -18,7 +18,6 @@ type IncomingCircuitCallback = (connection: Connection) => void;
 
 export class Session {
   private activeConnection: Connection | null = null;
-  private attachedPortId: number = -1;
   private nextTxn = 1;
   
   public systemId: string = '';
@@ -48,7 +47,6 @@ export class Session {
 
     await this.transport.init();
     // Port claimed via WS ?port=N (or TCP 0xC1 claim). No ATTACH — matches HW/C++.
-    this.attachedPortId = this.port - 1;
     this.systemId = `sys-port-${this.port}`;
   }
 

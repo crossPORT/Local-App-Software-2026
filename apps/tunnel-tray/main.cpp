@@ -7,7 +7,7 @@
 #include <wx/cmdline.h>
 #include <wx/snglinst.h>
 #include <wx/wx.h>
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
 #include <gtk/gtk.h>
 #endif
 
@@ -43,7 +43,7 @@ public:
     // Anchor frame — never Show(); size must be >0 to avoid gtk_window_resize asserts.
     hidden_ = new wxFrame(nullptr, wxID_ANY, wxT("RocketBox Tunnel"), wxDefaultPosition,
                           wxSize(200, 100), wxFRAME_NO_TASKBAR | wxFRAME_TOOL_WINDOW);
-#if defined(__WXGTK__)
+#if defined(ROCKETBOX_TRAY_HAS_GTK)
     if (GtkWidget* w = static_cast<GtkWidget*>(hidden_->GetHandle())) {
       tunnel_tray::suppress_window_attention(w);
     }
