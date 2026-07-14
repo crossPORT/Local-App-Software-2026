@@ -1,10 +1,7 @@
 #include "usb_plane.hpp"
 
-#include "platform_util.h"
 #include "usb_protocol.h"
 
-#include <cstdio>
-#include <fstream>
 #include <stdexcept>
 
 namespace rocketbox {
@@ -20,18 +17,8 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    const std::string path = platform::create_empty_temp_file("rocketbox-sdk-send-");
-    if (path.empty()) {
-        throw std::runtime_error("temp file failed");
-    }
-    {
-        std::ofstream out(path, std::ios::binary);
-        out.write(reinterpret_cast<const char*>(bytes.data()),
-                  static_cast<std::streamsize>(bytes.size()));
-    }
-    auto r = controller_->send_on_port(port_index(), path, nullptr, usb_protocol::kFileTimeoutMs,
-                                       frame_kind);
-    std::remove(path.c_str());
+    auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(),
+                                      usb_protocol::kFileTimeoutMs, frame_kind);
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "send failed" : r.error_message);
     }
@@ -42,17 +29,12 @@ std::vector<uint8_t> UsbPlane::recv_raw_file(uint8_t expected_kind) {
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    const std::string path = platform::create_empty_temp_file("rocketbox-sdk-recv-");
-    auto r = controller_->receive_on_port(port_index(), path, nullptr, usb_protocol::kFileTimeoutMs,
-                                          expected_kind);
+    std::vector<uint8_t> data;
+    auto r = controller_->receive_buffer(port_index(), &data, usb_protocol::kFileTimeoutMs,
+                                         expected_kind);
     if (!r.ok) {
-        std::remove(path.c_str());
         throw std::runtime_error(r.error_message.empty() ? "receive failed" : r.error_message);
     }
-    std::ifstream in(path, std::ios::binary);
-    std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)),
-                              std::istreambuf_iterator<char>());
-    std::remove(path.c_str());
     return data;
 }
 
@@ -72,17 +54,8 @@ bool UsbPlane::try_receive_session_message(unsigned header_timeout_ms, std::vect
     if (!controller_ || !out) {
         return false;
     }
-    const std::string path = platform::create_empty_temp_file("rocketbox-sdk-sess-");
-    auto r = controller_->receive_on_port(port_index(), path, nullptr, header_timeout_ms, 0);
-    if (!r.ok) {
-        std::remove(path.c_str());
-        return false;
-    }
-    std::ifstream in(path, std::ios::binary);
-    *out = std::vector<uint8_t>((std::istreambuf_iterator<char>(in)),
-                                std::istreambuf_iterator<char>());
-    std::remove(path.c_str());
-    return true;
+    auto r = controller_->receive_buffer(port_index(), out, header_timeout_ms, 0);
+    return r.ok;
 }
 
 ParsedHeader UsbPlane::receive_header() {

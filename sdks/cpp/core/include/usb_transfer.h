@@ -54,6 +54,18 @@ TransferResult receive_file_core(libusb_context* ctx,
                                  uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload,
                                  bool reset_data_endpoints = true);
 
+// In-memory ROCKETBX transfer (tunnel / datagram path). Same wire format as files.
+TransferResult send_buffer_core(libusb_context* ctx, const uint8_t* data, size_t len,
+                                int port_index, unsigned timeout_ms = usb_protocol::kFileTimeoutMs,
+                                uint8_t frame_kind = usb_protocol::kFrameKindPayload,
+                                const char* filename = nullptr,
+                                bool reset_data_endpoints = true);
+
+TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* out, int port_index,
+                                   unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
+                                   uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload,
+                                   bool reset_data_endpoints = true);
+
 struct RocketBoxUsbDevice {
     uint8_t bus = 0;
     uint8_t addr = 0;

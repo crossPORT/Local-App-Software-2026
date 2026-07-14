@@ -69,6 +69,12 @@ public:
                                    ProgressCallback progress_cb = nullptr,
                                    unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
                                    uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
+    TransferResult send_buffer(int port_index, const uint8_t* data, size_t len,
+                               unsigned timeout_ms = usb_protocol::kFileTimeoutMs,
+                               uint8_t frame_kind = usb_protocol::kFrameKindPayload);
+    TransferResult receive_buffer(int port_index, std::vector<uint8_t>* out,
+                                  unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
+                                  uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
     TransferResult loopback_on_ports(const std::string& path,
                                      int send_port_index,
                                      int recv_port_index,

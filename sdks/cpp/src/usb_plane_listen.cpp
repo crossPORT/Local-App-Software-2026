@@ -1,11 +1,8 @@
 #include "usb_plane.hpp"
 
-#include "platform_util.h"
 #include "usb_protocol.h"
 
 #include <chrono>
-#include <cstdio>
-#include <fstream>
 #include <thread>
 
 namespace rocketbox {
@@ -48,10 +45,6 @@ void UsbPlane::stop_listen() {
 }
 
 void UsbPlane::listen_loop() {
-    const std::string path = platform::create_empty_temp_file("rocketbox-sdk-listen-");
-    if (path.empty()) {
-        return;
-    }
     while (!listen_stop_.load(std::memory_order_acquire)) {
         if (!controller_ || !connected_) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -68,21 +61,18 @@ void UsbPlane::listen_loop() {
         }
 
         // Blocks up to kListenHeaderTimeoutMs inside libusb — no busy-spin.
-        auto r = controller_->receive_on_port(port_index(), path, nullptr, kListenHeaderTimeoutMs,
-                                              usb_protocol::kFrameKindPayload);
+        std::vector<uint8_t> body;
+        auto r = controller_->receive_buffer(port_index(), &body, kListenHeaderTimeoutMs,
+                                             usb_protocol::kFrameKindPayload);
         if (listen_stop_ || !r.ok) {
             // Yield so switch/send can take usb_mutex_ (avoid starve → "USB port busy").
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
-        std::ifstream in(path, std::ios::binary);
-        std::vector<uint8_t> body((std::istreambuf_iterator<char>(in)),
-                                  std::istreambuf_iterator<char>());
         if (!body.empty()) {
             cb(body);
         }
     }
-    std::remove(path.c_str());
 }
 
 }  // namespace detail

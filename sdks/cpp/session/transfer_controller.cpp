@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <chrono>
+#include <fstream>
 #include <thread>
 #include <libusb-1.0/libusb.h>
 #include <sstream>
@@ -164,6 +165,94 @@ TransferResult TransferController::receive_on_port(int port_index,
         event_log(resolved_port_index(),
                   "usb_recv_ok",
                   path + " bytes=" + std::to_string(result.bytes_transferred));
+    }
+    return result;
+}
+
+TransferResult TransferController::send_buffer(int port_index, const uint8_t* data, size_t len,
+                                               unsigned timeout_ms, uint8_t frame_kind) {
+    if (!usb_ctx_) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "libusb not initialized"};
+    }
+    if (shutting_down_.load(std::memory_order_acquire)) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
+    }
+    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
+    if (!lock.try_lock_for(kUsbLockWait)) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
+    }
+    if (rocketbox_sim_enabled()) {
+        const std::string path = platform::create_empty_temp_file("rocketbox-sim-send-");
+        if (path.empty()) {
+            return TransferResult{false, 0, 0, 0.0, 0.0, "temp file failed"};
+        }
+        {
+            std::ofstream out(path, std::ios::binary);
+            if (len > 0) {
+                out.write(reinterpret_cast<const char*>(data),
+                          static_cast<std::streamsize>(len));
+            }
+        }
+        auto result = rocketbox_sim_send_file(path, port_index, nullptr, timeout_ms);
+        std::remove(path.c_str());
+        event_log(resolved_port_index(), result.ok ? "usb_send_ok" : "usb_send_fail",
+                  "buffer bytes=" + std::to_string(result.bytes_transferred) +
+                      (result.error_message.empty() ? "" : " err=" + result.error_message));
+        return result;
+    }
+    auto result = send_buffer_core(usb_ctx_, data, len, port_index, timeout_ms, frame_kind, nullptr,
+                                   !stream_mode_);
+    event_log(resolved_port_index(), result.ok ? "usb_send_ok" : "usb_send_fail",
+              "buffer bytes=" + std::to_string(result.bytes_transferred) +
+                  (result.error_message.empty() ? "" : " err=" + result.error_message));
+    return result;
+}
+
+TransferResult TransferController::receive_buffer(int port_index, std::vector<uint8_t>* out,
+                                                  unsigned header_timeout_ms,
+                                                  uint8_t expected_frame_kind) {
+    if (!usb_ctx_) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "libusb not initialized"};
+    }
+    if (shutting_down_.load(std::memory_order_acquire)) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
+    }
+    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
+    if (!lock.try_lock_for(kUsbLockWait)) {
+        return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
+    }
+    if (rocketbox_sim_enabled()) {
+        const std::string path = platform::create_empty_temp_file("rocketbox-sim-recv-");
+        if (path.empty() || !out) {
+            return TransferResult{false, 0, 0, 0.0, 0.0, "temp file failed"};
+        }
+        auto result =
+            rocketbox_sim_receive_file(path, port_index, nullptr, header_timeout_ms);
+        if (result.ok) {
+            std::ifstream in(path, std::ios::binary);
+            *out = std::vector<uint8_t>((std::istreambuf_iterator<char>(in)),
+                                        std::istreambuf_iterator<char>());
+        } else if (out) {
+            out->clear();
+        }
+        std::remove(path.c_str());
+        if (result.ok) {
+            event_log(resolved_port_index(), "usb_recv_ok",
+                      "buffer bytes=" + std::to_string(result.bytes_transferred));
+        } else if (result.error_message != "Header read failed") {
+            event_log(resolved_port_index(), "usb_recv_fail",
+                      "buffer err=" + result.error_message);
+        }
+        return result;
+    }
+    auto result = receive_buffer_core(usb_ctx_, out, port_index, header_timeout_ms,
+                                      expected_frame_kind, !stream_mode_);
+    if (result.ok) {
+        event_log(resolved_port_index(), "usb_recv_ok",
+                  "buffer bytes=" + std::to_string(result.bytes_transferred));
+    } else if (result.error_message != "Header read failed") {
+        event_log(resolved_port_index(), "usb_recv_fail",
+                  "buffer err=" + result.error_message);
     }
     return result;
 }

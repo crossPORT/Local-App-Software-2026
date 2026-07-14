@@ -9,6 +9,7 @@ get_filename_component(LIBUSB_INCLUDE_PARENT "${LIBUSB_INCLUDE_DIRS}" DIRECTORY)
 
 add_library(rocketbox_usb_core STATIC
     src/usb_transfer_core.cpp
+    src/usb_transfer_buffer.cpp
     src/usb_device_open.cpp
     src/usb_switch.cpp
 )
