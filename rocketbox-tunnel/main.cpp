@@ -61,24 +61,32 @@ int main(int argc, char** argv) {
     rocketbox_tunnel_log(std::string("rocketbox-tunnel ") + ROCKETBOX_RELEASE_TAG_STR);
     rocketbox_tunnel_log(std::string("connect transport ") + tunnel_transport_name(opt.transport) +
                          (opt.port ? " prefer Port " + std::to_string(opt.port) : " (auto Port)"));
-    auto transport = open_tunnel_transport(opt.transport, opt.port);
-    const int port = transport->display_port();
+
+    // Resolve Port and take the lock before opening USB so --ping cannot steal a live bridge.
+    const int port = resolve_tunnel_display_port(opt.transport, opt.port);
     if (port < 1 || port > 4) {
       throw std::runtime_error("USB cable has no silkscreen Port (check serial)");
     }
     if (opt.ping_peer != 0 && opt.ping_peer == port) {
       throw std::runtime_error("--ping M must be a different port than local");
     }
-    const std::string local_ip = rocketbox_lan::ip_for_port(port);
-    if (opt.iface.empty()) opt.iface = "rb" + std::to_string(port);
-    rocketbox_tunnel_log("Port " + std::to_string(port) + " address " + local_ip + " system " +
-                         transport->system_id() + " serial " + transport->serial());
 
     TunnelPortLock port_lock;
     std::string lock_err;
     if (!port_lock.try_acquire(port, lock_err)) {
       throw std::runtime_error(lock_err);
     }
+
+    auto transport = open_tunnel_transport(opt.transport, port);
+    if (transport->display_port() != port) {
+      throw std::runtime_error("USB serial maps to Port " +
+                               std::to_string(transport->display_port()) + ", expected Port " +
+                               std::to_string(port));
+    }
+    const std::string local_ip = rocketbox_lan::ip_for_port(port);
+    if (opt.iface.empty()) opt.iface = "rb" + std::to_string(port);
+    rocketbox_tunnel_log("Port " + std::to_string(port) + " address " + local_ip + " system " +
+                         transport->system_id() + " serial " + transport->serial());
 
     if (opt.ping_peer != 0) {
       return run_rocketbox_ping(*transport, port, opt.ping_peer);
