@@ -31,6 +31,7 @@ private:
   int local_port_;
   std::mutex write_mu_;
   std::atomic<bool> stop_{false};
+  std::atomic<int> pending_peer_{0};
   std::atomic<uint64_t> up_bytes_{0};
   std::atomic<uint64_t> down_bytes_{0};
 };

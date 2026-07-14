@@ -57,11 +57,12 @@ bool CircuitDialer::ensure(int dest_port) {
     if (dest_port < 1 || dest_port > 4 || dest_port == local_port_) {
         return false;
     }
-    {
+    // Must match EP4 switch — active_peer alone can lie after inbound-only traffic.
+    if (transport_.switch_dest() == dest_port) {
         std::lock_guard<std::mutex> lock(mu_);
-        if (active_peer_port_ == dest_port) {
-            return true;
-        }
+        active_peer_port_ = dest_port;
+        last_activity_ = std::chrono::steady_clock::now();
+        return true;
     }
     try {
         transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
@@ -96,10 +97,10 @@ void CircuitDialer::note_activity() {
 }
 
 void CircuitDialer::note_inbound_peer(int peer_port) {
+    // Do not set active_peer_port_ here — that skipped EP4 switch on the reply
+    // path (Windows→Linux echo replies never left the Linux port).
     if (peer_port < 1 || peer_port > 4 || peer_port == local_port_) return;
-    std::lock_guard<std::mutex> lock(mu_);
-    if (active_peer_port_ == 0) active_peer_port_ = peer_port;
-    last_activity_ = std::chrono::steady_clock::now();
+    note_activity();
 }
 
 void CircuitDialer::tick_idle() {

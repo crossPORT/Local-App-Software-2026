@@ -19,7 +19,11 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
     return;
   }
   const int src = rocketbox_lan::src_port_from_ip_packet(msg.data(), msg.size());
-  if (src > 0) dialer_.note_inbound_peer(src);
+  if (src > 0) {
+    dialer_.note_inbound_peer(src);
+    // Remember peer for the bridge thread to EP4-switch (cannot ensure here — listen thread).
+    pending_peer_.store(src, std::memory_order_relaxed);
+  }
   dialer_.note_activity();
   down_bytes_.fetch_add(msg.size(), std::memory_order_relaxed);
   std::lock_guard<std::mutex> lock(write_mu_);
@@ -31,6 +35,9 @@ void TunnelBridge::run() {
   auto last_idle_check = std::chrono::steady_clock::now();
   bool logged_src_fix = false;
   while (!stop_) {
+    const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
+    if (want > 0) (void)dialer_.ensure(want);
+
     auto pkt = tun_.read_packet();
     if (pkt.empty()) {
       const auto now = std::chrono::steady_clock::now();
@@ -53,6 +60,7 @@ void TunnelBridge::run() {
     }
 
     if (!dialer_.ensure(dest)) {
+      std::cerr << "[rocketbox-tunnel] drop packet: ensure failed dest=" << dest << std::endl;
       continue;
     }
     dialer_.note_activity();
