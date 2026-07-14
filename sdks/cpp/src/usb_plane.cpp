@@ -39,6 +39,9 @@ void UsbPlane::connect() {
     // port_index_ is the libusb sort index (wx ResolvePortIndex), matching
     // working TransferOrchestrator(port_index) → TransferController(port_index).
     controller_ = std::make_unique<TransferController>(port_index_, [](const TransferUiState&) {});
+    if (stream_mode_) {
+        controller_->set_stream_mode(true);
+    }
     if (controller_->device_count() <= 0) {
         controller_.reset();
         throw std::runtime_error("no RocketBox USB device");
@@ -181,6 +184,13 @@ bool UsbPlane::switch_preserve() const {
 void UsbPlane::wait_for_idle() {
     while (controller_ && controller_->is_busy()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+void UsbPlane::set_stream_mode(bool enabled) {
+    stream_mode_ = enabled;
+    if (controller_) {
+        controller_->set_stream_mode(enabled);
     }
 }
 

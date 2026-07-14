@@ -21,6 +21,8 @@ public:
   /** Netns + host gateway. expose = allowlist published on fabric IP. */
   void isolate_in_netns(const std::string& netns, const std::string& local_ip, int local_port,
                         const std::vector<ExposeRule>& expose);
+  /** SIGHUP: refresh published ports (netns gateway only). */
+  void reload_expose(const std::vector<ExposeRule>& expose);
   void close();
   void interrupt();
 

@@ -17,3 +17,9 @@ void HostGateway::install(int, const std::string&, const std::vector<ExposeRule>
   throw std::runtime_error(
       "Windows --expose is not enabled yet; omit --expose or use Linux");
 }
+
+void HostGateway::set_expose(const std::vector<ExposeRule>& expose) {
+  if (expose.empty()) return;
+  throw std::runtime_error(
+      "Windows --expose is not enabled yet; omit --expose or use Linux");
+}

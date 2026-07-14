@@ -15,14 +15,14 @@ function wrapAttachError(displayPort: number, err: unknown): Error {
   debugLog(toPortIndex(displayPort), 'attach_fail', msg);
   if (msg === 'timeout' || /timeout/i.test(msg)) {
     return new RocketBoxError(
-      'Sim attach timed out waiting for ATTACH reply from the daemon.',
+      'Sim connect timed out — is simulated-hardware running on :1773?',
       'timeout',
     );
   }
   return err instanceof Error ? err : new Error(msg);
 }
 
-/** Attach RocketBox Session over SimTransport only (no WebUSB Session path). */
+/** Open SimTransport + Session for Port N (WS ?port=N; no ATTACH). */
 export async function attachSession(
   options: AttachSessionOptions,
 ): Promise<{ session: Session; transport: Transport }> {

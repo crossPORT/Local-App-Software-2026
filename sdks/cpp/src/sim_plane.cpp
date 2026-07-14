@@ -22,6 +22,13 @@ void SimPlane::connect() {
     if (fd_ == RB_SOCK_INVALID) {
         throw std::runtime_error("could not connect to simulated-hardware :1772");
     }
+    // Claim display Port N (daemon TCP has no ?port=; same role as WS ?port=N). Not ATTACH.
+    const uint8_t claim[2] = {0xC1, static_cast<uint8_t>(display_port_)};
+    if (rb_sock_write(fd_, claim, sizeof(claim)) <= 0) {
+        rb_sock_close(fd_);
+        fd_ = RB_SOCK_INVALID;
+        throw std::runtime_error("sim port claim failed");
+    }
     connected_ = true;
     stop_ = false;
     thread_ = std::thread([this] { listen_loop(); });

@@ -3,6 +3,8 @@
 #include "tray_theme.hpp"
 #include "tunnel_proc.hpp"
 
+#include <wx/filename.h>
+#include <wx/stdpaths.h>
 #include <wx/wx.h>
 
 namespace {
@@ -19,14 +21,26 @@ wxString tooltip_for(int port, bool up) {
 }
 }  // namespace
 
+void TunnelTrayIcon::write_icon_files() {
+  wxFileName dir(wxStandardPaths::Get().GetTempDir(), wxEmptyString);
+  dir.AppendDir(wxT("rocketbox-tray"));
+  if (!dir.DirExists()) dir.Mkdir(0755, wxPATH_MKDIR_FULL);
+  const wxString normal = dir.GetPath() + wxFileName::GetPathSeparator() + wxT("normal.png");
+  const wxString dim = dir.GetPath() + wxFileName::GetPathSeparator() + wxT("dim.png");
+  const bool dark = tunnel_tray::desktop_prefers_dark();
+  if (tunnel_tray::save_tray_png(normal, dark, false)) icon_file_normal_ = normal.ToStdString();
+  if (tunnel_tray::save_tray_png(dim, dark, true)) icon_file_dim_ = dim.ToStdString();
+}
+
 void TunnelTrayIcon::reload_icons() {
   icon_normal_ = tunnel_tray::load_brand_icon();
   icon_dim_ = tunnel_tray::make_dim_icon(icon_normal_);
   last_tip_.clear();
+  if (ayatana_.active()) write_icon_files();
 }
 
 void TunnelTrayIcon::reassert_icon() {
-  RemoveIcon();
+  if (!ayatana_.active()) RemoveIcon();
   last_tip_.clear();
   refresh_icon();
 }
@@ -38,22 +52,18 @@ void TunnelTrayIcon::on_tick(wxTimerEvent&) {
     reload_icons();
   }
   const bool up = proc_.running();
-  if (up && (port_ < 1 || port_ > 4)) {
-    for (int p = 1; p <= 4; ++p) {
-      const auto rates = tunnel_tray::read_tunnel_rates(p);
-      if (rates.ok && rates.display_port > 0) {
-        port_ = rates.display_port;
-        break;
-      }
-      if (rates.ok) {
-        port_ = p;
-        break;
-      }
-    }
+  if (up) {
+    const int live = tunnel_tray::live_tunnel_port();
+    if (live > 0 && live != port_) port_ = live;
   }
   if (up != last_up_) {
     if (!up) persist_settings(false);
-    if (panel_ && panel_->is_shown()) panel_->sync_from_host(controls_now(), up);
+    else persist_settings(true);
+  }
+  // Keep Enable + Status in lockstep with live helper/stats (orphan-safe).
+  if (panel_ && panel_->is_shown()) {
+    if (up != last_up_) panel_->sync_from_host(controls_now(), up);
+    else panel_->sync_running(up);
   }
   traffic_ = false;
   if (up) {
@@ -75,17 +85,24 @@ void TunnelTrayIcon::on_pulse(wxTimerEvent&) {
 }
 
 void TunnelTrayIcon::refresh_icon() {
-  if (!wxTaskBarIcon::IsAvailable()) return;
   const bool up = proc_.running();
-  const wxIcon& icon = !up ? icon_dim_ : (traffic_ && !pulse_hi_ ? icon_dim_ : icon_normal_);
-  if (!icon.IsOk()) return;
+  const bool dim = !up || (traffic_ && !pulse_hi_);
   const wxString tip = tooltip_for(port_, up);
   if (tip == last_tip_ && up == last_up_ && traffic_ == last_traffic_ && pulse_hi_ == last_pulse_) {
     return;
   }
+  if (up != last_up_ && ayatana_.active()) ayatana_.refresh_menu();
   last_tip_ = tip;
   last_up_ = up;
   last_traffic_ = traffic_;
   last_pulse_ = pulse_hi_;
+  if (ayatana_.active()) {
+    const std::string& path = dim ? icon_file_dim_ : icon_file_normal_;
+    if (!path.empty()) ayatana_.set_icon(path, tip.ToStdString());
+    return;
+  }
+  if (!wxTaskBarIcon::IsAvailable()) return;
+  const wxIcon& icon = dim ? icon_dim_ : icon_normal_;
+  if (!icon.IsOk()) return;
   SetIcon(icon, tip);
 }

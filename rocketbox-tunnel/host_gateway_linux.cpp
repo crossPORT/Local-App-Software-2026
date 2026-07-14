@@ -108,3 +108,26 @@ void HostGateway::install(int local_port, const std::string& netns,
                  ns_addr + " dev " + host_veth_);
   }
 }
+
+void HostGateway::set_expose(const std::vector<ExposeRule>& expose) {
+  if (port_ <= 0 || netns_.empty()) {
+    return;
+  }
+  const std::string host_addr = "10.65." + std::to_string(port_) + ".1";
+  const std::string tunnel_ip = "10.64.0." + std::to_string(port_);
+  const std::string tun = "rb" + std::to_string(port_);
+  run_ignore(nx(netns_, std::string(kIpt) + " -t nat -F"));
+  run_or_throw(nx(netns_, std::string(kIpt) + " -t nat -A POSTROUTING -o " + tun +
+                             " -j SNAT --to-source " + tunnel_ip));
+  for (const ExposeRule& r : expose) {
+    if (r.port <= 0 || r.port > 65535) {
+      continue;
+    }
+    if (r.tcp) {
+      add_dnat(netns_, tunnel_ip, host_addr, r.port, "tcp");
+    }
+    if (r.udp) {
+      add_dnat(netns_, tunnel_ip, host_addr, r.port, "udp");
+    }
+  }
+}

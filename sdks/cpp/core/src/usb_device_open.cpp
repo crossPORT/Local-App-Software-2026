@@ -12,7 +12,8 @@
 libusb_device_handle* open_device_by_index(libusb_context* ctx,
                                            int index,
                                            std::string* error_out,
-                                           int max_open_attempts) {
+                                           int max_open_attempts,
+                                           bool reset_data_endpoints) {
     const std::vector<RocketBoxUsbDevice> devices = list_rocketbox_devices(ctx);
     if (index < 0 || index >= static_cast<int>(devices.size())) {
         if (error_out) {
@@ -103,8 +104,15 @@ libusb_device_handle* open_device_by_index(libusb_context* ctx,
         return nullptr;
     }
 
-    // Do not clear_halt on every open — tunnel listen/send reopen often; clearing
-    // IN/OUT mid-stream causes "Bad magic bytes" desync on the peer.
+    // App file transfers: clear_halt recovers stalls between discrete opens.
+    // Tunnel streaming: skip — clearing IN/OUT on every reopen causes Bad magic.
+    if (reset_data_endpoints) {
+        int ch_out = libusb_clear_halt(handle, usb_protocol::kEndpointDataOut);
+        int ch_in = libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
+        USB_DIAG("[USB-DIAG] clear_halt port=%d EP_OUT=%d (%s) EP_IN=%d (%s)\n",
+                 index, ch_out, libusb_strerror(static_cast<libusb_error>(ch_out)),
+                 ch_in, libusb_strerror(static_cast<libusb_error>(ch_in)));
+    }
     return handle;
 }
 

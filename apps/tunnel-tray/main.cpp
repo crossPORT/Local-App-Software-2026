@@ -1,11 +1,15 @@
 #include "tray_icon.hpp"
 #include "tray_ipc.hpp"
+#include "tray_gnome.hpp"
 #include "session_dbus.hpp"
 
 #include <iostream>
 #include <wx/cmdline.h>
 #include <wx/snglinst.h>
 #include <wx/wx.h>
+#if defined(__WXGTK__)
+#include <gtk/gtk.h>
+#endif
 
 class TunnelTrayApp : public wxApp {
 public:
@@ -18,6 +22,8 @@ public:
   bool OnInit() override {
     SetExitOnFrameDelete(false);
     if (!wxApp::OnInit()) return false;
+    tunnel_tray::disable_gtk_startup_notify();
+    wxInitAllImageHandlers();  // PNG save/load for Ayatana tray icons
 
     checker_ = new wxSingleInstanceChecker("rocketbox-tunnel-tray-" + wxGetUserId());
     if (checker_->IsAnotherRunning()) {
@@ -37,6 +43,11 @@ public:
     // Anchor frame — never Show(); size must be >0 to avoid gtk_window_resize asserts.
     hidden_ = new wxFrame(nullptr, wxID_ANY, wxT("RocketBox Tunnel"), wxDefaultPosition,
                           wxSize(200, 100), wxFRAME_NO_TASKBAR | wxFRAME_TOOL_WINDOW);
+#if defined(__WXGTK__)
+    if (GtkWidget* w = static_cast<GtkWidget*>(hidden_->GetHandle())) {
+      tunnel_tray::suppress_window_attention(w);
+    }
+#endif
     tray_ = new TunnelTrayIcon();
     ipc_ = new tunnel_tray::TrayIpcServer([this] {
       if (tray_) tray_->show_panel();

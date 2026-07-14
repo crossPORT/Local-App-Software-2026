@@ -33,6 +33,8 @@ add_executable(rocketbox-tunnel
   stats_path.cpp
   port_lock.cpp
   tunnel_log.cpp
+  expose_file.cpp
+  tunnel_options.cpp
 )
 target_include_directories(rocketbox-tunnel PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -73,6 +75,9 @@ endif()
 if(UNIX AND NOT APPLE)
   install(FILES ${CMAKE_SOURCE_DIR}/docs/tunnel/linux.md
           DESTINATION share/doc/rocketbox/tunnel
+          COMPONENT RocketBoxTunnel)
+  install(FILES ${CMAKE_SOURCE_DIR}/cmake/debian/org.rocketbox.pkexec.tunnel-helper.policy
+          DESTINATION share/polkit-1/actions
           COMPONENT RocketBoxTunnel)
 elseif(APPLE)
   install(FILES ${CMAKE_SOURCE_DIR}/docs/tunnel/macos.md

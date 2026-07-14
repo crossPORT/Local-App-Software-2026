@@ -8,3 +8,4 @@ Terminal=false
 Categories=Network;System;Utility;
 Keywords=RocketBox;tunnel;USB;tray;
 StartupNotify=false
+X-GNOME-UsesNotifications=false

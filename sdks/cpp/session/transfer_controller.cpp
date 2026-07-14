@@ -125,7 +125,8 @@ TransferResult TransferController::send_on_port(int port_index,
     }
     TransferResult result = rocketbox_sim_enabled()
         ? rocketbox_sim_send_file(path, port_index, std::move(progress_cb), timeout_ms)
-        : send_file_core(usb_ctx_, path, port_index, std::move(progress_cb), timeout_ms, frame_kind);
+        : send_file_core(usb_ctx_, path, port_index, std::move(progress_cb), timeout_ms,
+                         frame_kind, {}, !stream_mode_);
     event_log(resolved_port_index(),
               result.ok ? "usb_send_ok" : "usb_send_fail",
               path + " bytes=" + std::to_string(result.bytes_transferred)
@@ -151,7 +152,7 @@ TransferResult TransferController::receive_on_port(int port_index,
     TransferResult result = rocketbox_sim_enabled()
         ? rocketbox_sim_receive_file(path, port_index, std::move(progress_cb), header_timeout_ms)
         : receive_file_core(usb_ctx_, path, port_index, std::move(progress_cb),
-                            header_timeout_ms, expected_frame_kind);
+                            header_timeout_ms, expected_frame_kind, !stream_mode_);
     if (!result.ok && header_timeout_ms <= usb_protocol::kSessionHeaderTimeoutMs + 1) {
         // Session listener polls frequently; only log non-timeout failures.
         if (result.error_message != "Header read failed") {

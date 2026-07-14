@@ -1,18 +1,15 @@
 #include "tray_icon.hpp"
 #include "tray_settings.hpp"
 #include "tray_theme.hpp"
-#include "tunnel_log.hpp"
 #include "tunnel_log_ui.hpp"
-#include "usb_ports_ui.hpp"
-
-#include <wx/msgdlg.h>
-#include <wx/utils.h>
 
 namespace {
 enum {
   ID_TRAY_ENABLE = wxID_HIGHEST + 1,
   ID_TRAY_DISABLE,
   ID_TRAY_LOG,
+  ID_TRAY_QUIT,
+  ID_TRAY_OPEN,
 };
 }  // namespace
 
@@ -25,18 +22,43 @@ TunnelTrayIcon::TunnelTrayIcon() {
   reload_icons();
   tick_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_tick, this);
   pulse_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_pulse, this);
-  Bind(wxEVT_TASKBAR_LEFT_DOWN, &TunnelTrayIcon::on_left_down, this);
-  Bind(wxEVT_MENU, &TunnelTrayIcon::on_menu, this);
+  start_ayatana();
+  if (!ayatana_.active()) {
+    // Fallback: wx GtkStatusIcon (menu position is unreliable on Wayland).
+    Bind(wxEVT_TASKBAR_LEFT_DOWN, &TunnelTrayIcon::on_left_down, this);
+    Bind(wxEVT_MENU, &TunnelTrayIcon::on_menu, this);
+  }
   tick_.Start(1000);
-  if (settings.enabled) set_enabled(true);
+  // Prefer live helper/stats over stale settings.enabled after tray restart.
+  if (proc_.running()) {
+    const int live = tunnel_tray::live_tunnel_port();
+    if (live > 0) port_ = live;
+    persist_settings(true);
+  } else if (settings.enabled) {
+    set_enabled(true);
+  }
   refresh_icon();
 }
 
 TunnelTrayIcon::~TunnelTrayIcon() {
+  ayatana_.stop();
   if (panel_) {
     panel_->Destroy();
     panel_.release();
   }
+}
+
+void TunnelTrayIcon::start_ayatana() {
+  if (!tunnel_tray::ayatana_tray_available()) return;
+  tunnel_tray::AyatanaCallbacks cbs;
+  cbs.open_panel = [this](unsigned user_time) { show_panel(user_time); };
+  cbs.enable = [this] { CallAfter([this] { set_enabled(true); }); };
+  cbs.disable = [this] { CallAfter([this] { set_enabled(false); }); };
+  cbs.open_log = [this] { CallAfter([this] { open_log(); }); };
+  cbs.quit = [this] { CallAfter([this] { quit_app(); }); };
+  cbs.is_running = [this] { return proc_.running(); };
+  if (!ayatana_.start(std::move(cbs))) return;
+  write_icon_files();
 }
 
 void TunnelTrayIcon::ensure_panel() {
@@ -59,27 +81,32 @@ void TunnelTrayIcon::ensure_panel() {
           usb_ = c.usb;
           expose_ = c.expose;
         }
-        apply_expose();
+        return apply_expose();
       },
       [this]() { quit_app(); });
 }
 
 wxMenu* TunnelTrayIcon::CreatePopupMenu() {
+  if (ayatana_.active()) return nullptr;
+  return build_menu();
+}
+
+wxMenu* TunnelTrayIcon::build_menu() {
   auto* m = new wxMenu();
-  m->Append(wxID_OPEN, wxT("Open control panel"));
+  m->Append(ID_TRAY_OPEN, wxT("Open control panel"));
   if (proc_.running()) m->Append(ID_TRAY_DISABLE, wxT("Disable tunnel"));
   else m->Append(ID_TRAY_ENABLE, wxT("Enable tunnel"));
   m->Append(ID_TRAY_LOG, wxT("Open log"));
   m->AppendSeparator();
-  m->Append(wxID_EXIT, wxT("Quit tray"));
+  m->Append(ID_TRAY_QUIT, wxT("Quit tray"));
   return m;
 }
 
-void TunnelTrayIcon::on_left_down(wxTaskBarIconEvent&) { show_panel(); }
+void TunnelTrayIcon::on_left_down(wxTaskBarIconEvent&) { PopupMenu(build_menu()); }
 
 void TunnelTrayIcon::on_menu(wxCommandEvent& ev) {
   switch (ev.GetId()) {
-    case wxID_OPEN:
+    case ID_TRAY_OPEN:
       show_panel();
       break;
     case ID_TRAY_ENABLE:
@@ -91,8 +118,8 @@ void TunnelTrayIcon::on_menu(wxCommandEvent& ev) {
     case ID_TRAY_LOG:
       open_log();
       break;
-    case wxID_EXIT:
-      quit_app();
+    case ID_TRAY_QUIT:
+      CallAfter([this] { quit_app(); });
       break;
     default:
       break;
@@ -102,9 +129,9 @@ void TunnelTrayIcon::on_menu(wxCommandEvent& ev) {
 void TunnelTrayIcon::open_log() { tunnel_tray::show_tunnel_log(nullptr); }
 
 void TunnelTrayIcon::quit_app() {
-  // Only stop the tunnel this tray started (pid / helper-managed).
   proc_.stop();
   persist_settings(false);
+  ayatana_.stop();
   if (panel_) {
     panel_->Destroy();
     panel_.release();
@@ -113,86 +140,12 @@ void TunnelTrayIcon::quit_app() {
   wxTheApp->ExitMainLoop();
 }
 
-tunnel_tray::TrayControls TunnelTrayIcon::controls_now() const {
-  tunnel_tray::TrayControls c;
-  c.port = port_;
-  c.usb = usb_;
-  c.expose = expose_;
-  return c;
-}
-
-tunnel_tray::TunnelConfig TunnelTrayIcon::config_from_ui() const {
-  tunnel_tray::TunnelConfig cfg;
-  cfg.port = port_;
-  cfg.transport = usb_ ? "usb" : "sim";
-  cfg.expose = expose_;
-  return cfg;
-}
-
-void TunnelTrayIcon::persist_settings(bool enabled) {
-  tunnel_tray::TraySettings s;
-  s.expose = expose_;
-  s.port = port_;
-  s.usb = usb_;
-  s.enabled = enabled;
-  tunnel_tray::save_tray_settings(s);
-}
-
-bool TunnelTrayIcon::set_enabled(bool want_on) {
-  if (want_on) {
-    if (usb_) {
-      if (port_ < 1 || port_ > 4 || !tunnel_tray::display_port_available(port_)) {
-        const int sole = tunnel_tray::sole_available_display_port();
-        if (sole > 0) port_ = sole;
-        else port_ = 0;
-      }
-    }
-    std::string err;
-    rocketbox_tunnel_log(std::string("[tray] enable ") + (usb_ ? "usb" : "sim") +
-                         (port_ ? " Port " + std::to_string(port_) : " (auto Port)"));
-    if (!proc_.start(config_from_ui(), err)) {
-      rocketbox_tunnel_log("[tray] enable failed: " + err);
-      wxMessageBox(err, "RocketBox Tunnel", wxOK | wxICON_ERROR);
-      persist_settings(false);
-      return false;
-    }
-    if (port_ <= 0) {
-      for (int p = 1; p <= 4; ++p) {
-        const auto rates = tunnel_tray::read_tunnel_rates(p);
-        if (rates.ok && rates.display_port > 0) {
-          port_ = rates.display_port;
-          break;
-        }
-        if (rates.ok) {
-          port_ = p;
-          break;
-        }
-      }
-    }
-    rocketbox_tunnel_log("[tray] tunnel running");
-  } else {
-    rocketbox_tunnel_log("[tray] disable");
-    proc_.stop();
-  }
-  persist_settings(want_on);
-  refresh_icon();
-  if (panel_ && panel_->is_shown()) panel_->sync_from_host(controls_now(), proc_.running());
-  return true;
-}
-
-void TunnelTrayIcon::apply_expose() {
-  persist_settings(proc_.running());
-  if (!proc_.running()) return;
-  proc_.stop();
-  std::string err;
-  if (!proc_.start(config_from_ui(), err)) {
-    wxMessageBox(err, "RocketBox Tunnel", wxOK | wxICON_ERROR);
-    persist_settings(false);
-  }
-  refresh_icon();
-}
-
-void TunnelTrayIcon::show_panel() {
+void TunnelTrayIcon::show_panel(unsigned user_time) {
   ensure_panel();
-  panel_->show_raise(controls_now(), proc_.running());
+  const bool up = proc_.running();
+  if (up) {
+    const int live = tunnel_tray::live_tunnel_port();
+    if (live > 0) port_ = live;
+  }
+  panel_->show_raise(controls_now(), up, user_time);
 }

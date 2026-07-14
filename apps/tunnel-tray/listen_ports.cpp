@@ -121,7 +121,7 @@ std::string service_label(const Endpoint& ep, const std::string& process) {
 
 std::string endpoint_menu_label(const Endpoint& ep, bool down, const std::string& process) {
   auto s = service_label(ep, down ? std::string{} : process);
-  if (down) s += "  (down)";
+  if (down) s += " - not listening";
   return s;
 }
 

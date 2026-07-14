@@ -30,7 +30,7 @@ lists plugged cables only; with one cable there is nothing to pick.
 
 1. Enable tunnel from the panel or tray menu.
 2. USB: Cable from serial (picker only if multiple cables).
-3. Optionally check Expose → Apply (restarts if running).
+3. Optionally check Expose → Apply (SIGHUP reload; no restart).
 4. Status shows `Connected · Port N`. Hover for up/down rates.
 
 Config: `~/.config/rocketbox/tunnel-tray.conf`  
@@ -55,13 +55,14 @@ sudo rocketbox-tunnel --transport sim --port 4
 | `--no-netns` | Keep TUN in the host netns |
 | `--transport usb` | USB (default) |
 
-Only one `rocketbox-tunnel` may bridge a given Port (lock file). Privilege:
-root/`CAP_NET_ADMIN`, `pkexec` from the tray, or `rocketbox-tunnel-helper` on
-`/run/rocketbox/helper.sock`.
+Only one `rocketbox-tunnel` may bridge a given Port (lock file). Privilege: tray
+asks for a password **once** to start `rocketbox-tunnel-helper`; Enable / Disable /
+Apply then use `/run/rocketbox/helper.sock` with no further prompts while the helper
+stays up. Or run the tunnel as root / with `CAP_NET_ADMIN`.
 
 ## Troubleshooting
 
 - **already running** — second CLI on same Port; stop the first or use another Port.
 - **in use / busy** — close RocketBox App on that cable.
-- **auth cancelled** — declined pkexec; tunnel stays Off.
+- **auth cancelled** — declined the one-time helper elevation; tunnel stays Off.
 - **tray missing** — set `DBUS_SESSION_BUS_ADDRESS` or use `apps/tunnel-tray/run-tray.sh`.

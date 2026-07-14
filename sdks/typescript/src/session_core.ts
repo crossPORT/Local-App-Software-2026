@@ -1,7 +1,6 @@
 import type { Transport } from './transport';
 import type { SystemInfo } from './system_info';
 import {
-  MSG_ATTACH,
   MSG_LIST,
   MSG_CONNECT,
   MSG_DISCONNECT,
@@ -32,7 +31,7 @@ export class Session {
   constructor(private readonly transport: Transport, private readonly port: number) {}
 
   async init(): Promise<void> {
-    // Register handlers before opening USB so early EP traffic is not dropped.
+    // Register handlers before opening so early EP traffic is not dropped.
     this.transport.onEP3Received((header, payload) => {
       this.handleControlMessage(header, payload);
     });
@@ -48,7 +47,9 @@ export class Session {
     });
 
     await this.transport.init();
-    await this.sendAttach();
+    // Port claimed via WS ?port=N (or TCP 0xC1 claim). No ATTACH — matches HW/C++.
+    this.attachedPortId = this.port - 1;
+    this.systemId = `sys-port-${this.port}`;
   }
 
   private handleControlMessage(header: DataView, payload: Uint8Array): void {
@@ -100,27 +101,6 @@ export class Session {
       }
     }
     return systems;
-  }
-
-  /** ATTACH on EP4; local port MUST reply on EP3 (fabric/request point are out of host scope). */
-  private async sendAttach(): Promise<void> {
-    const tryOnce = async (): Promise<void> => {
-      const header = this.buildControlHeader(MSG_ATTACH, this.getTxn(), this.port - 1, 0);
-      const [reply] = await this.transport.writeEP4(header);
-      this.attachedPortId = reply.getUint32(4);
-      this.systemId = `sys-port-${this.attachedPortId + 1}`;
-    };
-    try {
-      await tryOnce();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const stale = msg === 'timeout' || msg === 'busy' || /timeout|busy/i.test(msg);
-      if (!stale || typeof this.transport.recover !== 'function') {
-        throw err;
-      }
-      await this.transport.recover();
-      await tryOnce();
-    }
   }
 
   public async listSystems(): Promise<SystemInfo[]> {

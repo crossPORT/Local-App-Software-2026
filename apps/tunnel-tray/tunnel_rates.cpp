@@ -100,4 +100,11 @@ bool live_tunnel_holds_port(int display_port) {
 #endif
 }
 
+int live_tunnel_port() {
+  for (int p = 1; p <= 4; ++p) {
+    if (live_tunnel_holds_port(p)) return p;
+  }
+  return 0;
+}
+
 }  // namespace tunnel_tray

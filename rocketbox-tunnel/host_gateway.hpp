@@ -18,6 +18,8 @@ public:
   HostGateway& operator=(const HostGateway&) = delete;
 
   void install(int local_port, const std::string& netns, const std::vector<ExposeRule>& expose);
+  /** Rebuild DNAT allowlist without tearing down veth/netns (SIGHUP). */
+  void set_expose(const std::vector<ExposeRule>& expose);
   void remove();
 
   const std::string& host_veth() const { return host_veth_; }

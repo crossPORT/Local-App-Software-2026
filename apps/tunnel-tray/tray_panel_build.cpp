@@ -42,11 +42,12 @@ void TrayPanel::build_ui() {
   auto* bulk = new wxBoxSizer(wxHORIZONTAL);
   auto* all = new wxButton(this, wxID_ANY, wxT("Select all"));
   auto* none = new wxButton(this, wxID_ANY, wxT("Clear all"));
-  auto* apply = new wxButton(this, wxID_ANY, wxT("Apply"));
+  apply_ = new wxButton(this, wxID_ANY, wxT("Apply"));
+  apply_->Enable(false);
   auto* open_log = new wxButton(this, wxID_ANY, wxT("Open log"));
   bulk->Add(all, 0, wxRIGHT, 8);
   bulk->Add(none, 0, wxRIGHT, 8);
-  bulk->Add(apply, 0, wxRIGHT, 8);
+  bulk->Add(apply_, 0, wxRIGHT, 8);
   bulk->Add(open_log, 0);
   root->Add(bulk, 0, wxEXPAND | wxALL, 12);
 
@@ -87,15 +88,21 @@ void TrayPanel::build_ui() {
     refill_ports();
   });
   enable_->Bind(wxEVT_CHECKBOX, &TrayPanel::on_enable, this);
+  list_->Bind(wxEVT_CHECKLISTBOX, [this](wxCommandEvent&) { update_apply_enabled(); });
   all->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
     for (unsigned i = 0; i < list_->GetCount(); ++i) list_->Check(static_cast<int>(i), true);
+    update_apply_enabled();
   });
   none->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
     for (unsigned i = 0; i < list_->GetCount(); ++i) list_->Check(static_cast<int>(i), false);
+    update_apply_enabled();
   });
-  apply->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+  apply_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
     read_expose();
-    if (on_expose_) on_expose_();
+    if (on_expose_ && on_expose_()) {
+      applied_expose_ = ctrls_.expose;
+      update_apply_enabled();
+    }
     status_->SetLabel(tray_status_label(enable_->GetValue(), ctrls_.port));
   });
   open_log->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { show_tunnel_log(this); });

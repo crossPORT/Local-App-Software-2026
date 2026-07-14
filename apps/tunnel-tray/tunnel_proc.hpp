@@ -26,6 +26,8 @@ public:
   ~TunnelProcess() { stop(); }
 
   bool start(const TunnelConfig& cfg, std::string& error);
+  /** Write expose file and SIGHUP a live tunnel (adopt orphan pid if needed). */
+  bool reload(const TunnelConfig& cfg, std::string& error);
   void stop();
   bool running() const;
   long pid() const { return pid_; }
@@ -62,6 +64,9 @@ TunnelRates read_tunnel_rates(int port);
 
 /** True if stats name a still-living tunnel process for this port. */
 bool live_tunnel_holds_port(int display_port);
+
+/** First Port 1–4 with a live tunnel, or 0. */
+int live_tunnel_port();
 
 std::string format_rate(uint64_t bps);
 

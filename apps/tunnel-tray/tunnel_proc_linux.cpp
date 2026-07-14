@@ -1,14 +1,15 @@
 #include "tunnel_proc.hpp"
+#include "helper_launch.hpp"
 #include "platform/stats_paths.hpp"
+#include "tray_start_msg.hpp"
 #include "tunnel_args.hpp"
+#include "tunnel_hup.hpp"
 
 #include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
-#include <sstream>
 #include <unistd.h>
-#include <vector>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -29,6 +30,13 @@ std::string dirname_of(const std::string& path) {
   if (pos == std::string::npos) return ".";
   if (pos == 0) return "/";
   return path.substr(0, pos);
+}
+
+bool helper_term(long pid) {
+  if (pid <= 0) return false;
+  std::string reply, herr;
+  return tunnel_helper::send_command("TERM " + std::to_string(pid), reply, herr) &&
+         reply.rfind("OK", 0) == 0;
 }
 
 }  // namespace
@@ -71,10 +79,14 @@ bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) const {
 }
 
 bool TunnelProcess::running() const {
-  if (helper_managed_) {
-    std::string st, herr;
-    return tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0;
+  // Helper owns the elevated child across tray restarts — always ask STATUS.
+  std::string st, herr;
+  if (tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0) {
+    helper_managed_ = true;
+    return true;
   }
+  if (helper_managed_) helper_managed_ = false;
+  if (live_tunnel_port() > 0) return true;
   if (pid_ <= 0) return false;
   if (child_exited(nullptr)) return false;
   if (::kill(static_cast<pid_t>(pid_), 0) == 0) return true;
@@ -83,111 +95,95 @@ bool TunnelProcess::running() const {
 
 bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   if (running()) {
-    error = "tunnel already running";
-    return false;
+    // Live tunnel (helper child or orphan) — adopt into UI; HUP expose best-effort.
+    const int live = live_tunnel_port();
+    TunnelConfig adopted = cfg;
+    if (live > 0) {
+      adopted.port = live;
+      port_ = live;
+    }
+    std::string st, herr;
+    helper_managed_ =
+        tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0;
+    std::string ignore;
+    (void)reload(adopted, ignore);
+    return true;
   }
+  if (cfg.port >= 1 && cfg.port <= 4 && live_tunnel_holds_port(cfg.port)) {
+    return reload(cfg, error);
+  }
+  if (!ensure_helper_elevated(error)) return false;
+
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
   const std::string tail = build_tunnel_arg_tail(cfg, bin);
   pids_at_start_ = snapshot_stats_pids();
   clear_tunnel_stats(cfg.port);
 
   std::string reply, herr;
-  if (tunnel_helper::send_command("START " + tail, reply, herr) && reply.rfind("OK", 0) == 0) {
-    helper_managed_ = true;
-    port_ = cfg.port;
-    for (int i = 0; i < 600; ++i) {
-      if (tunnel_ready(cfg)) return true;
-      std::string st;
-      if (tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK stopped", 0) == 0) {
-        helper_managed_ = false;
-        error = "tunnel failed to start (no USB cable or see log)";
-        return false;
-      }
-      ::usleep(100000);
+  if (!tunnel_helper::send_command("START " + tail, reply, herr) || reply.rfind("OK", 0) != 0) {
+    error = herr.empty() ? (reply.empty() ? "helper START failed" : reply) : herr;
+    while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
+    if (error.find("already running") != std::string::npos) {
+      helper_managed_ = true;
+      const int live = live_tunnel_port();
+      if (live > 0) port_ = live;
+      return true;
     }
-    (void)tunnel_helper::send_command("STOP", reply, herr);
-    helper_managed_ = false;
-    error = "helper started tunnel but it did not become ready";
+    if (error.rfind("ERR ", 0) == 0) error.erase(0, 4);
     return false;
   }
-
-  std::vector<std::string> args_store;
-  args_store.push_back(bin);
-  if (cfg.transport != "usb" || cfg.port > 0) {
-    args_store.push_back("--port");
-    args_store.push_back(std::to_string(cfg.port));
-  }
-  args_store.push_back("--transport");
-  args_store.push_back(cfg.transport);
-  if (!cfg.iface.empty()) {
-    args_store.push_back("--iface");
-    args_store.push_back(cfg.iface);
-  }
-  if (!cfg.use_netns) args_store.push_back("--no-netns");
-  if (!cfg.expose.empty()) {
-    std::ostringstream oss;
-    for (size_t i = 0; i < cfg.expose.size(); ++i) {
-      if (i) oss << ',';
-      oss << endpoint_token(cfg.expose[i]);
-    }
-    args_store.push_back("--expose");
-    args_store.push_back(oss.str());
-  }
-
-  const bool use_pkexec = (::geteuid() != 0) && file_executable("/usr/bin/pkexec");
-  std::vector<char*> argv;
-  std::string pkexec = "/usr/bin/pkexec";
-  if (use_pkexec) argv.push_back(pkexec.data());
-  for (auto& s : args_store) argv.push_back(s.data());
-  argv.push_back(nullptr);
-
-  const pid_t child = ::fork();
-  if (child < 0) {
-    error = std::string("fork failed: ") + std::strerror(errno);
-    return false;
-  }
-  if (child == 0) {
-    ::setsid();
-    ::execvp(argv[0], argv.data());
-    _exit(127);
-  }
-  pid_ = child;
+  helper_managed_ = true;
   port_ = cfg.port;
-  helper_managed_ = false;
-
   for (int i = 0; i < 600; ++i) {
-    if (child_exited(nullptr)) {
-      error = "tunnel failed to start (no USB cable, auth cancelled, or see log)";
+    if (tunnel_ready(cfg)) return true;
+    std::string st;
+    if (tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK stopped", 0) == 0) {
+      helper_managed_ = false;
+      error = start_failed_msg(cfg);
       return false;
     }
-    if (tunnel_ready(cfg)) return true;
     ::usleep(100000);
   }
-  error = "tunnel failed to start (no USB cable, auth cancelled, or see log)";
-  stop();
+  (void)tunnel_helper::send_command("STOP", reply, herr);
+  helper_managed_ = false;
+  error = "helper started tunnel but it did not become ready";
   return false;
 }
 
 void TunnelProcess::stop() {
+  std::string reply, herr;
   if (helper_managed_) {
-    std::string reply, herr;
     (void)tunnel_helper::send_command("STOP", reply, herr);
     helper_managed_ = false;
-    pid_ = 0;
-    return;
+  } else {
+    // Helper may have forgotten the child after a helper restart — still ask.
+    (void)tunnel_helper::send_command("STOP", reply, herr);
   }
-  if (pid_ <= 0) return;
-  const pid_t p = static_cast<pid_t>(pid_);
-  if (::kill(p, SIGTERM) != 0 && errno == EPERM && file_executable("/usr/bin/pkexec")) {
-    (void)::system(("/usr/bin/pkexec kill " + std::to_string(p)).c_str());
+  // Reap any live tunnel from stats (root-owned orphan after helper STATUS=stopped).
+  for (int p = 1; p <= 4; ++p) {
+    if (!live_tunnel_holds_port(p)) continue;
+    const long pids = read_tunnel_rates(p).pid;
+    if (pids <= 0) continue;
+    if (!helper_term(pids)) {
+      std::string err;
+      if (ensure_helper_elevated(err)) (void)helper_term(pids);
+    }
+    for (int i = 0; i < 50; ++i) {
+      if (!live_tunnel_holds_port(p)) break;
+      ::usleep(100000);
+    }
   }
-  for (int i = 0; i < 50; ++i) {
-    if (::waitpid(p, nullptr, WNOHANG) == p) break;
-    if (::kill(p, 0) != 0 && errno == ESRCH) break;
-    ::usleep(100000);
+  if (pid_ > 0) {
+    const long p = pid_;
+    if (!helper_term(p)) {
+      std::string err;
+      if (ensure_helper_elevated(err)) (void)helper_term(p);
+      else if (::kill(static_cast<pid_t>(p), SIGTERM) != 0 && errno == EPERM &&
+               file_executable("/usr/bin/pkexec")) {
+        (void)::system(("/usr/bin/pkexec kill " + std::to_string(p)).c_str());
+      }
+    }
   }
-  if (::kill(p, 0) == 0 || errno == EPERM) (void)::kill(p, SIGKILL);
-  (void)::waitpid(p, nullptr, WNOHANG);
   pid_ = 0;
 }
 

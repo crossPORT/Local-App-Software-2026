@@ -46,7 +46,7 @@ Requires Node.js 18+.
 
 ## Clients
 
-- **PWA / WebUSB sim:** `ws://localhost:1773?port=N` (open the PWA with `?simulate=1&port=N`)
-- **C++ / rocketbox-tunnel:** TCP `127.0.0.1:1772`
+- **PWA / WebUSB sim:** `ws://localhost:1773?port=N` (required; no ATTACH)
+- **C++ / rocketbox-tunnel:** TCP `127.0.0.1:1772`, first bytes `0xC1` + Port 1–4 claim, then EP4 switch + EP1/2 data
 
 Full clone → sim → PWA → native walkthrough: **[docs/DEV-DEMO.md](../docs/DEV-DEMO.md)**.

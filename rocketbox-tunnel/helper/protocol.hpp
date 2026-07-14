@@ -11,7 +11,7 @@ constexpr const char* kDefaultSock =
     "/run/rocketbox/helper.sock";
 #endif
 
-/** Line protocol: START|STOP|STATUS|APPLY <args> → OK|ERR message */
+/** Line protocol: START|STOP|STATUS|HUP|TERM → OK|ERR message */
 bool send_command(const std::string& line, std::string& reply, std::string& error);
 
 }  // namespace tunnel_helper

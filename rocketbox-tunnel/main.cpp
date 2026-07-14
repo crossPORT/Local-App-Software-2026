@@ -1,12 +1,13 @@
 #include "bridge.hpp"
 #include "dialer.hpp"
-#include "expose_spec.hpp"
+#include "expose_file.hpp"
 #include "open_transport.hpp"
 #include "peer_map.hpp"
 #include "port_lock.hpp"
 #include "rocketbox_ping.hpp"
 #include "tun_device.hpp"
 #include "tunnel_log.hpp"
+#include "tunnel_options.hpp"
 #include "tunnel_stats.hpp"
 
 #include "rocketbox/sdk.h"
@@ -18,109 +19,44 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <vector>
 
 namespace {
 
 std::atomic<bool> g_stop{false};
-void on_signal(int) { g_stop = true; }
+std::atomic<bool> g_reload{false};
 
-struct Options {
-  int port = 0;
-  int ping_peer = 0;
-  std::string iface;
-#if defined(__linux__)
-  bool use_netns = true;
-#else
-  bool use_netns = false;
+void on_signal(int sig) {
+#if defined(SIGHUP)
+  if (sig == SIGHUP) {
+    g_reload = true;
+    return;
+  }
 #endif
-  rocketbox::TransportMode transport = rocketbox::TransportMode::Usb;
-  std::vector<ExposeRule> expose;
-};
-
-const char* transport_name(rocketbox::TransportMode t) {
-  return t == rocketbox::TransportMode::Usb ? "usb" : "sim";
-}
-
-void usage(const char* argv0) {
-  std::cerr << "RocketBox tunnel (USB ↔ host IP)\n"
-            << "Usage: " << argv0 << " [options]\n"
-            << "  (USB default)      Port from cable serial → 10.64.0.N\n"
-            << "  --port N           USB: pick among multiple cables; sim: required\n"
-            << "  --transport T      usb (default) or sim\n"
-            << "  --expose SPEC      Publish host ports: 445, tcp:22, udp:53\n"
-            << "  --iface NAME       TUN interface name (default: rbN)\n"
-            << "  --no-netns         Keep TUN in the host network namespace\n"
-            << "  --ping M           ICMP echo to peer port M, then exit\n";
-}
-
-bool parse_args(int argc, char** argv, Options& out) {
-  for (int i = 1; i < argc; ++i) {
-    const std::string a = argv[i];
-    auto need = [&](const char* name) -> std::string {
-      if (i + 1 >= argc) {
-        throw std::runtime_error(std::string("missing value for ") + name);
-      }
-      return argv[++i];
-    };
-    if (a == "--port") {
-      out.port = std::stoi(need("--port"));
-    } else if (a == "--transport") {
-      const std::string t = need("--transport");
-      if (t == "usb") {
-        out.transport = rocketbox::TransportMode::Usb;
-      } else if (t == "sim") {
-        out.transport = rocketbox::TransportMode::Sim;
-      } else {
-        throw std::runtime_error("--transport must be usb or sim");
-      }
-    } else if (a == "--ping") {
-      out.ping_peer = std::stoi(need("--ping"));
-    } else if (a == "--expose") {
-      parse_expose_list(need("--expose"), out.expose);
-    } else if (a == "--iface") {
-      out.iface = need("--iface");
-    } else if (a == "--no-netns") {
-      out.use_netns = false;
-    } else if (a == "-h" || a == "--help") {
-      usage(argv[0]);
-      return false;
-    } else {
-      throw std::runtime_error("unknown arg: " + a);
-    }
-  }
-  if (out.transport == rocketbox::TransportMode::Sim) {
-    if (out.port < 1 || out.port > 4) {
-      throw std::runtime_error("sim requires --port N (1–4)");
-    }
-  } else if (out.port != 0 && (out.port < 1 || out.port > 4)) {
-    throw std::runtime_error("--port N must be 1–4 when set");
-  }
-  if (out.ping_peer != 0 && (out.ping_peer < 1 || out.ping_peer > 4)) {
-    throw std::runtime_error("--ping M must be a port 1–4");
-  }
-  return true;
+  g_stop = true;
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-  Options opt;
+  TunnelOptions opt;
   try {
-    if (!parse_args(argc, argv, opt)) {
+    if (!tunnel_parse_args(argc, argv, opt)) {
       return 1;
     }
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
-    usage(argv[0]);
+    tunnel_usage(argv[0]);
     return 1;
   }
 
   std::signal(SIGINT, on_signal);
   std::signal(SIGTERM, on_signal);
+#if defined(SIGHUP)
+  std::signal(SIGHUP, on_signal);
+#endif
 
   try {
-    rocketbox_tunnel_log(std::string("connect transport ") + transport_name(opt.transport) +
+    rocketbox_tunnel_log(std::string("connect transport ") + tunnel_transport_name(opt.transport) +
                          (opt.port ? " prefer Port " + std::to_string(opt.port) : " (auto Port)"));
     auto transport = open_tunnel_transport(opt.transport, opt.port);
     const int port = transport->display_port();
@@ -145,6 +81,8 @@ int main(int argc, char** argv) {
       return run_rocketbox_ping(*transport, port, opt.ping_peer);
     }
 
+    write_expose_file(port, opt.expose);
+
     TunDevice tun;
     tun.open(opt.iface);
     if (opt.use_netns) {
@@ -159,9 +97,18 @@ int main(int argc, char** argv) {
     CircuitDialer dialer(*transport, port);
     TunnelBridge bridge(tun, dialer, port);
     TunnelStatsPublisher stats(port, bridge, transport->serial());
-    rocketbox_tunnel_log("bridging (Ctrl+C to stop)");
+    rocketbox_tunnel_log("bridging (Ctrl+C to stop; SIGHUP reloads expose)");
     std::thread stopper([&] {
       while (!g_stop) {
+        if (g_reload.exchange(false)) {
+          try {
+            const auto rules = read_expose_file(port);
+            tun.reload_expose(rules);
+            rocketbox_tunnel_log("reloaded expose (" + std::to_string(rules.size()) + " rules)");
+          } catch (const std::exception& e) {
+            rocketbox_tunnel_log(std::string("reload failed: ") + e.what());
+          }
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
       bridge.stop();
@@ -169,9 +116,7 @@ int main(int argc, char** argv) {
     });
     bridge.run();
     g_stop = true;
-    if (stopper.joinable()) {
-      stopper.join();
-    }
+    if (stopper.joinable()) stopper.join();
     transport->disconnect();
     rocketbox_tunnel_log("stopped");
   } catch (const std::exception& e) {

@@ -87,6 +87,8 @@ void TunDevice::isolate_in_netns(const std::string&, const std::string&, int,
   throw std::runtime_error("netns isolation is Linux-only; use --no-netns on macOS");
 }
 
+void TunDevice::reload_expose(const std::vector<ExposeRule>&) {}
+
 void TunDevice::close() {
   if (fd_ >= 0) {
     ::close(fd_);

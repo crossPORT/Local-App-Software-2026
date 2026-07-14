@@ -30,7 +30,7 @@ void serve_unix() {
     ::close(fd);
     return;
   }
-  ::chmod(kDefaultSock, 0660);
+  ::chmod(kDefaultSock, 0666);
   ::listen(fd, 4);
   std::cerr << "[rocketbox-tunnel-helper] listening on " << kDefaultSock << "\n";
   for (;;) {

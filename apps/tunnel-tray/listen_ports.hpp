@@ -32,7 +32,7 @@ std::vector<ListeningService> scan_listening_services();
 /** Unique endpoints only (no process names). */
 std::vector<Endpoint> scan_listening_endpoints();
 
-/** "SSH - TCP 22 (sshd)" / "TCP 53124 (chrome)" / with " (down)". */
+/** "SSH - TCP 22 (sshd)" / "TCP 53124 (chrome)" / "… - not listening". */
 std::string service_label(const Endpoint& ep, const std::string& process = {});
 std::string endpoint_menu_label(const Endpoint& ep, bool down, const std::string& process = {});
 

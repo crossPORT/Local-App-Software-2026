@@ -6,21 +6,22 @@ const TCP_PORT = Number(process.env.ROCKETBOX_TCP_PORT || 1772);
 const WS_PORT = Number(process.env.ROCKETBOX_WS_PORT || 1773);
 const LISTEN_HOST = process.env.ROCKETBOX_LISTEN_HOST || '0.0.0.0';
 
-// Message Types
-const MSG_ATTACH = 0x01;
+// Message Types (EP4/EP3 control — sim Session LIST/CONNECT only; no ATTACH)
 const MSG_LIST = 0x02;
 const MSG_CONNECT = 0x03;
 const MSG_DISCONNECT = 0x04;
 const MSG_KEEPALIVE = 0x05;
 const MSG_SESSION = 0x09;
 
-const MSG_ATTACHED = 0x81;
 const MSG_SYSTEMS = 0x82;
 const MSG_ACK = 0x83;
 const MSG_NAK = 0x84;
 const MSG_CIRCUIT_UP = 0x85;
 const MSG_CIRCUIT_DOWN = 0x86;
 const MSG_STATUS = 0x87;
+
+/** TCP port claim (same role as WS ?port=N). Not a USB EP; not ATTACH. */
+const SIM_PORT_CLAIM = 0xC1;
 
 // NAK Reason codes
 const NAK_BUSY = 0x01;
@@ -73,10 +74,42 @@ function applyState1DefaultPairs() {
     if (pa.connectedTo !== -1 || pb.connectedTo !== -1) continue;
     pa.connectedTo = b;
     pb.connectedTo = a;
+    pa.status = 'busy';
+    pb.status = 'busy';
     pa.lastConnectedTo = b;
     pb.lastConnectedTo = a;
+    pa.lastConnectTime = Date.now();
+    pb.lastConnectTime = Date.now();
     logEvent(`State-1 default pair: Port ${a + 1} <═══> Port ${b + 1}`);
   }
+}
+
+/** Force-free a Port slot, then bind socket (WS ?port=N or TCP 0xC1 claim). */
+function claimDisplayPort(displayPort, socket, type) {
+  if (displayPort < 1 || displayPort > 4) return null;
+  const portIndex = displayPort - 1;
+  const existing = ports[portIndex];
+  if (existing.status !== 'offline') {
+    logEvent(`Port ${displayPort} occupied — force-closing for ${type} claim`);
+    if (existing.socket) {
+      try {
+        if (existing.type === 'ws') existing.socket.close(4000, 'Session Overridden');
+        else if (existing.type === 'tcp') existing.socket.destroy();
+      } catch (e) {
+        logEvent(`Error force-closing old socket: ${e.message}`);
+      }
+    }
+    existing.reset();
+  }
+  const port = ports[portIndex];
+  port.socket = socket;
+  port.type = type;
+  port.status = 'reachable';
+  applyState1DefaultPairs();
+  replayAnnouncements(port);
+  broadcastSystems();
+  logEvent(`${type.toUpperCase()} claimed Port ${port.id + 1}`);
+  return port;
 }
 
 // --- Live Dashboard Visualization ---
@@ -289,35 +322,6 @@ function handleControlMessage(portRef, header, payload) {
   logEvent(`[Port ${port.id + 1}] Received MSG type: 0x${type.toString(16)}, txn: ${txn}, arg: ${arg}`);
 
   switch (type) {
-    case MSG_ATTACH: {
-      let reqPort = arg;
-      if (reqPort < 0 || reqPort >= 4) {
-        reqPort = port.id; // use pre-assigned port
-      }
-      const targetPort = ports[reqPort];
-      if (targetPort.status !== 'offline' && targetPort.socket !== port.socket) {
-        sendControlPacket(port, MSG_NAK, txn, NAK_BUSY);
-        return;
-      }
-
-      // Claim the port
-      if (targetPort !== port) {
-        targetPort.socket = port.socket;
-        targetPort.type = port.type;
-        targetPort.status = 'reachable';
-        port.reset();
-        port = targetPort;
-        portRef.current = targetPort; // Update the reference so other listeners use the correct port!
-      } else {
-        port.status = 'reachable';
-      }
-
-      logEvent(`[Port ${port.id + 1}] Successfully Attached!`);
-      sendControlPacket(port, MSG_ATTACHED, txn, port.id);
-      broadcastSystems();
-      break;
-    }
-
     case MSG_LIST: {
       sendControlPacket(port, MSG_SYSTEMS, txn, 0, buildSystemsPayload());
       break;
@@ -451,12 +455,13 @@ function handleClientDisconnect(port) {
 }
 
 function handleDataPacket(port, data) {
-  if (port.status !== 'busy' || port.connectedTo === -1) {
-    logEvent(`[Port ${port.id + 1}] Data packet ignored - no active circuit`);
+  if (!port || port.connectedTo === -1) {
+    logEvent(`[Port ${port?.id + 1}] Data packet ignored - no active circuit`);
     return;
   }
   const peer = ports[port.connectedTo];
-  if (!peer || peer.status !== 'busy') {
+  if (!peer || peer.connectedTo !== port.id) {
+    logEvent(`[Port ${port.id + 1}] Data packet ignored - peer not linked back`);
     return;
   }
 
@@ -525,25 +530,10 @@ function replayAnnouncements(port) {
   });
 }
 
-// --- TCP Server for C++ ---
+// --- TCP Server for C++ (claim Port via 0xC1 + display Port 1–4, then EP mux) ---
 const tcpServer = createServer(socket => {
-  logEvent(`New TCP connection established`);
-  let port = ports.find(p => p.status === 'offline');
-  if (!port) {
-    logEvent(`Refused TCP connection - all ports full`);
-    socket.destroy();
-    return;
-  }
-
-  port.socket = socket;
-  port.type = 'tcp';
-  port.status = 'reachable';
-  const activePortRef = { current: port };
-
-  applyState1DefaultPairs();
-  replayAnnouncements(port);
-  broadcastSystems();
-
+  logEvent(`New TCP connection (awaiting Port claim)`);
+  const activePortRef = { current: null };
   let recvBuffer = Buffer.alloc(0);
 
   socket.on('data', data => {
@@ -551,7 +541,26 @@ const tcpServer = createServer(socket => {
 
     while (recvBuffer.length > 0) {
       const epId = recvBuffer.readUInt8(0);
-      
+
+      if (!activePortRef.current) {
+        if (epId !== SIM_PORT_CLAIM) {
+          logEvent(`TCP refused: expected Port claim 0xC1, got 0x${epId.toString(16)}`);
+          socket.destroy();
+          return;
+        }
+        if (recvBuffer.length < 2) break;
+        const displayPort = recvBuffer.readUInt8(1);
+        recvBuffer = recvBuffer.subarray(2);
+        const port = claimDisplayPort(displayPort, socket, 'tcp');
+        if (!port) {
+          logEvent(`TCP refused: invalid Port claim ${displayPort}`);
+          socket.destroy();
+          return;
+        }
+        activePortRef.current = port;
+        continue;
+      }
+
       if (epId === 0x04) {
         // Detect if this is a Mode 11 Crossbar switch 16-byte packet (1B prefix + 16B packet)
         // Standard protocol ver is 0x01 in the first byte of payload, but message type is never 0x00
@@ -568,9 +577,6 @@ const tcpServer = createServer(socket => {
             continue;
           }
         } else if (recvBuffer.length === 2) {
-          // If we only have 2 bytes, and the first byte of payload is 0x01, we don't know if it's
-          // standard control ver 0x01 or a Switch Request to Port 1 (destPort 0x01).
-          // We must wait for the 3rd byte (type byte) to disambiguate.
           break;
         }
 
@@ -611,7 +617,7 @@ const tcpServer = createServer(socket => {
   });
 
   socket.on('close', () => {
-    handleClientDisconnect(activePortRef.current);
+    if (activePortRef.current) handleClientDisconnect(activePortRef.current);
   });
 
   socket.on('error', err => {
@@ -1352,49 +1358,19 @@ httpServer.listen(WS_PORT, LISTEN_HOST, () => {
 
 wsServer.on('connection', (ws, req) => {
   const params = new URLSearchParams(req.url.split('?')[1] || '');
-  let portIndex = parseInt(params.get('port') || '-1', 10);
-  if (portIndex >= 1 && portIndex <= 4) {
-    portIndex = portIndex - 1;
-  } else {
-    portIndex = ports.findIndex(p => p.status === 'offline');
-  }
-
-  if (portIndex >= 0 && portIndex < 4) {
-    const existingPort = ports[portIndex];
-    if (existingPort.status !== 'offline') {
-      logEvent(`Port ${portIndex + 1} occupied during connect - force-closing existing connection to allow takeover`);
-      if (existingPort.socket) {
-        try {
-          if (existingPort.type === 'ws') {
-            existingPort.socket.close(4000, 'Session Overridden');
-          } else if (existingPort.type === 'tcp') {
-            existingPort.socket.destroy();
-          }
-        } catch (e) {
-          logEvent(`Error force-closing old socket: ${e.message}`);
-        }
-      }
-      existingPort.reset();
-    }
-  }
-
-  if (portIndex === -1 || ports[portIndex].status !== 'offline') {
-    logEvent(`Refused WS connection - port ${portIndex + 1} occupied`);
-    ws.close(1013, 'Port Occupied');
+  let displayPort = parseInt(params.get('port') || '0', 10);
+  if (displayPort < 1 || displayPort > 4) {
+    logEvent(`Refused WS connection — need ?port=1..4 (no ATTACH auto-assign)`);
+    ws.close(1008, 'port required');
     return;
   }
 
-  const port = ports[portIndex];
-  port.socket = ws;
-  port.type = 'ws';
-  port.status = 'reachable';
+  const port = claimDisplayPort(displayPort, ws, 'ws');
+  if (!port) {
+    ws.close(1013, 'Port Occupied');
+    return;
+  }
   const activePortRef = { current: port };
-
-  logEvent(`WS Connected to Port ${port.id + 1}`);
-  sendControlPacket(port, MSG_ATTACHED, 0, port.id);
-  applyState1DefaultPairs();
-  replayAnnouncements(port);
-  broadcastSystems();
 
   ws.on('message', data => {
     const buf = Buffer.from(data);

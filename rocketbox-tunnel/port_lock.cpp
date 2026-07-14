@@ -52,8 +52,15 @@ bool TunnelPortLock::try_acquire(int display_port, std::string& error) {
 
 void TunnelPortLock::release() {
   if (handle_) {
+    const int port = port_;
     CloseHandle(static_cast<HANDLE>(handle_));
     handle_ = nullptr;
+    port_ = 0;
+    if (port > 0) {
+      const std::string path = rocketbox_tunnel_lock_path(port);
+      DeleteFileA(path.c_str());
+    }
+    return;
   }
   port_ = 0;
 }
@@ -85,9 +92,14 @@ bool TunnelPortLock::try_acquire(int display_port, std::string& error) {
 
 void TunnelPortLock::release() {
   if (fd_ >= 0) {
+    const int port = port_;
     (void)::flock(fd_, LOCK_UN);
     ::close(fd_);
     fd_ = -1;
+    port_ = 0;
+    // Drop the file so a dead PID is not left looking like a live lock.
+    if (port > 0) (void)::unlink(rocketbox_tunnel_lock_path(port).c_str());
+    return;
   }
   port_ = 0;
 }

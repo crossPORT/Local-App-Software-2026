@@ -78,19 +78,19 @@ bool TunnelProcess::tunnel_ready(const TunnelConfig& cfg) const {
 }
 
 bool TunnelProcess::running() const {
-  if (helper_managed_) {
-    std::string st, herr;
-    return tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0;
+  std::string st, herr;
+  if (tunnel_helper::send_command("STATUS", st, herr) && st.rfind("OK running", 0) == 0) {
+    helper_managed_ = true;
+    return true;
   }
+  if (helper_managed_) helper_managed_ = false;
+  if (live_tunnel_port() > 0) return true;
   if (pid_ <= 0) return false;
   return !child_exited(nullptr);
 }
 
 bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
-  if (running()) {
-    error = "tunnel already running";
-    return false;
-  }
+  if (running()) return true;  // Helper still owns tunnel after tray restart.
   const std::string bin = cfg.tunnel_bin.empty() ? default_tunnel_bin() : cfg.tunnel_bin;
   TunnelConfig run = cfg;
   run.use_netns = false;
@@ -106,6 +106,11 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   if (!tunnel_helper::send_command("START " + tail, reply, herr) || reply.rfind("OK", 0) != 0) {
     error = herr.empty() ? (reply.empty() ? "helper START failed" : reply) : herr;
     while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
+    if (error.find("already running") != std::string::npos) {
+      helper_managed_ = true;
+      return true;
+    }
+    if (error.rfind("ERR ", 0) == 0) error.erase(0, 4);
     return false;
   }
   helper_managed_ = true;
@@ -127,6 +132,11 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
   (void)tunnel_helper::send_command("STOP", reply, herr);
   helper_managed_ = false;
   error = "helper started tunnel but it did not become ready";
+  return false;
+}
+
+bool TunnelProcess::reload(const TunnelConfig&, std::string& error) {
+  error = "expose reload is not supported on Windows yet";
   return false;
 }
 

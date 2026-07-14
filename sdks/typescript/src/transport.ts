@@ -20,7 +20,7 @@ export interface Transport {
 
   /**
    * Control plane → port (OUT). Resolves when the port replies on EP3 for this txn.
-   * Silence on EP3 = port control firmware not answering (ATTACH/LIST/CONNECT).
+   * Silence on EP3 = sim control not answering (LIST/CONNECT). Real HW does not use this.
    */
   writeEP4(data: Uint8Array): Promise<[DataView, Uint8Array]>;
   /** Control plane ← port (IN): unsolicited SYSTEMS / CIRCUIT_* (txn replies handled inside writeEP4). */

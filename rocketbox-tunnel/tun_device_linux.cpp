@@ -95,6 +95,12 @@ void TunDevice::isolate_in_netns(const std::string& netns, const std::string& lo
   gateway_->install(local_port, netns, expose);
 }
 
+void TunDevice::reload_expose(const std::vector<ExposeRule>& expose) {
+  if (gateway_) {
+    gateway_->set_expose(expose);
+  }
+}
+
 void TunDevice::close() {
   if (fd_ >= 0) {
     ::close(fd_);

@@ -65,6 +65,7 @@ public:
                                             uint8_t expected_frame_kind) override;
     FileTransferResult loopback_files(const std::string& path, int send_port, int recv_port,
                                       FileProgressFn progress) override;
+    void set_stream_mode(bool enabled) override;
 
 private:
     void send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_kind,
@@ -78,6 +79,7 @@ private:
     int display_port_;
     int port_index_;
     bool connected_ = false;
+    bool stream_mode_ = false;
     std::unique_ptr<TransferController> controller_;
     std::vector<uint8_t> pending_payload_;
     std::mutex listen_mu_;

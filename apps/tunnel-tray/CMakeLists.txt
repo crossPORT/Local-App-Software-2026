@@ -13,20 +13,31 @@ if(UNIX AND NOT APPLE)
     set(_tray_gtk_flags ${GTK3_CFLAGS_OTHER})
     add_compile_definitions(ROCKETBOX_TRAY_HAS_GTK=1)
   endif()
+  pkg_check_modules(AYATANA QUIET ayatana-appindicator3-0.1)
+  if(AYATANA_FOUND)
+    list(APPEND _tray_gtk_libs ${AYATANA_LIBRARIES})
+    list(APPEND _tray_gtk_incs ${AYATANA_INCLUDE_DIRS})
+    list(APPEND _tray_gtk_flags ${AYATANA_CFLAGS_OTHER})
+    add_compile_definitions(ROCKETBOX_TRAY_HAS_AYATANA=1)
+  endif()
 endif()
 
 add_executable(rocketbox-tunnel-tray
   main.cpp
   session_dbus.cpp
   tray_icon.cpp
+  tray_icon_enable.cpp
   tray_icon_tick.cpp
   tray_ipc.cpp
   tray_enable_msg.cpp
+  tray_start_msg.cpp
   listen_ports.cpp
   tray_settings.cpp
   tray_panel.cpp
   tray_panel_build.cpp
   tray_icons.cpp
+  tray_icon_outline.cpp
+  tray_ayatana.cpp
   tray_theme.cpp
   tunnel_rates.cpp
   tunnel_log_ui.cpp
@@ -36,6 +47,14 @@ add_executable(rocketbox-tunnel-tray
   tunnel_args.cpp
   platform/stats_paths.cpp
 )
+if(NOT WIN32)
+  target_sources(rocketbox-tunnel-tray PRIVATE
+    tunnel_hup.cpp
+    tunnel_proc_reload.cpp
+    tray_gnome.cpp
+    ${CMAKE_SOURCE_DIR}/rocketbox-tunnel/expose_file.cpp
+  )
+endif()
 
 if(WIN32)
   target_sources(rocketbox-tunnel-tray PRIVATE
@@ -45,7 +64,10 @@ if(WIN32)
     "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")
   set_target_properties(rocketbox-tunnel-tray PROPERTIES WIN32_EXECUTABLE TRUE)
 else()
-  target_sources(rocketbox-tunnel-tray PRIVATE tunnel_proc_linux.cpp socket_owners_linux.cpp)
+  target_sources(rocketbox-tunnel-tray PRIVATE
+    tunnel_proc_linux.cpp
+    socket_owners_linux.cpp
+    helper_launch.cpp)
 endif()
 
 target_include_directories(rocketbox-tunnel-tray PRIVATE

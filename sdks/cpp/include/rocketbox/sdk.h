@@ -95,6 +95,8 @@ public:
                                               int send_port,
                                               int recv_port,
                                               FileProgressFn progress);
+    /** Tunnel streaming: skip clear_halt on each USB open (default: App clears). */
+    virtual void set_stream_mode(bool) {}
 };
 
 std::unique_ptr<RocketBoxTransport> create_rocketbox_transport(TransportMode mode,

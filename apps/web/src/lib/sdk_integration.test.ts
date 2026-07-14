@@ -8,12 +8,10 @@ if (typeof globalThis.WebSocket === 'undefined') {
   (globalThis as any).WebSocket = WebSocket;
 }
 
-// Protocol Constants
-const MSG_ATTACH = 0x01;
+// Protocol Constants (no ATTACH — Port from WS ?port=N)
 const MSG_LIST = 0x02;
 const MSG_CONNECT = 0x03;
 const MSG_DISCONNECT = 0x04;
-const MSG_ATTACHED = 0x81;
 const MSG_SYSTEMS = 0x82;
 const MSG_ACK = 0x83;
 const MSG_CIRCUIT_UP = 0x85;
@@ -115,10 +113,6 @@ describe('TypeScript SDK Integration with Simulated Hardware', () => {
           const arg = view.getUint32(4);
 
           switch (type) {
-            case MSG_ATTACH: {
-              ws.send(makeControlPacket(MSG_ATTACHED, txn, port.id));
-              break;
-            }
             case MSG_LIST: {
               const activeList = mockPorts.filter(p => p.status !== 'offline');
               ws.send(makeControlPacket(MSG_SYSTEMS, txn, 0, buildMockSystemsPayload(activeList)));

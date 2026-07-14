@@ -43,14 +43,16 @@ TransferResult send_file_core(libusb_context* ctx,
                               ProgressCallback progress_cb = nullptr,
                               unsigned timeout_ms = usb_protocol::kFileTimeoutMs,
                               uint8_t frame_kind = usb_protocol::kFrameKindPayload,
-                              const std::string& header_filename = {});
+                              const std::string& header_filename = {},
+                              bool reset_data_endpoints = true);
 
 TransferResult receive_file_core(libusb_context* ctx,
                                  const std::string& out_path,
                                  int port_index,
                                  ProgressCallback progress_cb = nullptr,
                                  unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
-                                 uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
+                                 uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload,
+                                 bool reset_data_endpoints = true);
 
 struct RocketBoxUsbDevice {
     uint8_t bus = 0;

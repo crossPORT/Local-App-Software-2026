@@ -1,5 +1,6 @@
 #include "helper/commands.hpp"
 
+#include <cerrno>
 #include <cstring>
 #include <string>
 
@@ -101,6 +102,27 @@ std::string status_child() {
   if (!child_alive()) return "OK stopped\n";
   return "OK running\n";
 }
+
+std::string hup_managed() {
+  if (!child_alive()) return "ERR not running\n";
+  if (::kill(g_child, SIGHUP) != 0) {
+    return std::string("ERR HUP failed: ") + std::strerror(errno) + "\n";
+  }
+  return "OK\n";
+}
+
+std::string signal_pid(const std::string& arg, int sig) {
+  try {
+    const long pid = std::stol(arg);
+    if (pid <= 0) return "ERR bad pid\n";
+    if (::kill(static_cast<pid_t>(pid), sig) != 0) {
+      return std::string("ERR signal failed: ") + std::strerror(errno) + "\n";
+    }
+    return "OK\n";
+  } catch (...) {
+    return "ERR bad pid\n";
+  }
+}
 #endif
 
 }  // namespace
@@ -109,6 +131,11 @@ std::string handle_line(const std::string& line) {
   if (line.rfind("START ", 0) == 0) return start_child(line.substr(6));
   if (line == "STOP") return stop_child();
   if (line == "STATUS") return status_child();
+#if !defined(_WIN32)
+  if (line == "HUP") return hup_managed();
+  if (line.rfind("HUP ", 0) == 0) return signal_pid(line.substr(4), SIGHUP);
+  if (line.rfind("TERM ", 0) == 0) return signal_pid(line.substr(5), SIGTERM);
+#endif
   return "ERR unknown\n";
 }
 

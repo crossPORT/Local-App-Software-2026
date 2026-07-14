@@ -17,6 +17,14 @@ bool selected(const std::vector<Endpoint>& sel, const Endpoint& ep) {
 
 }  // namespace
 
+bool expose_selection_equal(const std::vector<Endpoint>& a, const std::vector<Endpoint>& b) {
+  if (a.size() != b.size()) return false;
+  std::vector<Endpoint> sa = a, sb = b;
+  std::sort(sa.begin(), sa.end());
+  std::sort(sb.begin(), sb.end());
+  return sa == sb;
+}
+
 std::vector<ExposeRow> build_expose_rows(const std::vector<Endpoint>& sel) {
   const auto live = scan_listening_services();
   std::map<Endpoint, std::string> proc_by_ep;

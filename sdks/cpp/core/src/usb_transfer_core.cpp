@@ -613,7 +613,8 @@ TransferResult send_file_core(libusb_context* ctx,
                               ProgressCallback progress_cb,
                               unsigned timeout_ms,
                               uint8_t frame_kind,
-                              const std::string& header_filename) {
+                              const std::string& header_filename,
+                              bool reset_data_endpoints) {
     TransferResult result{};
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -626,7 +627,8 @@ TransferResult send_file_core(libusb_context* ctx,
     file.seekg(0, std::ios::beg);
     result.expected_bytes = file_size;
 
-    libusb_device_handle* handle = open_device_by_index(ctx, port_index, &result.error_message);
+    libusb_device_handle* handle =
+        open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
     if (!handle) {
         if (result.error_message.empty()) {
             result.error_message =
@@ -800,10 +802,12 @@ TransferResult receive_file_core(libusb_context* ctx,
                                  int port_index,
                                  ProgressCallback progress_cb,
                                  unsigned header_timeout_ms,
-                                 uint8_t expected_frame_kind) {
+                                 uint8_t expected_frame_kind,
+                                 bool reset_data_endpoints) {
     TransferResult result{};
 
-    libusb_device_handle* handle = open_device_by_index(ctx, port_index, &result.error_message);
+    libusb_device_handle* handle =
+        open_device_by_index(ctx, port_index, &result.error_message, 5, reset_data_endpoints);
     if (!handle) {
         if (result.error_message.empty()) {
             result.error_message =

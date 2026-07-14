@@ -87,6 +87,8 @@ public:
     void run_payload_send(const std::string& path, ProgressCallback progress_cb = nullptr);
     void run_payload_receive(const std::string& out_path,
                              ProgressCallback progress_cb = nullptr);
+    /** Tunnel: skip clear_halt on each open so streaming reopen stays in sync. */
+    void set_stream_mode(bool enabled) { stream_mode_ = enabled; }
     int device_count() const;
     bool rocketbox_port_available() const;
     std::string device_label() const;
@@ -126,4 +128,5 @@ private:
     std::string transfer_detail_;
     int last_switch_dest_ = -1;
     bool switch_preserve_ = false;
+    bool stream_mode_ = false;
 };

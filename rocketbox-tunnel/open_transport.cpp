@@ -66,6 +66,7 @@ std::unique_ptr<rocketbox::RocketBoxTransport> open_tunnel_transport(
 
   auto t = rocketbox::create_rocketbox_transport(rocketbox::TransportMode::Usb,
                                                 libusb_index + 1);
+  t->set_stream_mode(true);
   t->connect();
   if (t->display_port() != want) {
     throw std::runtime_error("USB serial maps to Port " +
