@@ -1,4 +1,5 @@
 #include "tun_device.hpp"
+#include "tun_win_net.hpp"
 #include "wintun_load.hpp"
 
 #include <cstring>
@@ -11,13 +12,6 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <iphlpapi.h>
-#include <netioapi.h>
-
-#pragma comment(lib, "iphlpapi.lib")
-#pragma comment(lib, "ws2_32.lib")
 
 namespace {
 
@@ -46,54 +40,11 @@ std::wstring to_wide(const std::string& s) {
   return out;
 }
 
-void set_ipv4(const NET_LUID& luid, const std::string& local_ip) {
+int port_from_fabric_ip(const std::string& local_ip) {
   unsigned a = 0, b = 0, c = 0, d = 0;
-  if (sscanf(local_ip.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) {
-    throw std::runtime_error("bad local IP: " + local_ip);
-  }
-  MIB_UNICASTIPADDRESS_ROW row{};
-  InitializeUnicastIpAddressEntry(&row);
-  row.InterfaceLuid = luid;
-  row.Address.Ipv4.sin_family = AF_INET;
-  row.Address.Ipv4.sin_addr.S_un.S_addr = htonl((a << 24) | (b << 16) | (c << 8) | d);
-  row.OnLinkPrefixLength = 24;
-  row.DadState = IpDadStatePreferred;
-  row.SkipAsSource = 0;
-  const DWORD r = CreateUnicastIpAddressEntry(&row);
-  if (r != NO_ERROR && r != ERROR_OBJECT_ALREADY_EXISTS) {
-    throw std::runtime_error("CreateUnicastIpAddressEntry failed: " + std::to_string(r));
-  }
-}
-
-void tune_iface(const NET_LUID& luid) {
-  MIB_IPINTERFACE_ROW row{};
-  InitializeIpInterfaceEntry(&row);
-  row.Family = AF_INET;
-  row.InterfaceLuid = luid;
-  if (GetIpInterfaceEntry(&row) != NO_ERROR) return;
-  row.UseAutomaticMetric = FALSE;
-  row.Metric = 1;
-  row.DisableDefaultRoutes = TRUE;
-  row.WeakHostSend = TRUE;
-  row.WeakHostReceive = TRUE;
-  (void)SetIpInterfaceEntry(&row);
-}
-
-void set_route(const NET_LUID& luid) {
-  MIB_IPFORWARD_ROW2 row{};
-  InitializeIpForwardEntry(&row);
-  row.InterfaceLuid = luid;
-  row.DestinationPrefix.Prefix.si_family = AF_INET;
-  row.DestinationPrefix.Prefix.Ipv4.sin_family = AF_INET;
-  row.DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr = htonl(0x0A400000);  // 10.64.0.0
-  row.DestinationPrefix.PrefixLength = 24;
-  row.NextHop.Ipv4.sin_family = AF_INET;
-  row.NextHop.Ipv4.sin_addr.S_un.S_addr = 0;
-  row.Metric = 1;
-  const DWORD r = CreateIpForwardEntry2(&row);
-  if (r != NO_ERROR && r != ERROR_OBJECT_ALREADY_EXISTS) {
-    throw std::runtime_error("CreateIpForwardEntry2 failed: " + std::to_string(r));
-  }
+  if (sscanf(local_ip.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) return 0;
+  if (a != 10 || b != 64 || c != 0 || d < 1 || d > 4) return 0;
+  return static_cast<int>(d);
 }
 
 }  // namespace
@@ -139,9 +90,11 @@ void TunDevice::configure_lan(const std::string& local_ip) {
   auto* c = ctx(win_);
   if (!c || !c->session) throw std::runtime_error("TUN not open");
   gateway_.reset();
-  set_ipv4(c->luid, local_ip);
-  tune_iface(c->luid);
-  set_route(c->luid);
+  rocketbox_tun_win::set_ipv4(c->luid, local_ip);
+  rocketbox_tun_win::tune_iface(c->luid);
+  rocketbox_tun_win::set_route(c->luid);
+  const int port = port_from_fabric_ip(local_ip);
+  if (port > 0) rocketbox_tun_win::set_fabric_neighbors(c->luid, port);
 }
 
 void TunDevice::isolate_in_netns(const std::string&, const std::string&, int,
@@ -180,7 +133,6 @@ std::vector<uint8_t> TunDevice::read_packet() {
   DWORD size = 0;
   BYTE* pkt = c->fns.ReceivePacket(c->session, &size);
   if (!pkt) {
-    // Always wait — never busy-spin when the ring is empty or on other errors.
     WaitForSingleObject(c->fns.GetReadWaitEvent(c->session), 250);
     return {};
   }

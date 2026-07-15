@@ -11,8 +11,8 @@ namespace detail {
 namespace {
 
 unsigned listen_header_timeout_ms(bool stream) {
-  // Short polls so outbound send can take usb_mutex_ without starving TCP ACKs.
-  return stream ? 5u : 300u;
+  // Short polls so pause/switch can take usb_mutex_ quickly after IN timeout.
+  return stream ? 10u : 300u;
 }
 
 }  // namespace
