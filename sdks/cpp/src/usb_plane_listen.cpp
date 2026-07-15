@@ -11,7 +11,7 @@ namespace detail {
 namespace {
 
 unsigned listen_header_timeout_ms(bool stream) {
-  // Short polls so pause/switch can take usb_mutex_ quickly after IN timeout.
+  // Short polls so pause/switch can take the IN lock quickly after IN timeout.
   return stream ? 10u : 300u;
 }
 
@@ -152,8 +152,6 @@ void UsbPlane::listen_loop() {
       pause_cv_.notify_all();
     }
     if (listen_stop_ || !r.ok) {
-      // Yield so send_buffer can take usb_mutex_ between IN polls.
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
     if (!body.empty()) {

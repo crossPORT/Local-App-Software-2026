@@ -81,8 +81,7 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
         return false;
     }
     try {
-        // Aim → send → clear. Leaving EP4 aimed (v0.1.27) blocked IN on this HW so
-        // ping replies never arrived in either direction.
+        // Sticky EP4: aim once, stay aimed for the peer (full duplex IN+OUT).
         if (transport_.switch_dest() != dest_port) {
             transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
         }
@@ -97,11 +96,6 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
             std::memcpy(framed.data() + 4, msg.data(), msg.size());
         }
         transport_.send_bytes(framed);
-        transport_.clear_circuit();
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            active_peer_port_ = 0;
-        }
     } catch (const std::exception& e) {
         std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port << ": " << e.what()
                   << std::endl;

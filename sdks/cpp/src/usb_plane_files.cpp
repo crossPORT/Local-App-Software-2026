@@ -17,7 +17,7 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    ListenUsbPause pause(*this);
+    // Do not pause listen around OUT — IN and OUT use separate USB locks (full duplex).
     auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(),
                                       usb_protocol::kFileTimeoutMs, frame_kind);
     if (!r.ok) {

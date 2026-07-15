@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -112,8 +113,17 @@ public:
     std::vector<RocketBoxUsbDevice> list_rocketbox_devices() const;
 
 private:
+    using UsbTimedLock = std::unique_lock<std::timed_mutex>;
+    /** IN then OUT — call only when holding neither (no lock upgrade). */
+    bool lock_usb_in(UsbTimedLock& lock, std::chrono::milliseconds wait) const;
+    bool lock_usb_out(UsbTimedLock& lock, std::chrono::milliseconds wait) const;
+    bool lock_usb_both(UsbTimedLock& in_lock, UsbTimedLock& out_lock,
+                       std::chrono::milliseconds wait) const;
+    /** Open stream handle; caller must hold lock_usb_both. */
     bool ensure_stream_device(std::string* err);
     void release_stream_device();
+    /** Warm under both locks if needed; never call while holding IN-only or OUT-only. */
+    bool warm_stream_if_needed(std::string* err);
     void start_worker(TransferKind kind,
                       const std::string& path,
                       const SendMeta& meta = {},
@@ -128,7 +138,9 @@ private:
     libusb_context* usb_ctx_ = nullptr;
 
     mutable std::mutex state_mutex_;
-    mutable std::timed_mutex usb_mutex_;
+    /** Concurrent data path: IN poll and OUT send take separate locks. */
+    mutable std::timed_mutex usb_in_mutex_;
+    mutable std::timed_mutex usb_out_mutex_;
     TransferUiState state_;
 
     std::thread worker_;

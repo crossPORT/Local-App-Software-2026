@@ -41,10 +41,50 @@ std::string kind_label(TransferKind kind) {
 
 }  // namespace
 
+bool TransferController::lock_usb_in(UsbTimedLock& lock, std::chrono::milliseconds wait) const {
+    lock = UsbTimedLock(usb_in_mutex_, std::defer_lock);
+    return lock.try_lock_for(wait);
+}
+
+bool TransferController::lock_usb_out(UsbTimedLock& lock, std::chrono::milliseconds wait) const {
+    lock = UsbTimedLock(usb_out_mutex_, std::defer_lock);
+    return lock.try_lock_for(wait);
+}
+
+bool TransferController::lock_usb_both(UsbTimedLock& in_lock, UsbTimedLock& out_lock,
+                                       std::chrono::milliseconds wait) const {
+    in_lock = UsbTimedLock(usb_in_mutex_, std::defer_lock);
+    out_lock = UsbTimedLock(usb_out_mutex_, std::defer_lock);
+    if (!in_lock.try_lock_for(wait)) {
+        return false;
+    }
+    if (!out_lock.try_lock_for(wait)) {
+        in_lock.unlock();
+        return false;
+    }
+    return true;
+}
+
+bool TransferController::warm_stream_if_needed(std::string* err) {
+    if (!stream_mode_ || stream_dev_) {
+        return true;
+    }
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
+        if (err) {
+            *err = "USB port busy";
+        }
+        return false;
+    }
+    return ensure_stream_device(err);
+}
+
 void TransferController::request_shutdown() {
     shutting_down_.store(true, std::memory_order_release);
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (lock.try_lock_for(std::chrono::milliseconds(500))) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (lock_usb_both(in_lock, out_lock, std::chrono::milliseconds(500))) {
         release_stream_device();
     }
 }
@@ -100,8 +140,9 @@ void TransferController::release_stream_device() {
 void TransferController::set_stream_mode(bool enabled) {
     if (stream_mode_ == enabled) return;
     if (!enabled) {
-        std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-        if (lock.try_lock_for(kUsbLockWait)) {
+        UsbTimedLock in_lock;
+        UsbTimedLock out_lock;
+        if (lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
             release_stream_device();
         }
     }
@@ -110,8 +151,9 @@ void TransferController::set_stream_mode(bool enabled) {
 
 bool TransferController::warm_stream_device(std::string* err) {
     if (!stream_mode_ || !usb_ctx_) return false;
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
         if (err) *err = "USB port busy";
         return false;
     }
@@ -160,8 +202,9 @@ TransferResult TransferController::send_on_port(int port_index,
     if (shutting_down_.load(std::memory_order_acquire)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     TransferResult result = rocketbox_sim_enabled()
@@ -186,8 +229,9 @@ TransferResult TransferController::receive_on_port(int port_index,
     if (shutting_down_.load(std::memory_order_acquire)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     TransferResult result = rocketbox_sim_enabled()
@@ -217,8 +261,15 @@ TransferResult TransferController::send_buffer(int port_index, const uint8_t* da
     if (shutting_down_.load(std::memory_order_acquire)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    if (stream_mode_ && port_index == port_index_ && !rocketbox_sim_enabled()) {
+        std::string warm_err;
+        if (!warm_stream_if_needed(&warm_err)) {
+            return TransferResult{false, 0, 0, 0.0, 0.0,
+                                  warm_err.empty() ? "stream open failed" : warm_err};
+        }
+    }
+    UsbTimedLock out_lock;
+    if (!lock_usb_out(out_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     if (rocketbox_sim_enabled()) {
@@ -242,9 +293,8 @@ TransferResult TransferController::send_buffer(int port_index, const uint8_t* da
     }
     TransferResult result;
     if (stream_mode_ && port_index == port_index_) {
-        std::string err;
-        if (!ensure_stream_device(&err)) {
-            return TransferResult{false, 0, 0, 0.0, 0.0, err.empty() ? "stream open failed" : err};
+        if (!stream_dev_) {
+            return TransferResult{false, 0, 0, 0.0, 0.0, "stream not open"};
         }
         result = send_buffer_on_handle(stream_dev_, data, len, timeout_ms, frame_kind, nullptr);
     } else {
@@ -266,8 +316,15 @@ TransferResult TransferController::receive_buffer(int port_index, std::vector<ui
     if (shutting_down_.load(std::memory_order_acquire)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    if (stream_mode_ && port_index == port_index_ && !rocketbox_sim_enabled()) {
+        std::string warm_err;
+        if (!warm_stream_if_needed(&warm_err)) {
+            return TransferResult{false, 0, 0, 0.0, 0.0,
+                                  warm_err.empty() ? "stream open failed" : warm_err};
+        }
+    }
+    UsbTimedLock in_lock;
+    if (!lock_usb_in(in_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     if (rocketbox_sim_enabled()) {
@@ -296,9 +353,8 @@ TransferResult TransferController::receive_buffer(int port_index, std::vector<ui
     }
     TransferResult result;
     if (stream_mode_ && port_index == port_index_) {
-        std::string err;
-        if (!ensure_stream_device(&err)) {
-            return TransferResult{false, 0, 0, 0.0, 0.0, err.empty() ? "stream open failed" : err};
+        if (!stream_dev_) {
+            return TransferResult{false, 0, 0, 0.0, 0.0, "stream not open"};
         }
         result = receive_buffer_on_handle(stream_dev_, out, header_timeout_ms, expected_frame_kind);
     } else {
@@ -327,8 +383,9 @@ TransferResult TransferController::exchange_buffer(int port_index, const uint8_t
     if (shutting_down_.load(std::memory_order_acquire)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     reply->clear();
@@ -395,8 +452,9 @@ TransferResult TransferController::loopback_on_ports(const std::string& path,
     if (!usb_ctx_) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "libusb not initialized"};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     return rocketbox_sim_enabled()
@@ -420,8 +478,9 @@ TransferResult TransferController::switch_port(int dest_port) {
         }
         return TransferResult{true, 16, 16, 0.0, 0.0, {}};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(kUsbLockWait)) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     TransferResult result;
@@ -483,8 +542,9 @@ int TransferController::device_count() const {
     if (!usb_ctx_) {
         return 0;
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, std::chrono::milliseconds(200))) {
         // USB is busy (active transfer or the peer process probing). Reporting
         // zero here would look like an unplug, so keep the last known count.
         return last_device_count_.load(std::memory_order_relaxed);
@@ -499,8 +559,9 @@ bool TransferController::rocketbox_port_available() const {
     if (!usb_ctx_) {
         return false;
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, std::chrono::milliseconds(200))) {
         // USB busy — assume the fabric is still present rather than treating a
         // transient lock collision as a disconnect.
         return link_policy::presence_when_probe_busy(
@@ -529,9 +590,10 @@ std::string TransferController::rocketbox_device_serial() const {
     if (!usb_ctx_) {
         return {};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
     // Serial string needs a quiet bus; short waits raced the session listener.
-    if (!lock.try_lock_for(std::chrono::milliseconds(2000))) {
+    if (!lock_usb_both(in_lock, out_lock, std::chrono::milliseconds(2000))) {
         return {};
     }
     const std::string serial = rocketbox_sim_enabled()
@@ -570,8 +632,9 @@ bool TransferController::rocketbox_device_bus_addr(int port_index,
     if (!usb_ctx_) {
         return false;
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, std::chrono::milliseconds(200))) {
         return false;
     }
     return rocketbox_sim_enabled()
@@ -583,8 +646,9 @@ std::vector<RocketBoxUsbDevice> TransferController::list_rocketbox_devices() con
     if (!usb_ctx_) {
         return {};
     }
-    std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-    if (!lock.try_lock_for(std::chrono::milliseconds(200))) {
+    UsbTimedLock in_lock;
+    UsbTimedLock out_lock;
+    if (!lock_usb_both(in_lock, out_lock, std::chrono::milliseconds(200))) {
         return {};
     }
     return rocketbox_sim_enabled() ? rocketbox_sim_list_devices()
@@ -658,8 +722,9 @@ void TransferController::start_worker(TransferKind kind,
 
         TransferResult result{};
         const auto run_usb_locked = [&](const auto& fn) {
-            std::unique_lock<std::timed_mutex> lock(usb_mutex_, std::defer_lock);
-            if (!lock.try_lock_for(kUsbLockWait)) {
+            UsbTimedLock in_lock;
+            UsbTimedLock out_lock;
+            if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
                 result = TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
                 return;
             }
