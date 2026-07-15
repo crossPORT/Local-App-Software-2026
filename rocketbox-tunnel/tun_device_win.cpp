@@ -120,7 +120,9 @@ void TunDevice::close() {
 
 void TunDevice::interrupt() { close(); }
 
-std::vector<uint8_t> TunDevice::read_packet() {
+std::vector<uint8_t> TunDevice::read_packet() { return read_packet(250); }
+
+std::vector<uint8_t> TunDevice::read_packet(int timeout_ms) {
   auto* c = ctx(win_);
   if (!c || !c->session) {
     Sleep(50);
@@ -128,10 +130,15 @@ std::vector<uint8_t> TunDevice::read_packet() {
   }
   DWORD size = 0;
   BYTE* pkt = c->fns.ReceivePacket(c->session, &size);
-  if (!pkt) {
-    WaitForSingleObject(c->fns.GetReadWaitEvent(c->session), 250);
-    return {};
+  if (pkt) {
+    std::vector<uint8_t> out(pkt, pkt + size);
+    c->fns.ReleaseReceivePacket(c->session, pkt);
+    return out;
   }
+  const DWORD wait = timeout_ms < 0 ? 250 : static_cast<DWORD>(timeout_ms);
+  WaitForSingleObject(c->fns.GetReadWaitEvent(c->session), wait);
+  pkt = c->fns.ReceivePacket(c->session, &size);
+  if (!pkt) return {};
   std::vector<uint8_t> out(pkt, pkt + size);
   c->fns.ReleaseReceivePacket(c->session, pkt);
   return out;

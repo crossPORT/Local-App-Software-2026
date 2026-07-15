@@ -1,5 +1,7 @@
 #include "tun_device.hpp"
 
+#include "pkt_batch.hpp"
+
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -69,6 +71,7 @@ void TunDevice::configure_lan(const std::string& local_ip) {
     throw std::runtime_error("TUN not open");
   }
   gateway_.reset();
+  run_or_throw(std::string(kIp) + " link set dev " + name_ + " mtu " + std::to_string(kTunMtu));
   run_or_throw(std::string(kIp) + " link set dev " + name_ + " up");
   run_or_throw(std::string(kIp) + " addr flush dev " + name_);
   run_or_throw(std::string(kIp) + " addr add " + local_ip + "/24 dev " + name_);
@@ -85,6 +88,8 @@ void TunDevice::isolate_in_netns(const std::string& netns, const std::string& lo
   run_or_throw(std::string(kIp) + " netns add " + netns);
   run_or_throw(std::string(kIp) + " link set dev " + name_ + " netns " + netns);
   run_or_throw(std::string(kIp) + " netns exec " + netns + " " + kIp + " link set dev " + name_ +
+               " mtu " + std::to_string(kTunMtu));
+  run_or_throw(std::string(kIp) + " netns exec " + netns + " " + kIp + " link set dev " + name_ +
                " up");
   run_or_throw(std::string(kIp) + " netns exec " + netns + " " + kIp + " addr flush dev " + name_);
   run_or_throw(std::string(kIp) + " netns exec " + netns + " " + kIp + " addr add " + local_ip +
@@ -93,6 +98,18 @@ void TunDevice::isolate_in_netns(const std::string& netns, const std::string& lo
                " route replace 10.64.0.0/24 dev " + name_);
   run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
              " -w net.ipv4.conf." + name_ + ".rp_filter=0");
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.ipv4.tcp_window_scaling=1");
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.ipv4.tcp_slow_start_after_idle=0");
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.core.rmem_max=16777216");
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.core.wmem_max=16777216");
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.ipv4.tcp_rmem='4096 87380 16777216'");
+  run_ignore(std::string(kIp) + " netns exec " + netns + " " + kSys +
+             " -w net.ipv4.tcp_wmem='4096 65536 16777216'");
   netns_ = netns;
   gateway_ = std::make_unique<HostGateway>();
   gateway_->install(local_port, netns, expose);
@@ -126,7 +143,9 @@ void TunDevice::interrupt() {
   }
 }
 
-std::vector<uint8_t> TunDevice::read_packet() {
+std::vector<uint8_t> TunDevice::read_packet() { return read_packet(250); }
+
+std::vector<uint8_t> TunDevice::read_packet(int timeout_ms) {
   if (fd_ < 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     return {};
@@ -134,7 +153,7 @@ std::vector<uint8_t> TunDevice::read_packet() {
   pollfd pfd{};
   pfd.fd = fd_;
   pfd.events = POLLIN;
-  const int pr = ::poll(&pfd, 1, 250);
+  const int pr = ::poll(&pfd, 1, timeout_ms < 0 ? 250 : timeout_ms);
   if (pr < 0) {
     if (errno != EINTR) {
       std::this_thread::sleep_for(std::chrono::milliseconds(50));

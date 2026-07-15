@@ -31,8 +31,12 @@ add_executable(unit-tests
     unit/test_session_rate_stats.cpp
     unit/test_port_util.cpp
     unit/test_port_probe.cpp
+    unit/test_pkt_batch.cpp
+    ${CMAKE_SOURCE_DIR}/rocketbox-tunnel/pkt_batch.cpp
 )
-target_include_directories(unit-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(unit-tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/rocketbox-tunnel)
 target_compile_definitions(unit-tests PRIVATE
     RB_TEST_FIXTURE_DIR="${RB_TEST_FIXTURE_DIR}")
 target_link_libraries(unit-tests PRIVATE rocketbox_sdk)

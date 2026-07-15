@@ -33,6 +33,8 @@ public:
   const std::string& netns() const { return netns_; }
 
   std::vector<uint8_t> read_packet();
+  /** Wait up to timeout_ms for one IP packet (0 = non-blocking). */
+  std::vector<uint8_t> read_packet(int timeout_ms);
   void write_packet(const uint8_t* data, size_t len);
 
 private:

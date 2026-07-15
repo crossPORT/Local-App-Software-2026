@@ -1,7 +1,9 @@
 #include "bridge.hpp"
+
 #include "fabric_source.hpp"
 #include "icmp_ping.hpp"
 #include "peer_map.hpp"
+#include "pkt_batch.hpp"
 #include "tunnel_log.hpp"
 
 #include <chrono>
@@ -24,20 +26,18 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
   const int src = rocketbox_lan::src_port_from_ip_packet(msg.data(), msg.size());
   if (src > 0) {
     dialer_.note_inbound_peer(src);
-    // Remember peer for the bridge thread to EP4-switch (cannot ensure here — listen thread).
     pending_peer_.store(src, std::memory_order_relaxed);
   }
   dialer_.note_activity();
   down_bytes_.fetch_add(msg.size(), std::memory_order_relaxed);
 
-  // Answer fabric ICMP here so peers get a reply without host firewall/stack.
   if (rocketbox_icmp::is_echo_request(msg.data(), msg.size(), local_port_)) {
     auto reply = rocketbox_icmp::make_echo_reply(msg.data(), msg.size());
     if (!reply.empty()) {
       std::lock_guard<std::mutex> lock(reply_mu_);
       pending_reply_ = std::move(reply);
     }
-    return;  // do not inject into TUN (avoids double reply)
+    return;
   }
 
   std::lock_guard<std::mutex> lock(write_mu_);
@@ -52,6 +52,7 @@ bool TunnelBridge::send_pending_icmp_reply() {
     reply = std::move(pending_reply_);
     pending_reply_.clear();
   }
+  flush_batch();
   const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
   if (dest == 0 || dest == local_port_ || !dialer_.deliver(dest, reply)) {
     rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
@@ -63,6 +64,40 @@ bool TunnelBridge::send_pending_icmp_reply() {
     logged_icmp_reply_ = true;
   }
   return true;
+}
+
+void TunnelBridge::flush_batch() {
+  if (batch_.empty()) return;
+  const int dest = batch_dest_;
+  auto pkts = std::move(batch_);
+  const std::size_t bytes = batch_bytes_;
+  batch_.clear();
+  batch_bytes_ = 0;
+  batch_dest_ = 0;
+  if (!dialer_.deliver_batch(dest, pkts)) {
+    std::cerr << "[rocketbox-tunnel] drop batch: deliver failed dest=" << dest
+              << " pkts=" << pkts.size() << std::endl;
+    return;
+  }
+  up_bytes_.fetch_add(bytes, std::memory_order_relaxed);
+}
+
+void TunnelBridge::queue_packet(int dest, std::vector<uint8_t> pkt) {
+  if (batch_dest_ != 0 && batch_dest_ != dest) {
+    flush_batch();
+  }
+  if (!batch_.empty() && batch_bytes_ + pkt.size() > kBatchMaxBytes) {
+    flush_batch();
+  }
+  if (batch_.empty()) {
+    batch_dest_ = dest;
+    batch_start_ = std::chrono::steady_clock::now();
+  }
+  batch_bytes_ += pkt.size();
+  batch_.push_back(std::move(pkt));
+  if (batch_bytes_ >= kBatchFlushBytes || batch_bytes_ >= kBatchMaxBytes) {
+    flush_batch();
+  }
 }
 
 void TunnelBridge::run() {
@@ -78,8 +113,12 @@ void TunnelBridge::run() {
         continue;
       }
 
-      auto pkt = tun_.read_packet();
+      const int wait_ms = batch_.empty() ? 250 : kBatchFlushMs;
+      auto pkt = tun_.read_packet(wait_ms);
       if (pkt.empty()) {
+        if (!batch_.empty()) {
+          flush_batch();
+        }
         const auto now = std::chrono::steady_clock::now();
         if (now - last_idle_check > std::chrono::seconds(1)) {
           dialer_.tick_idle();
@@ -88,22 +127,26 @@ void TunnelBridge::run() {
         continue;
       }
 
-      if (force_fabric_source(pkt, local_port_) && !logged_src_fix) {
-        std::cerr << "[rocketbox-tunnel] rewrote non-fabric source to 10.64.0." << local_port_
-                  << std::endl;
-        logged_src_fix = true;
+      for (;;) {
+        if (force_fabric_source(pkt, local_port_) && !logged_src_fix) {
+          std::cerr << "[rocketbox-tunnel] rewrote non-fabric source to 10.64.0." << local_port_
+                    << std::endl;
+          logged_src_fix = true;
+        }
+        const int dest = rocketbox_lan::dest_port_from_ip_packet(pkt.data(), pkt.size());
+        if (dest != 0 && dest != local_port_) {
+          queue_packet(dest, std::move(pkt));
+        }
+        pkt = tun_.read_packet(0);
+        if (pkt.empty()) break;
       }
 
-      const int dest = rocketbox_lan::dest_port_from_ip_packet(pkt.data(), pkt.size());
-      if (dest == 0 || dest == local_port_) {
-        continue;
+      if (!batch_.empty()) {
+        const auto age = std::chrono::steady_clock::now() - batch_start_;
+        if (age >= std::chrono::milliseconds(kBatchFlushMs) || batch_bytes_ >= kBatchFlushBytes) {
+          flush_batch();
+        }
       }
-
-      if (!dialer_.deliver(dest, pkt)) {
-        std::cerr << "[rocketbox-tunnel] drop packet: deliver failed dest=" << dest << std::endl;
-        continue;
-      }
-      up_bytes_.fetch_add(pkt.size(), std::memory_order_relaxed);
 
       const auto now = std::chrono::steady_clock::now();
       if (now - last_idle_check > std::chrono::seconds(1)) {
@@ -111,6 +154,7 @@ void TunnelBridge::run() {
         last_idle_check = now;
       }
     }
+    flush_batch();
   } catch (const std::exception& e) {
     rocketbox_tunnel_log(std::string("bridge abort: ") + e.what());
     stop_ = true;

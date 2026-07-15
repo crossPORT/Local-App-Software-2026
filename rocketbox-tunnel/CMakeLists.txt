@@ -27,6 +27,8 @@ add_executable(rocketbox-tunnel
   bridge.cpp
   fabric_source.cpp
   dialer.cpp
+  dialer_frame.cpp
+  pkt_batch.cpp
   icmp_ping.cpp
   ${_gw_src}
   rocketbox_ping.cpp

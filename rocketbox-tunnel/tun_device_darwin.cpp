@@ -1,5 +1,7 @@
 #include "tun_device.hpp"
 
+#include "pkt_batch.hpp"
+
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -80,8 +82,12 @@ void TunDevice::open(const std::string& /*iface_name*/) {
 void TunDevice::configure_lan(const std::string& local_ip) {
   if (fd_ < 0 || name_.empty()) throw std::runtime_error("TUN not open");
   gateway_.reset();
-  run_or_throw("ifconfig " + name_ + " inet " + local_ip + " " + local_ip + " netmask 255.255.255.0 up");
+  run_or_throw("ifconfig " + name_ + " inet " + local_ip + " " + local_ip +
+               " netmask 255.255.255.0 mtu " + std::to_string(kTunMtu) + " up");
   run_or_throw("route -n add -net 10.64.0.0/24 -interface " + name_);
+  // Best-effort TCP window room on host (no netns on macOS).
+  (void)::system("sysctl -w net.inet.tcp.win_scale_factor=3 >/dev/null 2>&1");
+  (void)::system("sysctl -w kern.ipc.maxsockbuf=16777216 >/dev/null 2>&1");
 }
 
 void TunDevice::isolate_in_netns(const std::string&, const std::string&, int,
@@ -110,7 +116,9 @@ void TunDevice::close() {
 
 void TunDevice::interrupt() { close(); }
 
-std::vector<uint8_t> TunDevice::read_packet() {
+std::vector<uint8_t> TunDevice::read_packet() { return read_packet(250); }
+
+std::vector<uint8_t> TunDevice::read_packet(int timeout_ms) {
   if (fd_ < 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     return {};
@@ -118,7 +126,7 @@ std::vector<uint8_t> TunDevice::read_packet() {
   pollfd pfd{};
   pfd.fd = fd_;
   pfd.events = POLLIN;
-  const int pr = ::poll(&pfd, 1, 250);
+  const int pr = ::poll(&pfd, 1, timeout_ms < 0 ? 250 : timeout_ms);
   if (pr < 0) {
     if (errno != EINTR) {
       std::this_thread::sleep_for(std::chrono::milliseconds(50));

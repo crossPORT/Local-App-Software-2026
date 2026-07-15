@@ -46,6 +46,7 @@ void tune_iface(const NET_LUID& luid) {
   row.DisableDefaultRoutes = TRUE;
   row.WeakHostSend = TRUE;
   row.WeakHostReceive = TRUE;
+  row.NlMtu = 16384;  // kTunMtu — keep in sync with pkt_batch.hpp
   (void)SetIpInterfaceEntry(&row);
 }
 
