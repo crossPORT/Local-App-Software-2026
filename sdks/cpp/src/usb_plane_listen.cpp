@@ -52,6 +52,10 @@ void UsbPlane::start_listen() {
     } catch (...) {
       std::cerr << "[rocketbox] listen thread exited: unknown" << std::endl;
     }
+    std::lock_guard<std::mutex> lock(pause_mu_);
+    listen_in_recv_ = false;
+    pause_depth_ = 0;
+    pause_cv_.notify_all();
   });
 }
 
@@ -83,13 +87,17 @@ void UsbPlane::resume_listen_for_usb() {
   if (!listen_thread_.joinable()) {
     return;
   }
-  std::lock_guard<std::mutex> lock(pause_mu_);
-  if (pause_depth_ > 0) {
-    --pause_depth_;
+  {
+    std::lock_guard<std::mutex> lock(pause_mu_);
+    if (pause_depth_ > 0) {
+      --pause_depth_;
+    }
+    if (pause_depth_ == 0) {
+      pause_cv_.notify_all();
+    }
   }
-  if (pause_depth_ == 0) {
-    pause_cv_.notify_all();
-  }
+  // Repost IN as soon as exclusion ends (peer may already be answering).
+  ensure_listening();
 }
 
 void UsbPlane::run_exclusive(const std::function<void()>& fn) {

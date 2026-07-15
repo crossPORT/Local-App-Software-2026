@@ -1,13 +1,8 @@
 #include "usb_plane.hpp"
 
 #include "platform_util.h"
-#include "usb_protocol.h"
 
-#include <chrono>
-#include <cstdio>
-#include <fstream>
 #include <stdexcept>
-#include <thread>
 
 namespace rocketbox {
 namespace detail {
@@ -132,66 +127,6 @@ void UsbPlane::sync_systems(std::function<void(const std::vector<SystemInfo>&)> 
     }
     if (handler) {
         handler(systems);
-    }
-}
-
-void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
-    const int dest = peer_port_from_system_id(peer_system_id);
-    // Sticky full duplex: keep the listen thread, but pause IN polls so EP4 switch
-    // can take usb_mutex_ (listen holds it for the whole bulk IN timeout otherwise).
-    ListenUsbPause pause(*this);
-    auto r = switch_port_if_needed(dest);
-    if (!r.ok) {
-        throw std::runtime_error(r.error_message.empty() ? "ensure_circuit failed" : r.error_message);
-    }
-    if (controller_) {
-        controller_->mark_switch_preserve();
-    }
-}
-
-void UsbPlane::clear_circuit() {
-    ListenUsbPause pause(*this);
-    (void)switch_port(0);
-}
-
-int UsbPlane::switch_dest() const {
-    return controller_ ? controller_->last_switch_dest() : 0;
-}
-
-FileTransferResult UsbPlane::switch_port(int dest_port) {
-    if (!controller_) {
-        return TransferResult{false, 0, 0, 0.0, 0.0, "not connected"};
-    }
-    return from_core(controller_->switch_port(dest_port));
-}
-
-FileTransferResult UsbPlane::switch_port_if_needed(int dest_port) {
-    if (!controller_) {
-        return TransferResult{false, 0, 0, 0.0, 0.0, "not connected"};
-    }
-    return from_core(controller_->switch_port_if_needed(dest_port));
-}
-
-void UsbPlane::mark_switch_preserve() {
-    if (controller_) {
-        controller_->mark_switch_preserve();
-    }
-}
-
-bool UsbPlane::switch_preserve() const {
-    return controller_ && controller_->switch_preserve();
-}
-
-void UsbPlane::wait_for_idle() {
-    while (controller_ && controller_->is_busy()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-}
-
-void UsbPlane::set_stream_mode(bool enabled) {
-    stream_mode_ = enabled;
-    if (controller_) {
-        controller_->set_stream_mode(enabled);
     }
 }
 

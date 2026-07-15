@@ -81,22 +81,28 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
         return false;
     }
     try {
-        transport_.run_exclusive([this, dest_port, &msg] {
-            if (transport_.switch_dest() != dest_port) {
-                transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
-            }
-            {
-                std::lock_guard<std::mutex> lock(mu_);
-                active_peer_port_ = dest_port;
-                last_activity_ = std::chrono::steady_clock::now();
-            }
-            std::vector<uint8_t> framed(4 + msg.size());
-            write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
-            if (!msg.empty()) {
-                std::memcpy(framed.data() + 4, msg.data(), msg.size());
-            }
-            transport_.send_bytes(framed);
-        });
+        // Separate windows: switch (listen up during settle) then send — never one fat pause.
+        if (transport_.switch_dest() != dest_port) {
+            transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
+        }
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            active_peer_port_ = dest_port;
+            last_activity_ = std::chrono::steady_clock::now();
+        }
+        std::vector<uint8_t> framed(4 + msg.size());
+        write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
+        if (!msg.empty()) {
+            std::memcpy(framed.data() + 4, msg.data(), msg.size());
+        }
+        transport_.send_bytes(framed);
+        // Dial-on-demand + possible half-duplex: drop EP4 aim after OUT so IN can land.
+        // Next outbound calls ensure_circuit again.
+        transport_.clear_circuit();
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            active_peer_port_ = 0;
+        }
     } catch (const std::exception& e) {
         std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port << ": " << e.what()
                   << std::endl;
