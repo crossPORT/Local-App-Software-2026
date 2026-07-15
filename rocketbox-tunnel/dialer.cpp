@@ -85,7 +85,8 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
     if (!msg.empty()) {
         std::memcpy(framed.data() + 4, msg.data(), msg.size());
     }
-    // Sticky EP4; retry once after cache invalidate if OUT fails (listen race / stale aim).
+    // Aim → send → clear. Leaving EP4 aimed blocks IN on this HW, so the peer's
+    // reply (and our next RX) never lands — usb_send_ok then silent loss.
     for (int attempt = 0; attempt < 2; ++attempt) {
         try {
             if (attempt > 0 || transport_.switch_dest() != dest_port) {
@@ -97,6 +98,11 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
                 last_activity_ = std::chrono::steady_clock::now();
             }
             transport_.send_bytes(framed);
+            transport_.clear_circuit();
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                active_peer_port_ = 0;
+            }
             note_activity();
             return true;
         } catch (const std::exception& e) {
@@ -168,18 +174,24 @@ void CircuitDialer::note_inbound_peer(int peer_port) {
 }
 
 void CircuitDialer::tick_idle() {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (active_peer_port_ == 0 || stop_) {
-        return;
+    int peer = 0;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (active_peer_port_ == 0 || stop_) {
+            return;
+        }
+        const auto idle = std::chrono::steady_clock::now() - last_activity_;
+        if (idle < std::chrono::seconds(rocketbox_lan::kIdleDisconnectSec)) {
+            return;
+        }
+        peer = active_peer_port_;
+        active_peer_port_ = 0;
     }
-    const auto idle = std::chrono::steady_clock::now() - last_activity_;
-    if (idle < std::chrono::seconds(rocketbox_lan::kIdleDisconnectSec)) {
-        return;
+    std::cerr << "[rocketbox-tunnel] idle release peer port " << peer << std::endl;
+    try {
+        transport_.clear_circuit();
+    } catch (...) {
     }
-    // Keep EP4 aimed at the last peer. Clearing forced a cold path where
-    // Windows→Linux failed until Linux originated traffic (neighbor/circuit warm).
-    std::cerr << "[rocketbox-tunnel] idle (keeping EP4 peer port " << active_peer_port_ << ")"
-              << std::endl;
 }
 
 bool CircuitDialer::circuit_open() const {

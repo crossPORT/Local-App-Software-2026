@@ -17,9 +17,8 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    // Pause listen around OUT: concurrent bulk IN+OUT on the same handle times out
-    // ("Header send failed", 8s) on Windows WinUSB even with split locks. Sticky EP4
-    // still avoids per-packet switch/clear; this only serializes the data endpoints.
+    // Pause listen around OUT: concurrent bulk IN+OUT times out on WinUSB
+    // ("Header send failed"). Dialer clears EP4 after send so IN can receive.
     ListenUsbPause pause(*this);
     auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(),
                                       usb_protocol::kFileTimeoutMs, frame_kind);
