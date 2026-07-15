@@ -58,6 +58,7 @@ void TrayPanel::sync_ctrls() {
   if (p > 0) ctrls_.port = p;
   ctrls_.usb = usb_->GetValue();
   if (ep4_switch_) ctrls_.ep4_dynamic_switch = ep4_switch_->GetValue();
+  if (high_priority_) ctrls_.high_priority = high_priority_->GetValue();
 }
 
 void TrayPanel::read_expose() {
@@ -86,6 +87,10 @@ void TrayPanel::sync_from_host(const TrayControls& ctrls, bool running) {
     ep4_switch_->SetValue(ctrls.ep4_dynamic_switch);
     ep4_switch_->Enable(!running);
   }
+  if (high_priority_) {
+    high_priority_->SetValue(ctrls.high_priority);
+    high_priority_->Enable(!running);
+  }
   const int keep_port = ctrls_.port;
   refill_ports();
   // refill_ports may clear Port when USB is hidden by our own tunnel claim.
@@ -111,6 +116,7 @@ void TrayPanel::sync_running(bool running, int display_port) {
   sim_->Enable(!running);
   if (port_) port_->Enable(!running);
   if (ep4_switch_) ep4_switch_->Enable(!running);
+  if (high_priority_) high_priority_->Enable(!running);
   enable_->Enable(true);
   syncing_ = false;
 }

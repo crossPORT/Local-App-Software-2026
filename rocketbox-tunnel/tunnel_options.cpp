@@ -21,6 +21,8 @@ void tunnel_usage(const char* argv0) {
             << "  --iface NAME       TUN interface name (default: rbN)\n"
             << "  --no-netns         Keep TUN in the host network namespace\n"
             << "  --ep4-switch       Enable experimental EP4 routing (off by default)\n"
+            << "  --high-priority    Raise process priority (default; best-effort)\n"
+            << "  --no-high-priority Leave process at normal scheduling priority\n"
             << "  --ping M           ICMP echo to peer port M, then exit\n"
             << "  -V, --version      Print release tag and exit\n"
             << "  SIGHUP / expose file  Reload expose (Linux SIGHUP; all OS: rewrite expose file)\n";
@@ -30,6 +32,10 @@ bool tunnel_parse_args(int argc, char** argv, TunnelOptions& out) {
   if (const char* env = std::getenv("ROCKETBOX_EP4_SWITCH")) {
     const std::string v = env;
     out.ep4_dynamic_switch = (v == "1" || v == "true" || v == "yes");
+  }
+  if (const char* env = std::getenv("ROCKETBOX_HIGH_PRIORITY")) {
+    const std::string v = env;
+    out.high_priority = !(v == "0" || v == "false" || v == "no");
   }
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
@@ -60,6 +66,10 @@ bool tunnel_parse_args(int argc, char** argv, TunnelOptions& out) {
       out.use_netns = false;
     } else if (a == "--ep4-switch") {
       out.ep4_dynamic_switch = true;
+    } else if (a == "--high-priority") {
+      out.high_priority = true;
+    } else if (a == "--no-high-priority") {
+      out.high_priority = false;
     } else if (a == "-V" || a == "--version") {
       std::cout << "rocketbox-tunnel " << ROCKETBOX_RELEASE_TAG_STR << "\n";
       return false;

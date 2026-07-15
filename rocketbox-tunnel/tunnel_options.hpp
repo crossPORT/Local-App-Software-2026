@@ -18,6 +18,8 @@ struct TunnelOptions {
   rocketbox::TransportMode transport = rocketbox::TransportMode::Usb;
   /** When true, allow EP4 dest switch writes (default off). */
   bool ep4_dynamic_switch = false;
+  /** Best-effort elevate scheduling priority (default on). */
+  bool high_priority = true;
   std::vector<ExposeRule> expose;
 };
 

@@ -47,6 +47,8 @@ TraySettings load_tray_settings() {
     } else if (line.compare(0, 19, "ep4_dynamic_switch=") == 0) {
       s.ep4_dynamic_switch =
           line.substr(19) == "1" || line.substr(19) == "true";
+    } else if (line.compare(0, 14, "high_priority=") == 0) {
+      s.high_priority = line.substr(14) == "1" || line.substr(14) == "true";
     }
   }
   if (s.port < 1 || s.port > 4) s.port = 1;
@@ -64,6 +66,7 @@ void save_tray_settings(const TraySettings& s) {
   out << "usb=" << (s.usb ? 1 : 0) << "\n";
   out << "enabled=" << (s.enabled ? 1 : 0) << "\n";
   out << "ep4_dynamic_switch=" << (s.ep4_dynamic_switch ? 1 : 0) << "\n";
+  out << "high_priority=" << (s.high_priority ? 1 : 0) << "\n";
   out << "expose=";
   for (size_t i = 0; i < s.expose.size(); ++i) {
     if (i) out << ',';

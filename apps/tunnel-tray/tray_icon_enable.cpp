@@ -11,6 +11,7 @@ tunnel_tray::TrayControls TunnelTrayIcon::controls_now() const {
   c.port = port_;
   c.usb = usb_;
   c.ep4_dynamic_switch = ep4_dynamic_switch_;
+  c.high_priority = high_priority_;
   c.expose = expose_;
   return c;
 }
@@ -21,6 +22,7 @@ tunnel_tray::TunnelConfig TunnelTrayIcon::config_from_ui() const {
   cfg.transport = usb_ ? "usb" : "sim";
   cfg.expose = expose_;
   cfg.ep4_dynamic_switch = ep4_dynamic_switch_;
+  cfg.high_priority = high_priority_;
   return cfg;
 }
 
@@ -31,6 +33,7 @@ void TunnelTrayIcon::persist_settings(bool enabled) {
   s.usb = usb_;
   s.enabled = enabled;
   s.ep4_dynamic_switch = ep4_dynamic_switch_;
+  s.high_priority = high_priority_;
   tunnel_tray::save_tray_settings(s);
 }
 

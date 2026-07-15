@@ -27,6 +27,7 @@ add_executable(rocketbox-tunnel
   bridge.cpp
   fabric_source.cpp
   dialer.cpp
+  dialer_send.cpp
   dialer_frame.cpp
   pkt_batch.cpp
   icmp_ping.cpp
@@ -38,6 +39,7 @@ add_executable(rocketbox-tunnel
   tunnel_log.cpp
   expose_file.cpp
   tunnel_options.cpp
+  process_priority.cpp
 )
 target_include_directories(rocketbox-tunnel PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}

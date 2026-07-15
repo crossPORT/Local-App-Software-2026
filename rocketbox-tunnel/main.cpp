@@ -6,6 +6,7 @@
 #include "port_lock.hpp"
 #include "rocketbox_ping.hpp"
 #include "tun_device.hpp"
+#include "process_priority.hpp"
 #include "tunnel_log.hpp"
 #include "tunnel_options.hpp"
 #include "tunnel_stats.hpp"
@@ -93,6 +94,14 @@ int main(int argc, char** argv) {
     set_ep4_dynamic_switch_enabled(opt.ep4_dynamic_switch);
     if (opt.ep4_dynamic_switch) {
       rocketbox_tunnel_log("experimental EP4 routing enabled");
+    }
+    if (opt.high_priority) {
+      std::string pri;
+      if (rocketbox_raise_process_priority(&pri)) {
+        rocketbox_tunnel_log("raised process priority (" + pri + ")");
+      } else {
+        rocketbox_tunnel_log("high priority unavailable (" + pri + ")");
+      }
     }
 
     // Resolve Port and take the lock before opening USB so --ping cannot steal a live bridge.

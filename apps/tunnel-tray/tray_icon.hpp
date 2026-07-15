@@ -58,6 +58,7 @@ private:
   int port_ = 1;
   bool usb_ = true;
   bool ep4_dynamic_switch_ = false;
+  bool high_priority_ = true;
   std::vector<tunnel_tray::Endpoint> expose_;
   wxString last_tip_;
   bool last_up_ = false;

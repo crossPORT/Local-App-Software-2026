@@ -12,6 +12,7 @@ struct TraySettings {
   bool usb = true;
   bool enabled = false;
   bool ep4_dynamic_switch = false;
+  bool high_priority = true;
 };
 
 TraySettings load_tray_settings();

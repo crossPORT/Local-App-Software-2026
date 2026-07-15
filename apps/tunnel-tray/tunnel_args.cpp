@@ -19,6 +19,7 @@ std::string build_tunnel_arg_tail(const TunnelConfig& cfg, const std::string& bi
   if (!cfg.iface.empty()) oss << " --iface " << cfg.iface;
   if (!cfg.use_netns) oss << " --no-netns";
   if (cfg.ep4_dynamic_switch) oss << " --ep4-switch";
+  if (!cfg.high_priority) oss << " --no-high-priority";
   if (!cfg.expose.empty()) {
     oss << " --expose ";
     for (size_t i = 0; i < cfg.expose.size(); ++i) {

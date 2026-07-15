@@ -470,8 +470,11 @@ TransferResult TransferController::switch_port(int dest_port) {
     if (shutting_down_.load(std::memory_order_acquire)) {
         return TransferResult{false, 0, 0, 0.0, 0.0, "Shutting down"};
     }
-    if (rocketbox_sim_enabled()) {
-        event_log(resolved_port_index(), "switch_port", "sim skip dest=" + std::to_string(dest_port));
+    if (rocketbox_sim_enabled() || !ep4_dynamic_switch_enabled()) {
+        // Sim / EP4 gated: software dest cache only — no USB locks or EP4 write.
+        event_log(resolved_port_index(), "switch_port",
+                  std::string(rocketbox_sim_enabled() ? "sim" : "ep4_off") +
+                      " skip dest=" + std::to_string(dest_port));
         last_switch_dest_ = dest_port;
         if (dest_port == 0) {
             switch_preserve_ = false;
@@ -511,7 +514,7 @@ TransferResult TransferController::switch_port_if_needed(int dest_port) {
         return TransferResult{true, 0, 0, 0.0, 0.0, {}};
     }
     TransferResult result = switch_port(dest_port);
-    if (result.ok && dest_port >= 1 && dest_port <= 4) {
+    if (result.ok && dest_port >= 1 && dest_port <= 4 && ep4_dynamic_switch_enabled()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
     return result;

@@ -36,6 +36,9 @@ void TrayPanel::build_ui() {
 
   ep4_switch_ = new wxCheckBox(this, wxID_ANY, wxT("Experimental"));
   root->Add(ep4_switch_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
+  high_priority_ = new wxCheckBox(this, wxID_ANY, wxT("High priority"));
+  high_priority_->SetValue(true);
+  root->Add(high_priority_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
 
   auto* expose_lbl = new wxStaticText(this, wxID_ANY, wxT("Expose services"));
   root->Add(expose_lbl, 0, wxLEFT | wxRIGHT, 12);
@@ -76,7 +79,8 @@ void TrayPanel::build_ui() {
                        static_cast<wxWindow*>(transport_lbl), static_cast<wxWindow*>(expose_lbl),
                        static_cast<wxWindow*>(fw_note), static_cast<wxWindow*>(enable_),
                        static_cast<wxWindow*>(usb_), static_cast<wxWindow*>(sim_),
-                       static_cast<wxWindow*>(ep4_switch_)}) {
+                       static_cast<wxWindow*>(ep4_switch_),
+                       static_cast<wxWindow*>(high_priority_)}) {
     w->SetBackgroundColour(bg);
   }
 
@@ -100,6 +104,10 @@ void TrayPanel::build_ui() {
   ep4_switch_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
     if (syncing_) return;
     ctrls_.ep4_dynamic_switch = ep4_switch_->GetValue();
+  });
+  high_priority_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+    if (syncing_) return;
+    ctrls_.high_priority = high_priority_->GetValue();
   });
   list_->Bind(wxEVT_CHECKLISTBOX, [this](wxCommandEvent&) { update_apply_enabled(); });
   all->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {

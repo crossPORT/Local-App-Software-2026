@@ -1,5 +1,7 @@
 #include "usb_plane.hpp"
 
+#include "usb_transfer.h"
+
 #include <chrono>
 #include <stdexcept>
 #include <thread>
@@ -11,6 +13,18 @@ void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
     const int dest = peer_port_from_system_id(peer_system_id);
     if (controller_ && controller_->last_switch_dest() == dest) {
         controller_->mark_switch_preserve();
+        return;
+    }
+    // EP4 gated off: software dest cache only — no listen pause / EP4 / settle.
+    if (!ep4_dynamic_switch_enabled()) {
+        auto r = switch_port(dest);
+        if (!r.ok) {
+            throw std::runtime_error(r.error_message.empty() ? "ensure_circuit failed"
+                                                             : r.error_message);
+        }
+        if (controller_) {
+            controller_->mark_switch_preserve();
+        }
         return;
     }
     // EP4 connect: one switch packet when dest changes (HW). Settle after listen resumes.
@@ -29,6 +43,10 @@ void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
 }
 
 void UsbPlane::clear_circuit() {
+    if (!ep4_dynamic_switch_enabled()) {
+        (void)switch_port(0);
+        return;
+    }
     ListenUsbPause pause(*this);
     (void)switch_port(0);
 }

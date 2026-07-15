@@ -21,6 +21,8 @@ struct TrayControls {
   int port = 1;
   bool usb = true;
   bool ep4_dynamic_switch = false;
+  /** Raise tunnel process priority (default on). */
+  bool high_priority = true;
   std::vector<Endpoint> expose;
 };
 
@@ -65,6 +67,7 @@ private:
   wxRadioButton* usb_ = nullptr;
   wxRadioButton* sim_ = nullptr;
   wxCheckBox* ep4_switch_ = nullptr;
+  wxCheckBox* high_priority_ = nullptr;
   wxCheckListBox* list_ = nullptr;
   wxButton* apply_ = nullptr;
   std::vector<ExposeRow> rows_;
