@@ -1,13 +1,4 @@
-#include "tun_device.hpp"
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <iphlpapi.h>
-#include <netioapi.h>
+#include "tun_win_net.hpp"
 
 #include <cstdio>
 #include <stdexcept>
@@ -80,9 +71,10 @@ void set_fabric_neighbors(const NET_LUID& luid, int local_port) {
   for (int p = 1; p <= 4; ++p) {
     if (p == local_port) continue;
     MIB_IPNET_ROW2 row{};
-    row.Address.si_family = AF_INET;
+    InitializeIpNetEntry2(&row);
     row.Address.Ipv4.sin_family = AF_INET;
-    row.Address.Ipv4.sin_addr.S_un.S_addr = htonl(ipv4_u32(10, 64, 0, static_cast<unsigned>(p)));
+    row.Address.Ipv4.sin_addr.S_un.S_addr =
+        htonl(ipv4_u32(10, 64, 0, static_cast<unsigned>(p)));
     row.InterfaceLuid = luid;
     row.PhysicalAddressLength = 6;
     row.PhysicalAddress[0] = 0x02;

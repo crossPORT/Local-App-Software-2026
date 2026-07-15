@@ -1,5 +1,6 @@
-#include "tun_device.hpp"
+// tun_win_net.hpp must come first (winsock2 before windows/netioapi).
 #include "tun_win_net.hpp"
+#include "tun_device.hpp"
 #include "wintun_load.hpp"
 
 #include <cstring>
@@ -7,11 +8,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 
 namespace {
 
