@@ -11,9 +11,8 @@ namespace detail {
 namespace {
 
 unsigned listen_header_timeout_ms(bool stream) {
-  // USB bulk poll bound only — not an artificial pace delay. Shorter = faster
-  // exclusive turnaround when a switch/send must wait out an in-flight IN.
-  return stream ? 20u : 300u;
+  // Short polls so outbound send can take usb_mutex_ without starving TCP ACKs.
+  return stream ? 5u : 300u;
 }
 
 }  // namespace
@@ -153,6 +152,8 @@ void UsbPlane::listen_loop() {
       pause_cv_.notify_all();
     }
     if (listen_stop_ || !r.ok) {
+      // Yield so send_buffer can take usb_mutex_ between IN polls.
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
     if (!body.empty()) {

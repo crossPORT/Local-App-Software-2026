@@ -81,7 +81,7 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
         return false;
     }
     try {
-        // Separate windows: switch (listen up during settle) then send — never one fat pause.
+        // Switch once; stay aimed for the burst (idle tick clears after quiet).
         if (transport_.switch_dest() != dest_port) {
             transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
         }
@@ -96,13 +96,6 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
             std::memcpy(framed.data() + 4, msg.data(), msg.size());
         }
         transport_.send_bytes(framed);
-        // Dial-on-demand + possible half-duplex: drop EP4 aim after OUT so IN can land.
-        // Next outbound calls ensure_circuit again.
-        transport_.clear_circuit();
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            active_peer_port_ = 0;
-        }
     } catch (const std::exception& e) {
         std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port << ": " << e.what()
                   << std::endl;
