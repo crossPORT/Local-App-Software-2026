@@ -17,6 +17,13 @@ constexpr unsigned char kEndpointCtrlOut = 0x04;
 constexpr std::size_t kSwitchPacketSize = 16;
 constexpr unsigned kSwitchTimeoutMs = 2000;
 
+/**
+ * FPGA EP4 today advances a fixed 3-state pairing (default P1-P2 / P3-P4);
+ * payload content is ignored. Dest-addressed dynamic switch is not live yet.
+ * Keep false so hosts do not rotate the fabric; set true when HW feedback lands.
+ */
+constexpr bool kEp4DynamicSwitchEnabled = false;
+
 // 32-byte file header — magic "ROCKETBX"
 constexpr char kHeaderMagic[8] = {'R', 'O', 'C', 'K', 'E', 'T', 'B', 'X'};
 constexpr std::size_t kHeaderSize = 32;

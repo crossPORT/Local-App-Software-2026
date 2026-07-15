@@ -2,6 +2,12 @@
 
 export const SWITCH_PACKET_SIZE = 16;
 
+/**
+ * Match C++ `kEp4DynamicSwitchEnabled`. FPGA EP4 currently cycles fixed pairings;
+ * leave false until dest-addressed switch + feedback is live.
+ */
+export const EP4_DYNAMIC_SWITCH_ENABLED = false;
+
 /** Control OUT endpoint address (matches C++ `kEndpointCtrlOut`). */
 export const ENDPOINT_CTRL_OUT = 0x04;
 
@@ -17,6 +23,12 @@ export async function writeSwitch(
   ep4Out: number,
   destDisplayPort: number,
 ): Promise<void> {
+  if (!EP4_DYNAMIC_SWITCH_ENABLED) {
+    void device;
+    void ep4Out;
+    void destDisplayPort;
+    return;
+  }
   if (typeof device.clearHalt === 'function') {
     try {
       await device.clearHalt('out', ep4Out);

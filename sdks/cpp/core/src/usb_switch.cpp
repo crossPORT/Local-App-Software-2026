@@ -15,6 +15,13 @@ TransferResult switch_port_on_handle(libusb_device_handle* handle, int dest_port
     result.error_message = "null handle";
     return result;
   }
+  // No EP4 traffic until dynamic switch is live (see kEp4DynamicSwitchEnabled).
+  if (!usb_protocol::kEp4DynamicSwitchEnabled) {
+    (void)dest_port;
+    result.ok = true;
+    result.expected_bytes = usb_protocol::kSwitchPacketSize;
+    return result;
+  }
   libusb_clear_halt(handle, usb_protocol::kEndpointCtrlOut);
 
   std::array<uint8_t, usb_protocol::kSwitchPacketSize> pkt{};
