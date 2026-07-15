@@ -1,18 +1,16 @@
 #include "settings_dialog.h"
 
-#include "display_rate.h"
 #include "platform_util.h"
 #include "rocketbox_version.h"
+#include "settings_checks.h"
 #include "settings_ui_style.h"
 
-#include <sstream>
 #include <wx/dirdlg.h>
 #include <wx/scrolwin.h>
 #include <wx/sizer.h>
 
 using settings_ui::kBg;
 using settings_ui::kMuted;
-using settings_ui::kText;
 using settings_ui::MakeLabel;
 using settings_ui::ProfileText;
 using settings_ui::StyleButton;
@@ -91,21 +89,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent, const IdentityProfile& profile,
   folder_row->Add(browse_folder, 0, wxALIGN_CENTER_VERTICAL);
   root->Add(folder_row, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-  display_rate_check_ = new wxCheckBox(panel, wxID_ANY, "Display rate");
-  display_rate_check_->SetValue(profile.display_rate_mib_s > 0.0);
-  display_rate_check_->SetForegroundColour(kText);
-  display_rate_check_->SetBackgroundColour(kBg);
-  root->Add(display_rate_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
-
-  std::ostringstream rate_msg;
-  rate_msg.setf(std::ios::fixed);
-  rate_msg.precision(0);
-  rate_msg << "When enabled, transfer speeds use ~" << (kDisplayRatePresetMibS / 1024.0)
-           << " GiB/s (+/- " << kDisplayRatePresetJitterPct
-           << "%) during active transfers.";
-  auto* rate_hint = MakeLabel(panel, wxString::FromUTF8(rate_msg.str().c_str()), kMuted);
-  rate_hint->Wrap(kWrapWidth);
-  root->Add(rate_hint, 0, wxLEFT | wxRIGHT, 10);
+  rate_checks_ = AddSettingsRateChecks(panel, root, profile, kWrapWidth);
 
   auto* tune_hint = MakeLabel(panel,
                               "Advanced tuning keys can be set in a config file passed via "
@@ -180,13 +164,7 @@ void SettingsDialog::OnSave(wxCommandEvent&) {
                             : receive_sel == 2 ? ReceiveStatus::Busy
                                                : ReceiveStatus::AskFirst;
   profile_.receive_folder = folder_field_->GetValue().ToStdString();
-  if (display_rate_check_->GetValue()) {
-    profile_.display_rate_mib_s = kDisplayRatePresetMibS;
-    profile_.display_rate_jitter_pct = kDisplayRatePresetJitterPct;
-  } else {
-    profile_.display_rate_mib_s = 0.0;
-    profile_.display_rate_jitter_pct = 0.0;
-  }
+  ApplySettingsRateChecks(rate_checks_, profile_);
   if (profile_.config_path.empty()) {
     profile_.config_path = platform::default_identity_config_path();
   }

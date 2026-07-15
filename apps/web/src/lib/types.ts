@@ -32,6 +32,8 @@ export interface IdentityProfile {
   display_rate_mib_s: number;
   display_rate_jitter_pct: number;
   display_rate_enabled: boolean;
+  /** When true, EP4 dest switching is enabled (off by default). */
+  ep4_dynamic_switch: boolean;
   peers: PeerConfig[];
   config_path: string;
   usb_read_buffer_size?: string;

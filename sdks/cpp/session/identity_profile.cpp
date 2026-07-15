@@ -73,6 +73,9 @@ void apply_identity_key(IdentityProfile& cfg, const std::string& key, const std:
         } catch (...) {
             cfg.transfer_timeout_ms = 0;
         }
+    } else if (key == "ep4_dynamic_switch" || key == "experimental") {
+        cfg.ep4_dynamic_switch =
+            (value == "1" || value == "true" || value == "yes") ? 1 : 0;
     } else if (key == "usb_inflight_mb") {
         try {
             cfg.usb_inflight_mb = std::stoi(value);
@@ -255,6 +258,8 @@ bool load_profile_file(const std::string& path, int port_index, IdentityProfile&
     out.display_rate_jitter_pct = port_cfg.display_rate_jitter_pct > 0.0
                                       ? port_cfg.display_rate_jitter_pct
                                       : global.display_rate_jitter_pct;
+    out.ep4_dynamic_switch = port_cfg.ep4_dynamic_switch >= 0 ? port_cfg.ep4_dynamic_switch
+                                                              : global.ep4_dynamic_switch;
     out.peers = global.peers;
     out.config_path = path;
     return !out.display_name.empty() || !out.peers.empty();
@@ -375,6 +380,9 @@ bool save_identity_profile(const IdentityProfile& profile) {
     }
     if (profile.display_rate_jitter_pct > 0.0) {
         file << "display_rate_jitter_pct=" << profile.display_rate_jitter_pct << '\n';
+    }
+    if (profile.ep4_dynamic_switch >= 0) {
+        file << "ep4_dynamic_switch=" << (profile.ep4_dynamic_switch > 0 ? 1 : 0) << '\n';
     }
 
     for (std::size_t i = 0; i < profile.peers.size(); ++i) {

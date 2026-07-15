@@ -136,6 +136,7 @@ SessionOrchestrator::SessionOrchestrator(
     if (identity_.transfer_timeout_ms > 0) {
         set_payload_timeout_ms(static_cast<unsigned>(identity_.transfer_timeout_ms));
     }
+    set_ep4_dynamic_switch_enabled(identity_.ep4_dynamic_switch > 0);
     if (identity_.usb_inflight_mb > 0) {
         set_inflight_budget_mb(static_cast<unsigned>(identity_.usb_inflight_mb));
     }
@@ -311,6 +312,7 @@ void SessionOrchestrator::set_identity(IdentityProfile identity) {
         if (identity_.transfer_timeout_ms > 0) {
             set_payload_timeout_ms(static_cast<unsigned>(identity_.transfer_timeout_ms));
         }
+        set_ep4_dynamic_switch_enabled(identity_.ep4_dynamic_switch > 0);
         if (identity_.usb_inflight_mb > 0) {
             set_inflight_budget_mb(static_cast<unsigned>(identity_.usb_inflight_mb));
         }

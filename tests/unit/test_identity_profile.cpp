@@ -60,6 +60,29 @@ RB_TEST(identity_tuning_keys_parsed) {
     std::remove(path.c_str());
 }
 
+RB_TEST(identity_ep4_dynamic_switch_parsed) {
+    const std::string path = write_conf(
+        "display_name=Node\n"
+        "ep4_dynamic_switch=1\n");
+
+    IdentityProfile p;
+    CHECK(load_identity_profile(0, path, p));
+    CHECK_EQ(p.ep4_dynamic_switch, 1);
+    std::remove(path.c_str());
+}
+
+RB_TEST(identity_ep4_dynamic_switch_round_trip) {
+    const std::string path = write_conf("display_name=Node\n");
+    IdentityProfile p;
+    CHECK(load_identity_profile(0, path, p));
+    p.ep4_dynamic_switch = 0;
+    CHECK(save_identity_profile(p));
+    IdentityProfile loaded;
+    CHECK(load_identity_profile(0, path, loaded));
+    CHECK_EQ(loaded.ep4_dynamic_switch, 0);
+    std::remove(path.c_str());
+}
+
 RB_TEST(identity_bad_tuning_values_fall_back_to_zero) {
     const std::string path = write_conf(
         "display_name=Node\n"

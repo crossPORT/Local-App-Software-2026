@@ -16,6 +16,8 @@ struct TunnelOptions {
   bool use_netns = false;
 #endif
   rocketbox::TransportMode transport = rocketbox::TransportMode::Usb;
+  /** When true, allow EP4 dest switch writes (default off). */
+  bool ep4_dynamic_switch = false;
   std::vector<ExposeRule> expose;
 };
 

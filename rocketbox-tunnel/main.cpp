@@ -90,6 +90,10 @@ int main(int argc, char** argv) {
     rocketbox_tunnel_log(std::string("rocketbox-tunnel ") + ROCKETBOX_RELEASE_TAG_STR);
     rocketbox_tunnel_log(std::string("connect transport ") + tunnel_transport_name(opt.transport) +
                          (opt.port ? " prefer Port " + std::to_string(opt.port) : " (auto Port)"));
+    set_ep4_dynamic_switch_enabled(opt.ep4_dynamic_switch);
+    if (opt.ep4_dynamic_switch) {
+      rocketbox_tunnel_log("experimental EP4 routing enabled");
+    }
 
     // Resolve Port and take the lock before opening USB so --ping cannot steal a live bridge.
     const int port = resolve_tunnel_display_port(opt.transport, opt.port);

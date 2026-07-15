@@ -11,6 +11,7 @@ struct TraySettings {
   int port = 1;
   bool usb = true;
   bool enabled = false;
+  bool ep4_dynamic_switch = false;
 };
 
 TraySettings load_tray_settings();

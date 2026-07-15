@@ -1,6 +1,7 @@
 #pragma once
 
 #include "identity_profile.h"
+#include "settings_checks.h"
 
 #include <functional>
 #include <wx/wx.h>
@@ -29,7 +30,7 @@ private:
     wxTextCtrl* team_field_ = nullptr;
     wxChoice* receive_choice_ = nullptr;
     wxTextCtrl* folder_field_ = nullptr;
-    wxCheckBox* display_rate_check_ = nullptr;
+    SettingsRateChecks rate_checks_;
     IdentityProfile profile_;
     SaveCallback on_save_;
     SettingsDevActions dev_actions_;

@@ -40,6 +40,8 @@ struct IdentityProfile {
     double display_rate_mib_s = 0.0;
     // ±percent jitter applied once per transfer run (e.g. 3 => 6972..7364 for 7168 base).
     double display_rate_jitter_pct = 0.0;
+    // -1 unset (use default off), 0 off, 1 on — EP4 dest switching when FPGA supports it.
+    int ep4_dynamic_switch = -1;
     std::vector<PeerConfig> peers;
     std::string config_path;
 };

@@ -14,6 +14,7 @@ add_executable(rocketbox
     incoming_dialog.cpp
     link_release_dialog.cpp
     settings_dialog.cpp
+    settings_checks.cpp
     settings_ui_style.cpp
     event_log_dialog.cpp
 )

@@ -20,6 +20,7 @@ namespace tunnel_tray {
 struct TrayControls {
   int port = 1;
   bool usb = true;
+  bool ep4_dynamic_switch = false;
   std::vector<Endpoint> expose;
 };
 
@@ -63,6 +64,7 @@ private:
   wxChoice* port_ = nullptr;
   wxRadioButton* usb_ = nullptr;
   wxRadioButton* sim_ = nullptr;
+  wxCheckBox* ep4_switch_ = nullptr;
   wxCheckListBox* list_ = nullptr;
   wxButton* apply_ = nullptr;
   std::vector<ExposeRow> rows_;

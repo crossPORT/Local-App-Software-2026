@@ -28,6 +28,10 @@ using ProgressCallback = std::function<void(uint64_t done,
 void set_payload_timeout_ms(unsigned ms);
 unsigned payload_timeout_ms();
 
+/** When false (default), EP4 switch writes are no-ops. Settings / --ep4-switch override. */
+void set_ep4_dynamic_switch_enabled(bool enabled);
+bool ep4_dynamic_switch_enabled();
+
 // In-flight buffer budget (per process) in MB. 0 = auto-detect from the kernel
 // usbfs limit so submits never exceed the pool (LIBUSB_ERROR_NO_MEM). Raise it
 // when usbfs_memory_mb has been increased, for higher throughput.

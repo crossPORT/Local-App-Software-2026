@@ -10,6 +10,7 @@ tunnel_tray::TrayControls TunnelTrayIcon::controls_now() const {
   tunnel_tray::TrayControls c;
   c.port = port_;
   c.usb = usb_;
+  c.ep4_dynamic_switch = ep4_dynamic_switch_;
   c.expose = expose_;
   return c;
 }
@@ -19,6 +20,7 @@ tunnel_tray::TunnelConfig TunnelTrayIcon::config_from_ui() const {
   cfg.port = port_;
   cfg.transport = usb_ ? "usb" : "sim";
   cfg.expose = expose_;
+  cfg.ep4_dynamic_switch = ep4_dynamic_switch_;
   return cfg;
 }
 
@@ -28,6 +30,7 @@ void TunnelTrayIcon::persist_settings(bool enabled) {
   s.port = port_;
   s.usb = usb_;
   s.enabled = enabled;
+  s.ep4_dynamic_switch = ep4_dynamic_switch_;
   tunnel_tray::save_tray_settings(s);
 }
 

@@ -23,6 +23,7 @@ TunnelTrayIcon::TunnelTrayIcon() {
   expose_ = settings.expose;
   port_ = settings.port;
   usb_ = settings.usb;
+  ep4_dynamic_switch_ = settings.ep4_dynamic_switch;
   dark_theme_ = tunnel_tray::desktop_prefers_dark();
   reload_icons();
   tick_.Bind(wxEVT_TIMER, &TunnelTrayIcon::on_tick, this);
@@ -76,6 +77,7 @@ void TunnelTrayIcon::ensure_panel() {
           const auto c = panel_->controls();
           port_ = c.port;
           usb_ = c.usb;
+          ep4_dynamic_switch_ = c.ep4_dynamic_switch;
           expose_ = c.expose;
         }
         return set_enabled(enable);
@@ -85,6 +87,7 @@ void TunnelTrayIcon::ensure_panel() {
           const auto c = panel_->controls();
           port_ = c.port;
           usb_ = c.usb;
+          ep4_dynamic_switch_ = c.ep4_dynamic_switch;
           expose_ = c.expose;
         }
         return apply_expose();

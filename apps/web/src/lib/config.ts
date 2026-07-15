@@ -79,6 +79,10 @@ function applyIdentityKey(cfg: Partial<IdentityProfile>, key: string, value: str
     case 'display_rate_jitter_pct':
       cfg.display_rate_jitter_pct = Math.max(0, Number.parseFloat(value) || 0);
       break;
+    case 'ep4_dynamic_switch':
+    case 'experimental':
+      cfg.ep4_dynamic_switch = value === '1' || value === 'true' || value === 'yes';
+      break;
     default:
       break;
   }
@@ -121,6 +125,7 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
     display_rate_mib_s: 0,
     display_rate_jitter_pct: 0,
     display_rate_enabled: true,
+    ep4_dynamic_switch: false,
     peers: [],
   };
   const portCfg: Partial<IdentityProfile> = { peers: [] };
@@ -205,6 +210,7 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
         : (global.display_rate_jitter_pct ?? 0),
     display_rate_enabled:
       (portCfg.display_rate_mib_s ?? 0) > 0 || (global.display_rate_mib_s ?? 0) > 0,
+    ep4_dynamic_switch: portCfg.ep4_dynamic_switch ?? global.ep4_dynamic_switch ?? false,
     peers: global.peers ?? [],
     config_path: configPath,
     usb_read_buffer_size: portCfg.usb_read_buffer_size || global.usb_read_buffer_size || '256kb',
@@ -247,6 +253,7 @@ export function defaultIdentityProfile(portIndex: number): IdentityProfile {
     display_rate_mib_s: 0,
     display_rate_jitter_pct: 0,
     display_rate_enabled: true,
+    ep4_dynamic_switch: false,
     peers: [],
     config_path: `local:port${portIndex}`,
     usb_read_buffer_size: '256kb',
@@ -280,6 +287,7 @@ function normalizeIdentity(raw: Partial<IdentityProfile>, portIndex: number): Id
     receive_status: raw.receive_status ?? defaults.receive_status,
     receive_folder: trim(raw.receive_folder ?? defaults.receive_folder),
     display_rate_enabled: raw.display_rate_enabled ?? defaults.display_rate_enabled,
+    ep4_dynamic_switch: raw.ep4_dynamic_switch ?? defaults.ep4_dynamic_switch,
     peers: (raw.peers ?? [])
       .map((peer) => normalizePeer(peer))
       .filter((peer): peer is PeerConfig => peer != null),

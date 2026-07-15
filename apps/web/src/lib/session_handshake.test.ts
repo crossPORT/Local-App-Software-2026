@@ -20,6 +20,7 @@ function identity(overrides: Partial<IdentityProfile> = {}): IdentityProfile {
     display_rate_mib_s: 0,
     display_rate_jitter_pct: 0,
     display_rate_enabled: true,
+    ep4_dynamic_switch: false,
     peers: [],
     config_path: 'test',
     ...overrides,

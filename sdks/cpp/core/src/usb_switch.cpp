@@ -4,10 +4,25 @@
 #include "usb_protocol.h"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <libusb-1.0/libusb.h>
 #include <string>
+
+namespace {
+
+std::atomic<bool> g_ep4_dynamic_switch{usb_protocol::kEp4DynamicSwitchDefault};
+
+}  // namespace
+
+void set_ep4_dynamic_switch_enabled(bool enabled) {
+  g_ep4_dynamic_switch.store(enabled, std::memory_order_release);
+}
+
+bool ep4_dynamic_switch_enabled() {
+  return g_ep4_dynamic_switch.load(std::memory_order_acquire);
+}
 
 TransferResult switch_port_on_handle(libusb_device_handle* handle, int dest_port) {
   TransferResult result{};
@@ -15,8 +30,8 @@ TransferResult switch_port_on_handle(libusb_device_handle* handle, int dest_port
     result.error_message = "null handle";
     return result;
   }
-  // No EP4 traffic until dynamic switch is live (see kEp4DynamicSwitchEnabled).
-  if (!usb_protocol::kEp4DynamicSwitchEnabled) {
+  // No EP4 traffic until settings / --ep4-switch enable dynamic routing.
+  if (!ep4_dynamic_switch_enabled()) {
     (void)dest_port;
     result.ok = true;
     result.expected_bytes = usb_protocol::kSwitchPacketSize;

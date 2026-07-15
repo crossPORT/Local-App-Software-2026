@@ -34,6 +34,9 @@ void TrayPanel::build_ui() {
   root->Add(usb_, 0, wxLEFT | wxRIGHT, 12);
   root->Add(sim_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
 
+  ep4_switch_ = new wxCheckBox(this, wxID_ANY, wxT("Experimental"));
+  root->Add(ep4_switch_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
+
   auto* expose_lbl = new wxStaticText(this, wxID_ANY, wxT("Expose services"));
   root->Add(expose_lbl, 0, wxLEFT | wxRIGHT, 12);
   list_ = new wxCheckListBox(this, wxID_ANY);
@@ -72,7 +75,8 @@ void TrayPanel::build_ui() {
   for (wxWindow* w : {static_cast<wxWindow*>(status_), static_cast<wxWindow*>(cable_lbl_),
                        static_cast<wxWindow*>(transport_lbl), static_cast<wxWindow*>(expose_lbl),
                        static_cast<wxWindow*>(fw_note), static_cast<wxWindow*>(enable_),
-                       static_cast<wxWindow*>(usb_), static_cast<wxWindow*>(sim_)}) {
+                       static_cast<wxWindow*>(usb_), static_cast<wxWindow*>(sim_),
+                       static_cast<wxWindow*>(ep4_switch_)}) {
     w->SetBackgroundColour(bg);
   }
 
@@ -93,6 +97,10 @@ void TrayPanel::build_ui() {
     refill_ports();
   });
   enable_->Bind(wxEVT_CHECKBOX, &TrayPanel::on_enable, this);
+  ep4_switch_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+    if (syncing_) return;
+    ctrls_.ep4_dynamic_switch = ep4_switch_->GetValue();
+  });
   list_->Bind(wxEVT_CHECKLISTBOX, [this](wxCommandEvent&) { update_apply_enabled(); });
   all->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
     for (unsigned i = 0; i < list_->GetCount(); ++i) list_->Check(static_cast<int>(i), true);

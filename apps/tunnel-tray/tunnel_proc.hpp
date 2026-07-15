@@ -18,6 +18,7 @@ struct TunnelConfig {
 #else
   bool use_netns = true;
 #endif
+  bool ep4_dynamic_switch = false;
   std::string tunnel_bin;  // empty = auto-detect
 };
 

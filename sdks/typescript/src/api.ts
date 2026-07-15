@@ -54,3 +54,7 @@ export {
 } from './transports/usb_pairing';
 export { setDebugLog, setDebugLevel, type DebugLevel } from './debug_log';
 export { subscribeUsbDisconnect } from './transports/usb_events';
+export {
+  setEp4DynamicSwitchEnabled,
+  isEp4DynamicSwitchEnabled,
+} from './transports/usb_switch';

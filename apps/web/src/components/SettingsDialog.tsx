@@ -13,6 +13,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: SettingsDialogProps) {
   const [displayRateEnabled, setDisplayRateEnabled] = useState(identity.display_rate_enabled);
+  const [ep4DynamicSwitch, setEp4DynamicSwitch] = useState(!!identity.ep4_dynamic_switch);
   const [debugLogLevel, setDebugLogLevel] = useState<EventLogLevel>(() => getEventLogLevel());
   const [usbReadBufferSize, setUsbReadBufferSize] = useState(identity.usb_read_buffer_size ?? '256kb');
   const [error, setError] = useState('');
@@ -32,6 +33,7 @@ export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: Se
       team: String(data.get('team') ?? '').trim(),
       receive_status: String(data.get('receive_status') ?? 'ask_first') as ReceiveStatus,
       display_rate_enabled: displayRateEnabled,
+      ep4_dynamic_switch: ep4DynamicSwitch,
       peers: [],
       usb_read_buffer_size: usbReadBufferSize,
       announce_interval_sec: parseInt(String(data.get('announce_interval_sec') ?? '30'), 10) || 30,
@@ -122,6 +124,20 @@ export function SettingsDialog({ identity, onClose, onSave, onOpenEventLog }: Se
               {displayRateEnabled
                 ? `Transfer speeds use ${displayRatePresetLabel()} during active transfers.`
                 : 'Transfer speeds reflect measured USB throughput.'}
+            </p>
+          </div>
+
+          <div className="settings-toggle-row">
+            <label className="settings-toggle-label">
+              <input
+                type="checkbox"
+                checked={ep4DynamicSwitch}
+                onChange={(e) => setEp4DynamicSwitch(e.target.checked)}
+              />
+              <span>Experimental</span>
+            </label>
+            <p className="settings-hint" style={{ color: theme.muted }}>
+              Off by default. Enables experimental EP4 routing when the hardware supports it.
             </p>
           </div>
 

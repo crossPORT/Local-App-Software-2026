@@ -13,6 +13,7 @@ import {
 } from '../transport_factory';
 import {
   setDebugLog,
+  setEp4DynamicSwitchEnabled,
   subscribeUsbDisconnect,
   webUsbBlockedReason,
 } from '@rocketbox/sdk';
@@ -140,6 +141,7 @@ export function useRocketBox() {
       if (cancelled) {
         return;
       }
+      setEp4DynamicSwitchEnabled(!!identity.ep4_dynamic_switch);
       rosterRef.current.seedFromConfig(identity.peers);
       setState({
         ...initialUiState(identity, identityPortHint),
@@ -246,6 +248,7 @@ export function useRocketBox() {
     async (desc: string) => {
       const portIdx = syncPortIndex(sessionRef.current, portIndexRef);
       const legIdentity = await loadIdentityProfileAsync(portIdx);
+      setEp4DynamicSwitchEnabled(!!legIdentity.ep4_dynamic_switch);
       setUsbDescription(desc);
       const count = await countTransportDevices();
       patch(() => {
@@ -341,6 +344,7 @@ export function useRocketBox() {
         if (nextPort !== portIndex) {
           portIndex = nextPort;
           const legIdentity = await loadIdentityProfileAsync(portIndex);
+          setEp4DynamicSwitchEnabled(!!legIdentity.ep4_dynamic_switch);
           identityRef.current = legIdentity;
           identityPatch = legIdentity;
         }
@@ -446,6 +450,7 @@ export function useRocketBox() {
       const storagePort = portIndexRef.current;
       saveIdentityProfile(storagePort, identity);
       const applied = applyBoothDisplaySettings(identity, storagePort);
+      setEp4DynamicSwitchEnabled(!!applied.ep4_dynamic_switch);
       identityRef.current = applied;
       rosterRef.current.seedFromConfig(applied.peers);
       const portIndex = portIndexRef.current;
