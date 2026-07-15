@@ -24,8 +24,8 @@ public:
     bool ensure(int dest_port);
 
     /**
-     * Switch (if needed) + framed send under one USB exclusion window.
-     * Prefer this over ensure()+send_message() to avoid two pause/turnarounds.
+     * EP4 connect if needed, then framed send. Keeps EP4 aimed (HW: one switch
+     * to connect, dest=0 only on idle/shutdown).
      */
     bool deliver(int dest_port, const std::vector<uint8_t>& msg);
 

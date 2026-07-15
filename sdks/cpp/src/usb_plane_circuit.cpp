@@ -13,7 +13,7 @@ void UsbPlane::ensure_circuit(const std::string& peer_system_id) {
         controller_->mark_switch_preserve();
         return;
     }
-    // Pause only for the EP4 write — never sleep while listen is down (reply loss).
+    // EP4 connect: one switch packet when dest changes (HW). Settle after listen resumes.
     {
         ListenUsbPause pause(*this);
         auto r = switch_port(dest);

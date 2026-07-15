@@ -85,8 +85,8 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
     if (!msg.empty()) {
         std::memcpy(framed.data() + 4, msg.data(), msg.size());
     }
-    // Aim → send → clear. Leaving EP4 aimed blocks IN on this HW, so the peer's
-    // reply (and our next RX) never lands — usb_send_ok then silent loss.
+    // EP4 connect once (HW): one switch to aim, stay connected; dest=0 only on
+    // idle/shutdown. Data uses EP1/EP2 full duplex while aimed.
     for (int attempt = 0; attempt < 2; ++attempt) {
         try {
             if (attempt > 0 || transport_.switch_dest() != dest_port) {
@@ -98,21 +98,17 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
                 last_activity_ = std::chrono::steady_clock::now();
             }
             transport_.send_bytes(framed);
-            transport_.clear_circuit();
-            {
-                std::lock_guard<std::mutex> lock(mu_);
-                active_peer_port_ = 0;
-            }
             note_activity();
             return true;
         } catch (const std::exception& e) {
             std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port
                       << " attempt=" << (attempt + 1) << ": " << e.what() << std::endl;
-            try {
-                transport_.clear_circuit();
-            } catch (...) {
-            }
-            {
+            // Force a fresh EP4 connect on retry (disconnect then aim) — not per-packet clear.
+            if (attempt == 0) {
+                try {
+                    transport_.clear_circuit();
+                } catch (...) {
+                }
                 std::lock_guard<std::mutex> lock(mu_);
                 active_peer_port_ = 0;
             }
@@ -187,7 +183,8 @@ void CircuitDialer::tick_idle() {
         peer = active_peer_port_;
         active_peer_port_ = 0;
     }
-    std::cerr << "[rocketbox-tunnel] idle release peer port " << peer << std::endl;
+    // EP4 disconnect (HW): one dest=0 at end of connection.
+    std::cerr << "[rocketbox-tunnel] idle disconnect peer port " << peer << std::endl;
     try {
         transport_.clear_circuit();
     } catch (...) {
