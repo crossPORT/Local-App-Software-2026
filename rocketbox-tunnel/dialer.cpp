@@ -80,29 +80,39 @@ bool CircuitDialer::deliver(int dest_port, const std::vector<uint8_t>& msg) {
     if (dest_port < 1 || dest_port > 4 || dest_port == local_port_) {
         return false;
     }
-    try {
-        // Sticky EP4: aim once, stay aimed for the peer (full duplex IN+OUT).
-        if (transport_.switch_dest() != dest_port) {
-            transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
-        }
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            active_peer_port_ = dest_port;
-            last_activity_ = std::chrono::steady_clock::now();
-        }
-        std::vector<uint8_t> framed(4 + msg.size());
-        write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
-        if (!msg.empty()) {
-            std::memcpy(framed.data() + 4, msg.data(), msg.size());
-        }
-        transport_.send_bytes(framed);
-    } catch (const std::exception& e) {
-        std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port << ": " << e.what()
-                  << std::endl;
-        return false;
+    std::vector<uint8_t> framed(4 + msg.size());
+    write_u32_be(framed.data(), static_cast<uint32_t>(msg.size()));
+    if (!msg.empty()) {
+        std::memcpy(framed.data() + 4, msg.data(), msg.size());
     }
-    note_activity();
-    return true;
+    // Sticky EP4; retry once after cache invalidate if OUT fails (listen race / stale aim).
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        try {
+            if (attempt > 0 || transport_.switch_dest() != dest_port) {
+                transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
+            }
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                active_peer_port_ = dest_port;
+                last_activity_ = std::chrono::steady_clock::now();
+            }
+            transport_.send_bytes(framed);
+            note_activity();
+            return true;
+        } catch (const std::exception& e) {
+            std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port
+                      << " attempt=" << (attempt + 1) << ": " << e.what() << std::endl;
+            try {
+                transport_.clear_circuit();
+            } catch (...) {
+            }
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                active_peer_port_ = 0;
+            }
+        }
+    }
+    return false;
 }
 
 void CircuitDialer::send_message(const std::vector<uint8_t>& msg) {
