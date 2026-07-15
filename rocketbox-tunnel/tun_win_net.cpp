@@ -71,7 +71,6 @@ void set_fabric_neighbors(const NET_LUID& luid, int local_port) {
   for (int p = 1; p <= 4; ++p) {
     if (p == local_port) continue;
     MIB_IPNET_ROW2 row{};
-    InitializeIpNetEntry2(&row);
     row.Address.Ipv4.sin_family = AF_INET;
     row.Address.Ipv4.sin_addr.S_un.S_addr =
         htonl(ipv4_u32(10, 64, 0, static_cast<unsigned>(p)));
