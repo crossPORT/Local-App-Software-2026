@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 namespace rocketbox {
 namespace detail {
@@ -39,9 +40,15 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
             throw std::runtime_error(r.error_message.empty() ? "send failed" : r.error_message);
         }
     }
-    // Close the post-OUT deaf window: do not return until IN is re-armed (stream only).
-    if (stream_mode_) {
+    // Close post-OUT deaf window only when this thread is NOT the listen
+    // thread. ICMP replies run inside the listen callback — waiting there
+    // deadlocks arming (listen_armed armed=0 every time) and adds ~100ms.
+    if (stream_mode_ && listen_thread_.joinable() &&
+        std::this_thread::get_id() != listen_thread_.get_id()) {
         wait_listen_in_armed(100);
+    } else if (stream_mode_) {
+        event_log(resolved_port_index(), "listen_armed_skip",
+                  "reason=on_listen_thread " + listen_state_string());
     }
     (void)filename;
 }
