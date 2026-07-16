@@ -96,6 +96,10 @@ bool is_echo_request(const uint8_t* pkt, size_t len, int local_port) {
   return pkt[ihl] == 8;  // ICMP echo request
 }
 
+bool is_icmp(const uint8_t* pkt, size_t len) {
+  return pkt && len >= 20 && (pkt[0] >> 4) == 4 && pkt[9] == 1;
+}
+
 std::vector<uint8_t> make_echo_reply(const uint8_t* request, size_t len) {
   if (!request || len < 28 || (request[0] >> 4) != 4 || request[9] != 1) {
     return {};

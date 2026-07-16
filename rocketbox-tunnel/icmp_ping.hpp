@@ -11,6 +11,9 @@ std::vector<uint8_t> echo_request(int src_port, int dst_port, uint16_t id, uint1
 /** True if packet is ICMP echo reply to our id (any seq). */
 bool is_echo_reply(const uint8_t* pkt, size_t len, uint16_t id);
 
+/** True if IPv4 protocol is ICMP (proto 1). */
+bool is_icmp(const uint8_t* pkt, size_t len);
+
 /** True if IPv4 ICMP echo request (type 8) destined to 10.64.0.local_port. */
 bool is_echo_request(const uint8_t* pkt, size_t len, int local_port);
 

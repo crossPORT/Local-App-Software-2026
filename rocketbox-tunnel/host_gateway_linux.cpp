@@ -1,5 +1,7 @@
 #include "host_gateway.hpp"
 
+#include "pkt_batch.hpp"
+
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -91,12 +93,21 @@ void HostGateway::install(int local_port, const std::string& netns,
 
   run_ignore(std::string(kIp) + " link del " + host_veth_ + " 2>/dev/null");
   run_or_throw(std::string(kIp) + " link add " + host_veth_ + " type veth peer name " + ns_veth_);
+  // Match TUN MTU so host expose sockets (e.g. :8080) advertise large MSS, not 1460.
+  run_or_throw(std::string(kIp) + " link set " + host_veth_ + " mtu " + std::to_string(kTunMtu));
+  run_or_throw(std::string(kIp) + " link set " + ns_veth_ + " mtu " + std::to_string(kTunMtu));
   run_or_throw(std::string(kIp) + " link set " + ns_veth_ + " netns " + netns_);
   run_or_throw(std::string(kIp) + " addr add " + host_addr + "/30 dev " + host_veth_);
   run_or_throw(std::string(kIp) + " link set " + host_veth_ + " up");
   run_ignore(std::string(kSys) + " -w net.ipv4.conf." + host_veth_ + ".rp_filter=0");
+  // Host-side window room for expose TCP (server lives on host, not in netns).
+  run_ignore(std::string(kSys) + " -w net.ipv4.tcp_slow_start_after_idle=0");
+  run_ignore(std::string(kSys) + " -w net.core.rmem_max=16777216");
+  run_ignore(std::string(kSys) + " -w net.core.wmem_max=16777216");
 
   run_or_throw(nx(netns_, std::string(kIp) + " addr add " + ns_addr + "/30 dev " + ns_veth_));
+  run_or_throw(nx(netns_, std::string(kIp) + " link set " + ns_veth_ + " mtu " +
+                             std::to_string(kTunMtu)));
   run_or_throw(nx(netns_, std::string(kIp) + " link set " + ns_veth_ + " up"));
   run_ignore(nx(netns_, std::string(kSys) + " -w net.ipv4.ip_forward=1"));
   run_ignore(nx(netns_, std::string(kSys) + " -w net.ipv4.conf.all.rp_filter=0"));

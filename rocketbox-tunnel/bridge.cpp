@@ -10,6 +10,12 @@
 #include <iostream>
 #include <utility>
 
+namespace {
+
+constexpr int kIdleTunWaitMs = 20;  // was 250 — kept ICMP replies waiting on TUN poll
+
+}  // namespace
+
 TunnelBridge::TunnelBridge(TunDevice& tun, CircuitDialer& dialer, int local_port)
     : tun_(tun), dialer_(dialer), local_port_(local_port) {
   dialer_.on_message([this](const std::vector<uint8_t>& msg) { on_tunnel_message(msg); });
@@ -33,37 +39,22 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
 
   if (rocketbox_icmp::is_echo_request(msg.data(), msg.size(), local_port_)) {
     auto reply = rocketbox_icmp::make_echo_reply(msg.data(), msg.size());
-    if (!reply.empty()) {
-      std::lock_guard<std::mutex> lock(reply_mu_);
-      pending_reply_ = std::move(reply);
+    if (reply.empty()) return;
+    const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
+    if (dest == 0 || dest == local_port_ || !dialer_.deliver(dest, reply)) {
+      rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
+      return;
+    }
+    up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
+    if (!logged_icmp_reply_) {
+      rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
+      logged_icmp_reply_ = true;
     }
     return;
   }
 
   std::lock_guard<std::mutex> lock(write_mu_);
   tun_.write_packet(msg.data(), msg.size());
-}
-
-bool TunnelBridge::send_pending_icmp_reply() {
-  std::vector<uint8_t> reply;
-  {
-    std::lock_guard<std::mutex> lock(reply_mu_);
-    if (pending_reply_.empty()) return false;
-    reply = std::move(pending_reply_);
-    pending_reply_.clear();
-  }
-  flush_batch();
-  const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
-  if (dest == 0 || dest == local_port_ || !dialer_.deliver(dest, reply)) {
-    rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
-    return true;
-  }
-  up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
-  if (!logged_icmp_reply_) {
-    rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
-    logged_icmp_reply_ = true;
-  }
-  return true;
 }
 
 void TunnelBridge::flush_batch() {
@@ -83,6 +74,16 @@ void TunnelBridge::flush_batch() {
 }
 
 void TunnelBridge::queue_packet(int dest, std::vector<uint8_t> pkt) {
+  // ICMP: never coalesce — 2 ms batch + USB pause dominate ping RTT.
+  if (rocketbox_icmp::is_icmp(pkt.data(), pkt.size())) {
+    flush_batch();
+    if (!dialer_.deliver(dest, pkt)) {
+      std::cerr << "[rocketbox-tunnel] drop ICMP: deliver failed dest=" << dest << std::endl;
+      return;
+    }
+    up_bytes_.fetch_add(pkt.size(), std::memory_order_relaxed);
+    return;
+  }
   if (batch_dest_ != 0 && batch_dest_ != dest) {
     flush_batch();
   }
@@ -109,11 +110,7 @@ void TunnelBridge::run() {
       const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
       if (want > 0) (void)dialer_.ensure(want);
 
-      if (send_pending_icmp_reply()) {
-        continue;
-      }
-
-      const int wait_ms = batch_.empty() ? 250 : kBatchFlushMs;
+      const int wait_ms = batch_.empty() ? kIdleTunWaitMs : kBatchFlushMs;
       auto pkt = tun_.read_packet(wait_ms);
       if (pkt.empty()) {
         if (!batch_.empty()) {
