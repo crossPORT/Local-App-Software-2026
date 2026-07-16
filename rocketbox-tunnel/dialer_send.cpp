@@ -3,9 +3,11 @@
 #include "dialer_frame.hpp"
 #include "peer_map.hpp"
 #include "pkt_batch.hpp"
+#include "tunnel_log.hpp"
 
 #include "usb_transfer.h"
 
+#include <chrono>
 #include <iostream>
 
 bool CircuitDialer::send_framed_batch(int dest_port, const std::vector<uint8_t>& batch_body,
@@ -15,6 +17,7 @@ bool CircuitDialer::send_framed_batch(int dest_port, const std::vector<uint8_t>&
   }
   const auto framed = frame_batch_body(batch_body);
   for (int attempt = 0; attempt < 2; ++attempt) {
+    const auto t0 = std::chrono::steady_clock::now();
     try {
       if (dial && (attempt > 0 || transport_.switch_dest() != dest_port)) {
         transport_.ensure_circuit(rocketbox_lan::system_id_for_port(dest_port));
@@ -24,14 +27,27 @@ bool CircuitDialer::send_framed_batch(int dest_port, const std::vector<uint8_t>&
         active_peer_port_ = dest_port;
         last_activity_ = std::chrono::steady_clock::now();
       }
+      rocketbox_tunnel_log("deliver_begin dest=" + std::to_string(dest_port) +
+                          " attempt=" + std::to_string(attempt + 1) +
+                          " bytes=" + std::to_string(framed.size()) +
+                          " dial=" + std::to_string(dial ? 1 : 0));
       transport_.send_bytes(framed);
+      const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - t0)
+                          .count();
+      rocketbox_tunnel_log("deliver_end dest=" + std::to_string(dest_port) +
+                           " attempt=" + std::to_string(attempt + 1) +
+                           " ok=1 elapsed_ms=" + std::to_string(ms));
       note_activity();
       return true;
     } catch (const std::exception& e) {
-      std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port
-                << " attempt=" << (attempt + 1) << ": " << e.what() << std::endl;
+      const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - t0)
+                          .count();
+      rocketbox_tunnel_log("deliver_end dest=" + std::to_string(dest_port) +
+                           " attempt=" + std::to_string(attempt + 1) +
+                           " ok=0 elapsed_ms=" + std::to_string(ms) + " err=" + e.what());
       if (attempt == 0 && dial) {
-        // EP4 off: clear is software-only and not needed to recover OUT.
         if (ep4_dynamic_switch_enabled()) {
           try {
             transport_.clear_circuit();
@@ -65,7 +81,7 @@ void CircuitDialer::send_message(const std::vector<uint8_t>& ip_packet) {
   try {
     transport_.send_bytes(framed);
   } catch (const std::exception& e) {
-    std::cerr << "[rocketbox-tunnel] send_message failed: " << e.what() << std::endl;
+    rocketbox_tunnel_log(std::string("send_message failed: ") + e.what());
     throw;
   }
   note_activity();

@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace {
@@ -45,8 +46,15 @@ TransferResult send_buffer_on_handle(libusb_device_handle* handle, const uint8_t
   }
   const auto t0 = std::chrono::steady_clock::now();
   if (!usb_bulk_write(handle, wire.data(), wire.size(), static_cast<int>(timeout_ms))) {
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - t0)
+                        .count();
     clear_out_halt(handle);
-    result.error_message = len > 0 ? "Payload send failed" : "Header send failed";
+    const char* bulk = usb_last_bulk_status();
+    result.error_message =
+        std::string(len > 0 ? "Payload send failed" : "Header send failed") +
+        " wire=" + std::to_string(wire.size()) + " timeout_ms=" + std::to_string(timeout_ms) +
+        " elapsed_ms=" + std::to_string(ms) + (bulk && bulk[0] ? std::string(" ") + bulk : "");
     return result;
   }
   const double sec =

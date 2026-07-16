@@ -2,15 +2,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 struct libusb_device_handle;
 
-/** Bulk OUT all of `len`. */
+/** Last bulk IN/OUT failure detail (thread-local). Empty if last op succeeded. */
+const char* usb_last_bulk_status();
+
+/** Bulk OUT all of `len`. On failure, usb_last_bulk_status() is set. */
 bool usb_bulk_write(libusb_device_handle* h, const uint8_t* data, size_t len, int timeout_ms);
 
 /**
  * Bulk IN up to `len`. On success *got == len. On failure *got is bytes read
- * before the error (may be 0).
+ * before the error (may be 0); usb_last_bulk_status() is set.
  */
 bool usb_bulk_read(libusb_device_handle* h, uint8_t* data, size_t len, int timeout_ms,
                    size_t* got);

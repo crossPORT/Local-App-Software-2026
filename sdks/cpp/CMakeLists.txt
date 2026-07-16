@@ -23,6 +23,7 @@ if (ROCKETBOX_BUILD_USB)
         src/usb_plane_circuit.cpp
         src/usb_plane_files.cpp
         src/usb_plane_listen.cpp
+        src/usb_plane_listen_loop.cpp
     )
 endif()
 

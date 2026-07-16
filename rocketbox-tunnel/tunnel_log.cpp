@@ -52,3 +52,12 @@ void rocketbox_tunnel_log(const std::string& line) {
   } catch (...) {
   }
 }
+
+void rocketbox_tunnel_enable_event_stderr() {
+  if (std::getenv("ROCKETBOX_LOG_STDERR")) return;
+#if defined(_WIN32)
+  _putenv_s("ROCKETBOX_LOG_STDERR", "1");
+#else
+  setenv("ROCKETBOX_LOG_STDERR", "1", 0);
+#endif
+}

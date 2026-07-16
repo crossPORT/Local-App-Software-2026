@@ -1,8 +1,10 @@
 #include "usb_plane.hpp"
 
+#include "event_log.h"
 #include "usb_protocol.h"
 
 #include <stdexcept>
+#include <string>
 
 namespace rocketbox {
 namespace detail {
@@ -17,13 +19,17 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    // Always pause listen around OUT (same as 0.1.39). Skipping pause for
-    // non-WinUSB stream caused concurrent IN+OUT on one handle and broke the
-    // tunnel. WinUSB also requires this exclusion.
+    // Always pause listen around OUT (same as 0.1.39).
     const unsigned timeout =
         stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
+    event_log(resolved_port_index(), "usb_out_begin",
+              "bytes=" + std::to_string(bytes.size()) + " timeout_ms=" + std::to_string(timeout) +
+                  " pause_listen=1 " + listen_state_string());
     ListenUsbPause pause(*this);
     auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(), timeout, frame_kind);
+    event_log(resolved_port_index(), r.ok ? "usb_out_end" : "usb_out_end_fail",
+              "bytes=" + std::to_string(bytes.size()) + " " + listen_state_string() +
+                  (r.error_message.empty() ? "" : " err=" + r.error_message));
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "send failed" : r.error_message);
     }

@@ -86,9 +86,11 @@ int main(int argc, char** argv) {
 #if defined(_WIN32)
   SetConsoleCtrlHandler(on_console_ctrl, TRUE);
 #endif
+  rocketbox_tunnel_enable_event_stderr();
 
   try {
     rocketbox_tunnel_log(std::string("rocketbox-tunnel ") + ROCKETBOX_RELEASE_TAG_STR);
+    rocketbox_tunnel_log("diag: listen_hb+pause+out state (need listen_hb every 1s)");
     rocketbox_tunnel_log(std::string("connect transport ") + tunnel_transport_name(opt.transport) +
                          (opt.port ? " prefer Port " + std::to_string(opt.port) : " (auto Port)"));
     set_ep4_dynamic_switch_enabled(opt.ep4_dynamic_switch);

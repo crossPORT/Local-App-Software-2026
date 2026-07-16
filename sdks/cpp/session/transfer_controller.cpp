@@ -304,6 +304,8 @@ TransferResult TransferController::send_buffer(int port_index, const uint8_t* da
     event_log(resolved_port_index(), result.ok ? "usb_send_ok" : "usb_send_fail",
               "buffer bytes=" +
                   std::to_string(result.ok ? result.bytes_transferred : result.expected_bytes) +
+                  " timeout_ms=" + std::to_string(timeout_ms) +
+                  " stream=" + std::string(stream_mode_ ? "1" : "0") +
                   (result.error_message.empty() ? "" : " err=" + result.error_message));
     return result;
 }
@@ -367,10 +369,14 @@ TransferResult TransferController::receive_buffer(int port_index, std::vector<ui
     }
     if (result.ok) {
         event_log(resolved_port_index(), "usb_recv_ok",
-                  "buffer bytes=" + std::to_string(result.bytes_transferred));
+                  "buffer bytes=" + std::to_string(result.bytes_transferred) +
+                      " hdr_timeout_ms=" + std::to_string(header_timeout_ms) +
+                      " stream=" + std::string(stream_mode_ ? "1" : "0"));
     } else if (result.error_message != "Header read failed") {
         event_log(resolved_port_index(), "usb_recv_fail",
-                  "buffer err=" + result.error_message);
+                  "hdr_timeout_ms=" + std::to_string(header_timeout_ms) +
+                      " stream=" + std::string(stream_mode_ ? "1" : "0") +
+                      " err=" + result.error_message);
     }
     return result;
 }

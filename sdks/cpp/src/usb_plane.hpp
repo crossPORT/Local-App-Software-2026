@@ -82,6 +82,7 @@ private:
     void listen_loop();
     void pause_listen_for_usb();
     void resume_listen_for_usb();
+    std::string listen_state_string();
 
     int display_port_;
     int port_index_;

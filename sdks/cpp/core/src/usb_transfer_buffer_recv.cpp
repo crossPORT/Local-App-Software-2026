@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <string>
 
 namespace {
 
@@ -126,10 +127,18 @@ TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vecto
   out->resize(static_cast<size_t>(hdr.file_size));
   if (hdr.file_size > 0) {
     size_t got = 0;
+    const auto t0 = Clock::now();
     if (!usb_bulk_read(handle, out->data(), out->size(), static_cast<int>(pay_ms), &got)) {
+      const auto ms =
+          std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - t0).count();
       (void)drain_payload_remainder(handle, hdr.file_size - got, static_cast<int>(pay_ms));
       out->clear();
-      result.error_message = "Payload read failed";
+      const char* bulk = usb_last_bulk_status();
+      result.error_message =
+          "Payload read failed want=" + std::to_string(hdr.file_size) +
+          " got=" + std::to_string(got) + " timeout_ms=" + std::to_string(pay_ms) +
+          " elapsed_ms=" + std::to_string(ms) +
+          (bulk && bulk[0] ? std::string(" ") + bulk : "");
       return result;
     }
   }

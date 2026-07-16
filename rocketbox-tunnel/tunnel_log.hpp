@@ -7,3 +7,6 @@ std::string rocketbox_tunnel_log_path();
 
 /** stderr + append to log file. Never throws. */
 void rocketbox_tunnel_log(const std::string& line);
+
+/** Ensure SDK event_log lines also print to stderr (tunnel diagnostics). */
+void rocketbox_tunnel_enable_event_stderr();
