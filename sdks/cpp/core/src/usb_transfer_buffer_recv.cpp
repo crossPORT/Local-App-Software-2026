@@ -67,7 +67,8 @@ bool drain_payload_remainder(libusb_device_handle* handle, uint64_t left, int ti
 }  // namespace
 
 TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vector<uint8_t>* out,
-                                        unsigned header_timeout_ms, uint8_t expected_frame_kind) {
+                                        unsigned header_timeout_ms, uint8_t expected_frame_kind,
+                                        unsigned payload_timeout_ms_arg) {
   TransferResult result{};
   if (!handle || !out) {
     result.error_message = "null handle/out";
@@ -76,6 +77,8 @@ TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vecto
   out->clear();
   using Clock = std::chrono::steady_clock;
   const auto deadline = Clock::now() + std::chrono::milliseconds(header_timeout_ms);
+  const unsigned pay_ms =
+      payload_timeout_ms_arg != 0 ? payload_timeout_ms_arg : payload_timeout_ms();
 
   RocketBxHeader hdr{};
   for (;;) {
@@ -103,7 +106,7 @@ TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vecto
       if (hdr.file_size > usb_protocol::kMaxBufferPayloadBytes) {
         (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
       } else {
-        (void)drain_payload_remainder(handle, hdr.file_size, static_cast<int>(payload_timeout_ms()));
+        (void)drain_payload_remainder(handle, hdr.file_size, static_cast<int>(pay_ms));
       }
       result.error_message = "Unexpected frame kind in header";
       return result;
@@ -123,10 +126,8 @@ TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vecto
   out->resize(static_cast<size_t>(hdr.file_size));
   if (hdr.file_size > 0) {
     size_t got = 0;
-    if (!usb_bulk_read(handle, out->data(), out->size(), static_cast<int>(payload_timeout_ms()),
-                       &got)) {
-      (void)drain_payload_remainder(handle, hdr.file_size - got,
-                                    static_cast<int>(payload_timeout_ms()));
+    if (!usb_bulk_read(handle, out->data(), out->size(), static_cast<int>(pay_ms), &got)) {
+      (void)drain_payload_remainder(handle, hdr.file_size - got, static_cast<int>(pay_ms));
       out->clear();
       result.error_message = "Payload read failed";
       return result;

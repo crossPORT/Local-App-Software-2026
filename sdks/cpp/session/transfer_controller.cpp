@@ -302,7 +302,8 @@ TransferResult TransferController::send_buffer(int port_index, const uint8_t* da
                                   !stream_mode_);
     }
     event_log(resolved_port_index(), result.ok ? "usb_send_ok" : "usb_send_fail",
-              "buffer bytes=" + std::to_string(result.bytes_transferred) +
+              "buffer bytes=" +
+                  std::to_string(result.ok ? result.bytes_transferred : result.expected_bytes) +
                   (result.error_message.empty() ? "" : " err=" + result.error_message));
     return result;
 }
@@ -352,14 +353,17 @@ TransferResult TransferController::receive_buffer(int port_index, std::vector<ui
         return result;
     }
     TransferResult result;
+    const unsigned pay_ms =
+        stream_mode_ ? usb_protocol::kDatagramTimeoutMs : payload_timeout_ms();
     if (stream_mode_ && port_index == port_index_) {
         if (!stream_dev_) {
             return TransferResult{false, 0, 0, 0.0, 0.0, "stream not open"};
         }
-        result = receive_buffer_on_handle(stream_dev_, out, header_timeout_ms, expected_frame_kind);
+        result = receive_buffer_on_handle(stream_dev_, out, header_timeout_ms, expected_frame_kind,
+                                          pay_ms);
     } else {
         result = receive_buffer_core(usb_ctx_, out, port_index, header_timeout_ms,
-                                     expected_frame_kind, !stream_mode_);
+                                     expected_frame_kind, !stream_mode_, pay_ms);
     }
     if (result.ok) {
         event_log(resolved_port_index(), "usb_recv_ok",
@@ -401,7 +405,9 @@ TransferResult TransferController::exchange_buffer(int port_index, const uint8_t
                 out.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(len));
             }
         }
-        auto sent = rocketbox_sim_send_file(spath, port_index, nullptr, usb_protocol::kFileTimeoutMs);
+        const unsigned send_timeout =
+            stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
+        auto sent = rocketbox_sim_send_file(spath, port_index, nullptr, send_timeout);
         std::remove(spath.c_str());
         if (!sent.ok) {
             std::remove(rpath.c_str());
@@ -417,18 +423,19 @@ TransferResult TransferController::exchange_buffer(int port_index, const uint8_t
         return got;
     }
     std::string err;
+    const unsigned send_timeout =
+        stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
     if (stream_mode_ && port_index == port_index_) {
         if (!ensure_stream_device(&err)) {
             return TransferResult{false, 0, 0, 0.0, 0.0, err.empty() ? "stream open failed" : err};
         }
-        auto sent = send_buffer_on_handle(stream_dev_, data, len, usb_protocol::kFileTimeoutMs,
-                                          frame_kind, nullptr);
+        auto sent = send_buffer_on_handle(stream_dev_, data, len, send_timeout, frame_kind, nullptr);
         event_log(resolved_port_index(), sent.ok ? "usb_send_ok" : "usb_send_fail",
                   "exchange bytes=" + std::to_string(sent.bytes_transferred) +
                       (sent.error_message.empty() ? "" : " err=" + sent.error_message));
         if (!sent.ok) return sent;
         auto got = receive_buffer_on_handle(stream_dev_, reply, reply_timeout_ms,
-                                            usb_protocol::kFrameKindPayload);
+                                            usb_protocol::kFrameKindPayload, send_timeout);
         if (got.ok) {
             event_log(resolved_port_index(), "usb_recv_ok",
                       "exchange bytes=" + std::to_string(got.bytes_transferred));
@@ -438,11 +445,11 @@ TransferResult TransferController::exchange_buffer(int port_index, const uint8_t
         }
         return got;
     }
-    auto sent = send_buffer_core(usb_ctx_, data, len, port_index, usb_protocol::kFileTimeoutMs,
-                                 frame_kind, nullptr, true);
+    auto sent = send_buffer_core(usb_ctx_, data, len, port_index, send_timeout, frame_kind, nullptr,
+                                 true);
     if (!sent.ok) return sent;
     return receive_buffer_core(usb_ctx_, reply, port_index, reply_timeout_ms,
-                               usb_protocol::kFrameKindPayload, true);
+                               usb_protocol::kFrameKindPayload, true, send_timeout);
 }
 
 TransferResult TransferController::loopback_on_ports(const std::string& path,

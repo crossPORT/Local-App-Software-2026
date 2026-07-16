@@ -12,6 +12,7 @@ TransferResult send_buffer_on_handle(libusb_device_handle* handle, const uint8_t
 
 TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vector<uint8_t>* out,
                                         unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
-                                        uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload);
+                                        uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload,
+                                        unsigned payload_timeout_ms_arg = 0);
 
 TransferResult switch_port_on_handle(libusb_device_handle* handle, int dest_port);

@@ -19,9 +19,10 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     }
     // Pause listen around OUT only: WinUSB times out concurrent bulk IN+OUT
     // ("Header send failed"). EP4 stays aimed for the connection (HW contract).
+    const unsigned timeout =
+        stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
     ListenUsbPause pause(*this);
-    auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(),
-                                      usb_protocol::kFileTimeoutMs, frame_kind);
+    auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(), timeout, frame_kind);
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "send failed" : r.error_message);
     }
@@ -33,8 +34,9 @@ std::vector<uint8_t> UsbPlane::recv_raw_file(uint8_t expected_kind) {
         throw std::runtime_error("not connected");
     }
     std::vector<uint8_t> data;
-    auto r = controller_->receive_buffer(port_index(), &data, usb_protocol::kFileTimeoutMs,
-                                         expected_kind);
+    const unsigned timeout =
+        stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
+    auto r = controller_->receive_buffer(port_index(), &data, timeout, expected_kind);
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "receive failed" : r.error_message);
     }

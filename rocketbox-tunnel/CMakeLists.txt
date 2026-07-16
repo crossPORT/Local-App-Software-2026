@@ -55,12 +55,15 @@ endif()
 target_compile_features(rocketbox-tunnel PRIVATE cxx_std_17)
 
 set(_helper_server helper/server_posix.cpp)
+set(_helper_commands helper/commands_posix.cpp)
 if(WIN32)
   set(_helper_server helper/server_win.cpp)
+  set(_helper_commands helper/commands_win.cpp)
 endif()
 add_executable(rocketbox-tunnel-helper
   helper/main.cpp
   helper/commands.cpp
+  ${_helper_commands}
   helper/protocol.cpp
   ${_helper_server}
 )

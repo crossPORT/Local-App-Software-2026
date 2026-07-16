@@ -6,7 +6,17 @@
 
 #include "usb_transfer.h"
 
+#include <chrono>
 #include <iostream>
+#include <thread>
+
+namespace {
+
+/** After a failed OUT, wait before retry so the peer can finish payload
+ *  fail / clear_halt instead of eating the next frame as leftover payload. */
+constexpr int kDeliverRetryBackoffMs = 150;
+
+}  // namespace
 
 bool CircuitDialer::send_framed_batch(int dest_port, const std::vector<uint8_t>& batch_body,
                                       bool dial) {
@@ -31,15 +41,17 @@ bool CircuitDialer::send_framed_batch(int dest_port, const std::vector<uint8_t>&
       std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port
                 << " attempt=" << (attempt + 1) << ": " << e.what() << std::endl;
       if (attempt == 0 && dial) {
-        // EP4 off: clear is software-only and not needed to recover OUT.
         if (ep4_dynamic_switch_enabled()) {
           try {
             transport_.clear_circuit();
           } catch (...) {
           }
         }
-        std::lock_guard<std::mutex> lock(mu_);
-        active_peer_port_ = 0;
+        {
+          std::lock_guard<std::mutex> lock(mu_);
+          active_peer_port_ = 0;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(kDeliverRetryBackoffMs));
       } else if (!dial) {
         return false;
       }

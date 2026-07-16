@@ -152,24 +152,24 @@ bool TunnelProcess::start(const TunnelConfig& cfg, std::string& error) {
 
 void TunnelProcess::stop() {
   std::string reply, herr;
-  if (helper_managed_) {
-    (void)tunnel_helper::send_command("STOP", reply, herr);
-    helper_managed_ = false;
-  } else {
-    // Helper may have forgotten the child after a helper restart — still ask.
-    (void)tunnel_helper::send_command("STOP", reply, herr);
-  }
-  // Reap any live tunnel from stats (root-owned orphan after helper STATUS=stopped).
-  for (int p = 1; p <= 4; ++p) {
-    if (!live_tunnel_holds_port(p)) continue;
-    const long pids = read_tunnel_rates(p).pid;
-    if (pids <= 0) continue;
-    if (!helper_term(pids)) {
-      std::string err;
-      if (ensure_helper_elevated(err)) (void)helper_term(pids);
+  (void)tunnel_helper::send_command("STOP", reply, herr);
+  helper_managed_ = false;
+  // Reap any live tunnel from stats (root orphan, or STOP against a stale helper).
+  for (int round = 0; round < 3; ++round) {
+    bool any = false;
+    for (int p = 1; p <= 4; ++p) {
+      if (!live_tunnel_holds_port(p)) continue;
+      any = true;
+      const long orphan = read_tunnel_rates(p).pid;
+      if (orphan <= 0) continue;
+      if (!helper_term(orphan)) {
+        std::string err;
+        if (ensure_helper_elevated(err)) (void)helper_term(orphan);
+      }
     }
-    for (int i = 0; i < 50; ++i) {
-      if (!live_tunnel_holds_port(p)) break;
+    if (!any) break;
+    for (int i = 0; i < 20; ++i) {
+      if (live_tunnel_port() == 0) break;
       ::usleep(100000);
     }
   }
@@ -181,12 +181,13 @@ void TunnelProcess::stop() {
       else if (::kill(static_cast<pid_t>(p), SIGTERM) != 0 && errno == EPERM &&
                file_executable("/usr/bin/pkexec")) {
         const int rc =
-            ::system(("/usr/bin/pkexec kill " + std::to_string(p)).c_str());
+            ::system(("/usr/bin/pkexec kill -9 " + std::to_string(p)).c_str());
         (void)rc;
       }
     }
   }
   pid_ = 0;
+  clear_tunnel_stats(0);
 }
 
 }  // namespace tunnel_tray

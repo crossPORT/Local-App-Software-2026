@@ -75,7 +75,17 @@ bool TunnelTrayIcon::set_enabled(bool want_on) {
     rocketbox_tunnel_log("[tray] disable");
     stop_in_progress_ = true;
     proc_.stop();
+    const bool still_up = proc_.running();
     stop_in_progress_ = false;
+    if (still_up) {
+      rocketbox_tunnel_log("[tray] disable failed: tunnel still running");
+      wxMessageBox("Tunnel did not stop. Kill rocketbox-tunnel-helper and try again.",
+                   "RocketBox Tunnel", wxOK | wxICON_ERROR);
+      persist_settings(true);
+      refresh_icon();
+      if (panel_ && panel_->is_shown()) panel_->sync_from_host(controls_now(), true);
+      return false;
+    }
   }
   persist_settings(want_on);
   refresh_icon();

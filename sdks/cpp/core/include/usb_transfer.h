@@ -68,7 +68,8 @@ TransferResult send_buffer_core(libusb_context* ctx, const uint8_t* data, size_t
 TransferResult receive_buffer_core(libusb_context* ctx, std::vector<uint8_t>* out, int port_index,
                                    unsigned header_timeout_ms = usb_protocol::kFileTimeoutMs,
                                    uint8_t expected_frame_kind = usb_protocol::kFrameKindPayload,
-                                   bool reset_data_endpoints = true);
+                                   bool reset_data_endpoints = true,
+                                   unsigned payload_timeout_ms_arg = 0);
 
 struct RocketBoxUsbDevice {
     uint8_t bus = 0;
