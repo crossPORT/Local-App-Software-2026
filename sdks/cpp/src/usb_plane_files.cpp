@@ -29,6 +29,8 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
+    // Gate before pause: concurrent callers must not nest ListenUsbPause.
+    std::lock_guard<std::mutex> gate(send_mu_);
     // Stream/tunnel: 2s only. File path keeps 8s.
     const unsigned timeout =
         stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
@@ -81,6 +83,7 @@ bool UsbPlane::exchange_bytes(const std::vector<uint8_t>& request, std::vector<u
     if (!controller_ || !reply) {
         return false;
     }
+    std::lock_guard<std::mutex> gate(send_mu_);
     // Exclusive IN for the reply wait — always pause background listen.
     ListenUsbPause pause(*this);
     auto r = controller_->exchange_buffer(port_index(), request.data(), request.size(), reply,

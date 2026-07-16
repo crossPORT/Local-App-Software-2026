@@ -25,6 +25,7 @@ add_executable(rocketbox-tunnel
   ${_tun_src}
   ${_wintun_src}
   bridge.cpp
+  bridge_icmp.cpp
   fabric_source.cpp
   dialer.cpp
   dialer_send.cpp

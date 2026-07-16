@@ -37,32 +37,11 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
   dialer_.note_activity();
   down_bytes_.fetch_add(msg.size(), std::memory_order_relaxed);
 
-  // Same as 0.1.39: reply immediately on the listen path.
+  // Queue ICMP replies — never USB OUT on the listen thread (WinUSB nest/stall).
   if (rocketbox_icmp::is_echo_request(msg.data(), msg.size(), local_port_)) {
     auto reply = rocketbox_icmp::make_echo_reply(msg.data(), msg.size());
-    if (reply.empty()) return;
-    const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
-    if (dest == 0 || dest == local_port_) {
-      rocketbox_tunnel_log("icmp_reply_drop bad dest=" + std::to_string(dest));
-      return;
-    }
-    const auto t0 = std::chrono::steady_clock::now();
-    rocketbox_tunnel_log("icmp_reply_begin dest=" + std::to_string(dest) +
-                         " bytes=" + std::to_string(reply.size()));
-    const bool ok = dialer_.deliver(dest, reply);
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - t0)
-                        .count();
-    rocketbox_tunnel_log(std::string("icmp_reply_end dest=") + std::to_string(dest) +
-                         " ok=" + (ok ? "1" : "0") + " elapsed_ms=" + std::to_string(ms));
-    if (!ok) {
-      rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
-      return;
-    }
-    up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
-    if (!logged_icmp_reply_) {
-      rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
-      logged_icmp_reply_ = true;
+    if (!reply.empty()) {
+      queue_icmp_reply(std::move(reply));
     }
     return;
   }
@@ -120,12 +99,14 @@ void TunnelBridge::run() {
   bool logged_src_fix = false;
   try {
     while (!stop_) {
+      flush_icmp_replies();
       const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
       if (want > 0) (void)dialer_.ensure(want);
 
       const int wait_ms = batch_.empty() ? kIdleTunWaitMs : kBatchFlushMs;
       auto pkt = tun_.read_packet(wait_ms);
       if (pkt.empty()) {
+        flush_icmp_replies();
         if (!batch_.empty()) {
           flush_batch();
         }
@@ -164,6 +145,7 @@ void TunnelBridge::run() {
         last_idle_check = now;
       }
     }
+    flush_icmp_replies();
     flush_batch();
   } catch (const std::exception& e) {
     rocketbox_tunnel_log(std::string("bridge abort: ") + e.what());

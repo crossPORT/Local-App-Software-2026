@@ -26,6 +26,8 @@ public:
 
 private:
   void on_tunnel_message(const std::vector<uint8_t>& msg);
+  void queue_icmp_reply(std::vector<uint8_t> reply);
+  void flush_icmp_replies();
   void flush_batch();
   void queue_packet(int dest, std::vector<uint8_t> pkt);
 
@@ -33,6 +35,8 @@ private:
   CircuitDialer& dialer_;
   int local_port_;
   std::mutex write_mu_;
+  std::mutex icmp_mu_;
+  std::vector<std::vector<uint8_t>> icmp_pending_;
   std::atomic<bool> stop_{false};
   std::atomic<int> pending_peer_{0};
   std::atomic<uint64_t> up_bytes_{0};

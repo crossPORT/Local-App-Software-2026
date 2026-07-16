@@ -98,6 +98,8 @@ private:
     int pause_depth_ = 0;
     bool listen_in_recv_ = false;
     std::atomic<uint64_t> out_seq_{0};
+    /** Serialize pause+OUT so TUN never nests pause under an in-flight send. */
+    std::mutex send_mu_;
     std::thread listen_thread_;
 };
 
