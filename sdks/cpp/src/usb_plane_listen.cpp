@@ -129,29 +129,6 @@ void UsbPlane::resume_listen_for_usb() {
   ensure_listening();
 }
 
-void UsbPlane::wait_listen_in_armed(unsigned max_ms) {
-  if (!stream_mode_ || !listen_thread_.joinable() || max_ms == 0) {
-    return;
-  }
-  const auto t0 = std::chrono::steady_clock::now();
-  bool armed = false;
-  {
-    std::unique_lock<std::mutex> lock(pause_mu_);
-    pause_cv_.wait_for(lock, std::chrono::milliseconds(max_ms), [this] {
-      return listen_stop_.load(std::memory_order_acquire) ||
-             (pause_depth_ == 0 && listen_in_recv_);
-    });
-    armed = !listen_stop_.load(std::memory_order_acquire) && pause_depth_ == 0 &&
-            listen_in_recv_;
-  }
-  const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::steady_clock::now() - t0)
-                           .count();
-  event_log(resolved_port_index(), "listen_armed",
-            "wait_ms=" + std::to_string(wait_ms) + " armed=" + (armed ? "1" : "0") + " " +
-                listen_state_string());
-}
-
 void UsbPlane::run_exclusive(const std::function<void()>& fn) {
   ListenUsbPause pause(*this);
   fn();

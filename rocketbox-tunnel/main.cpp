@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
 
   try {
     rocketbox_tunnel_log(std::string("rocketbox-tunnel ") + ROCKETBOX_RELEASE_TAG_STR);
-    rocketbox_tunnel_log("diag: listen_hb+pause+armed+out state; stream_timeout_ms=2000");
+    rocketbox_tunnel_log("diag: listen_hb+pause+out; stream_timeout_ms=2000; linux_stream_no_pause");
     rocketbox_tunnel_log(std::string("connect transport ") + tunnel_transport_name(opt.transport) +
                          (opt.port ? " prefer Port " + std::to_string(opt.port) : " (auto Port)"));
     set_ep4_dynamic_switch_enabled(opt.ep4_dynamic_switch);

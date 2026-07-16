@@ -5,13 +5,22 @@
 
 #include <stdexcept>
 #include <string>
-#include <thread>
 
 namespace rocketbox {
 namespace detail {
 namespace {
 
 ProgressCallback adapt(FileProgressFn progress) { return progress; }
+
+/** WinUSB cannot concurrent bulk IN+OUT on one handle. libusb can; HW is full duplex. */
+bool pause_listen_for_out(bool stream) {
+#if defined(_WIN32)
+  (void)stream;
+  return true;
+#else
+  return !stream;
+#endif
+}
 
 }  // namespace
 
@@ -20,16 +29,16 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    // Stream/tunnel: 2s only. File path keeps 8s. Never use file timeout for stream.
+    // Stream/tunnel: 2s only. File path keeps 8s.
     const unsigned timeout =
         stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
+    const bool pause = pause_listen_for_out(stream_mode_);
     const uint64_t seq = out_seq_.fetch_add(1, std::memory_order_relaxed) + 1;
     event_log(resolved_port_index(), "usb_out_begin",
               "seq=" + std::to_string(seq) + " bytes=" + std::to_string(bytes.size()) +
-                  " timeout_ms=" + std::to_string(timeout) + " pause_listen=1 " +
-                  listen_state_string());
-    {
-        ListenUsbPause pause(*this);
+                  " timeout_ms=" + std::to_string(timeout) +
+                  " pause_listen=" + std::string(pause ? "1" : "0") + " " + listen_state_string());
+    auto send = [&] {
         auto r =
             controller_->send_buffer(port_index(), bytes.data(), bytes.size(), timeout, frame_kind);
         event_log(resolved_port_index(), r.ok ? "usb_out_end" : "usb_out_end_fail",
@@ -39,16 +48,12 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
         if (!r.ok) {
             throw std::runtime_error(r.error_message.empty() ? "send failed" : r.error_message);
         }
-    }
-    // Close post-OUT deaf window only when this thread is NOT the listen
-    // thread. ICMP replies run inside the listen callback — waiting there
-    // deadlocks arming (listen_armed armed=0 every time) and adds ~100ms.
-    if (stream_mode_ && listen_thread_.joinable() &&
-        std::this_thread::get_id() != listen_thread_.get_id()) {
-        wait_listen_in_armed(100);
-    } else if (stream_mode_) {
-        event_log(resolved_port_index(), "listen_armed_skip",
-                  "reason=on_listen_thread " + listen_state_string());
+    };
+    if (pause) {
+        ListenUsbPause hold(*this);
+        send();
+    } else {
+        send();
     }
     (void)filename;
 }
@@ -76,6 +81,7 @@ bool UsbPlane::exchange_bytes(const std::vector<uint8_t>& request, std::vector<u
     if (!controller_ || !reply) {
         return false;
     }
+    // Exclusive IN for the reply wait — always pause background listen.
     ListenUsbPause pause(*this);
     auto r = controller_->exchange_buffer(port_index(), request.data(), request.size(), reply,
                                           reply_timeout_ms, usb_protocol::kFrameKindPayload);

@@ -82,7 +82,6 @@ private:
     void listen_loop();
     void pause_listen_for_usb();
     void resume_listen_for_usb();
-    void wait_listen_in_armed(unsigned max_ms);
     std::string listen_state_string();
 
     int display_port_;
