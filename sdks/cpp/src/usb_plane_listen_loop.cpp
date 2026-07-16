@@ -35,6 +35,7 @@ void UsbPlane::listen_loop() {
         break;
       }
       listen_in_recv_ = true;
+      pause_cv_.notify_all();
     }
 
     if (!controller_ || !connected_) {

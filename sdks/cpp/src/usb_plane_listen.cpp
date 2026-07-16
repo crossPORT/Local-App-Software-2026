@@ -11,11 +11,25 @@ namespace rocketbox {
 namespace detail {
 
 std::string UsbPlane::listen_state_string() {
-  std::lock_guard<std::mutex> lock(pause_mu_);
-  return "pause_depth=" + std::to_string(pause_depth_) +
-         " in_recv=" + std::string(listen_in_recv_ ? "1" : "0") +
-         " listening=" + std::string(listen_thread_.joinable() ? "1" : "0") +
-         " stream=" + std::string(stream_mode_ ? "1" : "0");
+  int depth = 0;
+  bool in_recv = false;
+  bool listening = false;
+  {
+    std::lock_guard<std::mutex> lock(pause_mu_);
+    depth = pause_depth_;
+    in_recv = listen_in_recv_;
+    listening = listen_thread_.joinable();
+  }
+  std::string s = "pause_depth=" + std::to_string(depth) +
+                  " in_recv=" + std::string(in_recv ? "1" : "0") +
+                  " listening=" + std::string(listening ? "1" : "0") +
+                  " stream=" + std::string(stream_mode_ ? "1" : "0") +
+                  " out_seq=" + std::to_string(out_seq_.load(std::memory_order_relaxed));
+  if (controller_) {
+    s += " switch_dest=" + std::to_string(controller_->last_switch_dest());
+    s += " stream_open=" + std::string(controller_->stream_device_open() ? "1" : "0");
+  }
+  return s;
 }
 
 void UsbPlane::on_data_message(std::function<void(const std::vector<uint8_t>&)> cb) {
@@ -113,6 +127,29 @@ void UsbPlane::resume_listen_for_usb() {
   event_log(resolved_port_index(), "listen_resume",
             "depth=" + std::to_string(depth) + " " + listen_state_string());
   ensure_listening();
+}
+
+void UsbPlane::wait_listen_in_armed(unsigned max_ms) {
+  if (!stream_mode_ || !listen_thread_.joinable() || max_ms == 0) {
+    return;
+  }
+  const auto t0 = std::chrono::steady_clock::now();
+  bool armed = false;
+  {
+    std::unique_lock<std::mutex> lock(pause_mu_);
+    pause_cv_.wait_for(lock, std::chrono::milliseconds(max_ms), [this] {
+      return listen_stop_.load(std::memory_order_acquire) ||
+             (pause_depth_ == 0 && listen_in_recv_);
+    });
+    armed = !listen_stop_.load(std::memory_order_acquire) && pause_depth_ == 0 &&
+            listen_in_recv_;
+  }
+  const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now() - t0)
+                           .count();
+  event_log(resolved_port_index(), "listen_armed",
+            "wait_ms=" + std::to_string(wait_ms) + " armed=" + (armed ? "1" : "0") + " " +
+                listen_state_string());
 }
 
 void UsbPlane::run_exclusive(const std::function<void()>& fn) {

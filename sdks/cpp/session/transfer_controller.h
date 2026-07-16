@@ -102,6 +102,7 @@ public:
     /** Tunnel: skip clear_halt; keep one claimed handle for datagrams. */
     void set_stream_mode(bool enabled);
     bool warm_stream_device(std::string* err = nullptr);
+    bool stream_device_open() const { return stream_dev_ != nullptr; }
     int device_count() const;
     bool rocketbox_port_available() const;
     std::string device_label() const;

@@ -270,6 +270,11 @@ TransferResult TransferController::send_buffer(int port_index, const uint8_t* da
     }
     UsbTimedLock out_lock;
     if (!lock_usb_out(out_lock, kUsbLockWait)) {
+        event_log(resolved_port_index(), "usb_out_busy",
+                  "timeout_ms=" + std::to_string(timeout_ms) +
+                      " stream=" + std::string(stream_mode_ ? "1" : "0") +
+                      " stream_open=" + std::string(stream_dev_ ? "1" : "0") +
+                      " switch_dest=" + std::to_string(last_switch_dest_));
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     if (rocketbox_sim_enabled()) {
@@ -328,6 +333,11 @@ TransferResult TransferController::receive_buffer(int port_index, std::vector<ui
     }
     UsbTimedLock in_lock;
     if (!lock_usb_in(in_lock, kUsbLockWait)) {
+        event_log(resolved_port_index(), "usb_in_busy",
+                  "hdr_timeout_ms=" + std::to_string(header_timeout_ms) +
+                      " stream=" + std::string(stream_mode_ ? "1" : "0") +
+                      " stream_open=" + std::string(stream_dev_ ? "1" : "0") +
+                      " switch_dest=" + std::to_string(last_switch_dest_));
         return TransferResult{false, 0, 0, 0.0, 0.0, "USB port busy"};
     }
     if (rocketbox_sim_enabled()) {

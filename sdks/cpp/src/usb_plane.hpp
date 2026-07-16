@@ -82,6 +82,7 @@ private:
     void listen_loop();
     void pause_listen_for_usb();
     void resume_listen_for_usb();
+    void wait_listen_in_armed(unsigned max_ms);
     std::string listen_state_string();
 
     int display_port_;
@@ -97,6 +98,7 @@ private:
     std::condition_variable pause_cv_;
     int pause_depth_ = 0;
     bool listen_in_recv_ = false;
+    std::atomic<uint64_t> out_seq_{0};
     std::thread listen_thread_;
 };
 
