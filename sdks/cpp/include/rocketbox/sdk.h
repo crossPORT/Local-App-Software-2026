@@ -97,6 +97,8 @@ public:
                                               FileProgressFn progress);
     /** Tunnel streaming: skip clear_halt on each USB open (default: App clears). */
     virtual void set_stream_mode(bool) {}
+    /** Soft-recover USB data path after a stall (reopen stream). Default: no-op. */
+    virtual bool recover_data_path() { return false; }
     /**
      * Run fn without interleaved background USB IN (USB pauses listen; sim is a no-op).
      * Use to batch switch+send under one exclusion window — no artificial sleeps.
