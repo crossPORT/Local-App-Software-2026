@@ -2,6 +2,7 @@
 
 #include "usb_protocol.h"
 
+#include <optional>
 #include <stdexcept>
 
 namespace rocketbox {
@@ -10,6 +11,23 @@ namespace {
 
 ProgressCallback adapt(FileProgressFn progress) { return progress; }
 
+/** When to pause background USB IN around an OUT.
+ *  Fabric has no buffer: a peer OUT only completes if someone is reading.
+ *  If every peer pauses listen for every OUT, overlapping sends deadlock until
+ *  datagram timeout (any topology: Linux↔Linux, Win↔Win, mixed).
+ *  WinUSB cannot concurrent bulk IN+OUT on one handle — must pause there.
+ *  Elsewhere in stream mode, keep listening during OUT so at least this peer
+ *  can drain the other side. */
+std::optional<ListenUsbPause> pause_listen_for_out(UsbPlane& plane, bool stream) {
+#if defined(_WIN32)
+  (void)stream;
+  return std::optional<ListenUsbPause>(std::in_place, plane);
+#else
+  if (stream) return std::nullopt;
+  return std::optional<ListenUsbPause>(std::in_place, plane);
+#endif
+}
+
 }  // namespace
 
 void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_kind,
@@ -17,16 +35,15 @@ void UsbPlane::send_raw_file(const std::vector<uint8_t>& bytes, uint8_t frame_ki
     if (!controller_) {
         throw std::runtime_error("not connected");
     }
-    // Pause listen around OUT only: WinUSB times out concurrent bulk IN+OUT
-    // ("Header send failed"). EP4 stays aimed for the connection (HW contract).
+    auto pause = pause_listen_for_out(*this, stream_mode_);
     const unsigned timeout =
         stream_mode_ ? usb_protocol::kDatagramTimeoutMs : usb_protocol::kFileTimeoutMs;
-    ListenUsbPause pause(*this);
     auto r = controller_->send_buffer(port_index(), bytes.data(), bytes.size(), timeout, frame_kind);
     if (!r.ok) {
         throw std::runtime_error(r.error_message.empty() ? "send failed" : r.error_message);
     }
     (void)filename;
+    (void)pause;
 }
 
 std::vector<uint8_t> UsbPlane::recv_raw_file(uint8_t expected_kind) {
@@ -52,9 +69,10 @@ bool UsbPlane::exchange_bytes(const std::vector<uint8_t>& request, std::vector<u
     if (!controller_ || !reply) {
         return false;
     }
-    ListenUsbPause pause(*this);
+    auto pause = pause_listen_for_out(*this, stream_mode_);
     auto r = controller_->exchange_buffer(port_index(), request.data(), request.size(), reply,
                                           reply_timeout_ms, usb_protocol::kFrameKindPayload);
+    (void)pause;
     return r.ok;
 }
 

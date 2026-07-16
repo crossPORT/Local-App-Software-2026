@@ -47,7 +47,7 @@ constexpr int kPortCount = 4;
 // fast via transfer status. Override per-deployment via config
 // (transfer_timeout_ms) → set_payload_timeout_ms().
 constexpr unsigned kFileTimeoutMs = 8000;
-/** Tunnel datagram OUT/IN stall (stream mode). Keep short — listen is paused for OUT. */
+/** Tunnel/stream datagram stall. Small frames — fail fast; do not use file-chunk 8s. */
 constexpr unsigned kDatagramTimeoutMs = 2000;
 constexpr unsigned kSessionFileTimeoutMs = 8000;
 constexpr unsigned kSessionHeaderTimeoutMs = 2000;
