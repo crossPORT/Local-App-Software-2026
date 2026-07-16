@@ -2,25 +2,12 @@
 #include "usb_transfer_handle.h"
 #include "usb_device_open.h"
 #include "usb_buffer_bulk.h"
-#include "usb_diag.h"
 #include "usb_frame.h"
 #include "usb_protocol.h"
 
 #include <libusb-1.0/libusb.h>
 
 #include <chrono>
-#include <cstring>
-#include <vector>
-
-namespace {
-
-void clear_data_halts(libusb_device_handle* handle) {
-  if (!handle) return;
-  (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataOut);
-  (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
-}
-
-}  // namespace
 
 TransferResult send_buffer_on_handle(libusb_device_handle* handle, const uint8_t* data, size_t len,
                                      unsigned timeout_ms, uint8_t frame_kind, const char* filename) {
@@ -36,17 +23,14 @@ TransferResult send_buffer_on_handle(libusb_device_handle* handle, const uint8_t
   }
   RocketBxHeader hdr{};
   fill_rocketbx_header(&hdr, len, frame_kind, filename);
-  // One bulk OUT for header+payload — avoid peer stuck after header-only success.
-  std::vector<uint8_t> wire(sizeof(hdr) + len);
-  std::memcpy(wire.data(), &hdr, sizeof(hdr));
-  if (len > 0) {
-    std::memcpy(wire.data() + sizeof(hdr), data, len);
-  }
   const auto t0 = std::chrono::steady_clock::now();
-  if (!usb_bulk_write(handle, wire.data(), wire.size(), static_cast<int>(timeout_ms))) {
-    USB_DIAG("[USB-DIAG] send fail; clear_halt OUT/IN\n");
-    clear_data_halts(handle);
-    result.error_message = len > 0 ? "Payload send failed" : "Header send failed";
+  if (!usb_bulk_write(handle, reinterpret_cast<const uint8_t*>(&hdr), sizeof(hdr),
+                      static_cast<int>(timeout_ms))) {
+    result.error_message = "Header send failed";
+    return result;
+  }
+  if (len > 0 && !usb_bulk_write(handle, data, len, static_cast<int>(timeout_ms))) {
+    result.error_message = "Payload send failed";
     return result;
   }
   const double sec =

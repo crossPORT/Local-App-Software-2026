@@ -70,7 +70,6 @@ public:
     FileTransferResult loopback_files(const std::string& path, int send_port, int recv_port,
                                       FileProgressFn progress) override;
     void set_stream_mode(bool enabled) override;
-    bool recover_data_path() override;
 
 private:
     friend class ListenUsbPause;

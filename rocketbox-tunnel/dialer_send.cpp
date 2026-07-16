@@ -31,11 +31,7 @@ bool CircuitDialer::send_framed_batch(int dest_port, const std::vector<uint8_t>&
       std::cerr << "[rocketbox-tunnel] deliver failed dest=" << dest_port
                 << " attempt=" << (attempt + 1) << ": " << e.what() << std::endl;
       if (attempt == 0 && dial) {
-        // Soft-recover USB stream so the next attempt (and later traffic) can live again.
-        try {
-          (void)transport_.recover_data_path();
-        } catch (...) {
-        }
+        // EP4 off: clear is software-only and not needed to recover OUT.
         if (ep4_dynamic_switch_enabled()) {
           try {
             transport_.clear_circuit();

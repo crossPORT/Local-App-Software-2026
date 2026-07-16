@@ -47,14 +47,16 @@ constexpr int kPortCount = 4;
 // fast via transfer status. Override per-deployment via config
 // (transfer_timeout_ms) → set_payload_timeout_ms().
 constexpr unsigned kFileTimeoutMs = 8000;
-/** Tunnel datagram OUT/IN stall (stream mode). Keep short — listen is paused for OUT. */
-constexpr unsigned kDatagramTimeoutMs = 2000;
 constexpr unsigned kSessionFileTimeoutMs = 8000;
 constexpr unsigned kSessionHeaderTimeoutMs = 2000;
 // Wait for the payload header after sending "ready". Bounded so a cable pulled
 // between the handshake and the payload fails fast instead of hanging ~2 min.
 constexpr unsigned kPayloadHeaderTimeoutMs = 15000;
 constexpr unsigned kHandshakeTimeoutSec = 15;
+
+// Hard cap for in-memory ROCKETBX buffer payloads (tunnel batches, session
+// blobs). Reject without draining — an absurd size would hang discard forever.
+constexpr uint64_t kMaxBufferPayloadBytes = 64ull * 1024 * 1024;
 
 // How long the sender waits for the receiver to ACCEPT an offer. This is a human
 // decision in ask-first mode, so it must be generous. The sender shows a live

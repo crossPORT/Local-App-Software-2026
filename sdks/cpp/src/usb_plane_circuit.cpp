@@ -3,7 +3,6 @@
 #include "usb_transfer.h"
 
 #include <chrono>
-#include <iostream>
 #include <stdexcept>
 #include <thread>
 
@@ -91,20 +90,6 @@ void UsbPlane::set_stream_mode(bool enabled) {
     if (controller_) {
         controller_->set_stream_mode(enabled);
     }
-}
-
-bool UsbPlane::recover_data_path() {
-    if (!controller_ || !stream_mode_) {
-        return false;
-    }
-    ListenUsbPause pause(*this);
-    std::string err;
-    const bool ok = controller_->recover_stream_device(&err);
-    if (!ok) {
-        std::cerr << "[rocketbox] stream recover failed: "
-                  << (err.empty() ? "unknown" : err) << std::endl;
-    }
-    return ok;
 }
 
 }  // namespace detail

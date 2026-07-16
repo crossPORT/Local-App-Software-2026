@@ -41,20 +41,44 @@ void TunnelBridge::on_tunnel_message(const std::vector<uint8_t>& msg) {
     auto reply = rocketbox_icmp::make_echo_reply(msg.data(), msg.size());
     if (reply.empty()) return;
     const int dest = rocketbox_lan::dest_port_from_ip_packet(reply.data(), reply.size());
-    if (dest == 0 || dest == local_port_ || !dialer_.deliver(dest, reply)) {
-      rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
+    if (dest == 0 || dest == local_port_) {
+      rocketbox_tunnel_log("drop ICMP reply: bad dest=" + std::to_string(dest));
       return;
     }
-    up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
-    if (!logged_icmp_reply_) {
-      rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
-      logged_icmp_reply_ = true;
+    // Queue for bridge thread — never USB OUT from the listen callback.
+    {
+      std::lock_guard<std::mutex> lock(icmp_mu_);
+      pending_icmp_ = std::move(reply);
+      pending_icmp_dest_ = dest;
+      icmp_ready_.store(true, std::memory_order_release);
     }
     return;
   }
 
   std::lock_guard<std::mutex> lock(write_mu_);
   tun_.write_packet(msg.data(), msg.size());
+}
+
+void TunnelBridge::flush_icmp() {
+  std::vector<uint8_t> reply;
+  int dest = 0;
+  {
+    std::lock_guard<std::mutex> lock(icmp_mu_);
+    if (pending_icmp_.empty()) return;
+    reply = std::move(pending_icmp_);
+    dest = pending_icmp_dest_;
+    pending_icmp_dest_ = 0;
+    icmp_ready_.store(false, std::memory_order_release);
+  }
+  if (!dialer_.deliver(dest, reply)) {
+    rocketbox_tunnel_log("drop ICMP reply: deliver failed dest=" + std::to_string(dest));
+    return;
+  }
+  up_bytes_.fetch_add(reply.size(), std::memory_order_relaxed);
+  if (!logged_icmp_reply_) {
+    rocketbox_tunnel_log("ICMP echo reply (userspace) to 10.64.0." + std::to_string(dest));
+    logged_icmp_reply_ = true;
+  }
 }
 
 void TunnelBridge::flush_batch() {
@@ -107,10 +131,15 @@ void TunnelBridge::run() {
   bool logged_src_fix = false;
   try {
     while (!stop_) {
+      if (icmp_ready_.load(std::memory_order_acquire)) {
+        flush_icmp();
+      }
       const int want = pending_peer_.exchange(0, std::memory_order_relaxed);
       if (want > 0) (void)dialer_.ensure(want);
 
-      const int wait_ms = batch_.empty() ? kIdleTunWaitMs : kBatchFlushMs;
+      const int wait_ms =
+          !batch_.empty() ? kBatchFlushMs
+                          : (icmp_ready_.load(std::memory_order_acquire) ? 0 : kIdleTunWaitMs);
       auto pkt = tun_.read_packet(wait_ms);
       if (pkt.empty()) {
         if (!batch_.empty()) {
@@ -136,6 +165,10 @@ void TunnelBridge::run() {
         }
         pkt = tun_.read_packet(0);
         if (pkt.empty()) break;
+      }
+
+      if (icmp_ready_.load(std::memory_order_acquire)) {
+        flush_icmp();
       }
 
       if (!batch_.empty()) {

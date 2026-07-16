@@ -6,10 +6,9 @@
 
 /** Shared tunnel TUN / coalesce constants. */
 constexpr std::size_t kTunMtu = 16384;
-/** Flush coalesced USB frames sooner — large OUTs + WinUSB listen-pause stall easily. */
-constexpr std::size_t kBatchFlushBytes = 16 * 1024;
+constexpr std::size_t kBatchFlushBytes = 64 * 1024;
 constexpr int kBatchFlushMs = 2;
-constexpr std::size_t kBatchMaxBytes = 256 * 1024;
+constexpr std::size_t kBatchMaxBytes = 1024 * 1024;
 
 void pkt_write_u32_be(uint8_t* buf, uint32_t val);
 uint32_t pkt_read_u32_be(const uint8_t* buf);

@@ -102,8 +102,6 @@ public:
     /** Tunnel: skip clear_halt; keep one claimed handle for datagrams. */
     void set_stream_mode(bool enabled);
     bool warm_stream_device(std::string* err = nullptr);
-    /** Close/reopen stream with clear_halt — soft recover after OUT/IN stall. */
-    bool recover_stream_device(std::string* err = nullptr);
     int device_count() const;
     bool rocketbox_port_available() const;
     std::string device_label() const;

@@ -160,26 +160,6 @@ bool TransferController::warm_stream_device(std::string* err) {
     return ensure_stream_device(err);
 }
 
-bool TransferController::recover_stream_device(std::string* err) {
-    if (!stream_mode_ || !usb_ctx_) {
-        if (err) *err = "stream mode off";
-        return false;
-    }
-    UsbTimedLock in_lock;
-    UsbTimedLock out_lock;
-    if (!lock_usb_both(in_lock, out_lock, kUsbLockWait)) {
-        if (err) *err = "USB port busy";
-        return false;
-    }
-    release_stream_device();
-    // Reopen with endpoint clear_halt so a wedged WinUSB pipe can carry traffic again.
-    stream_dev_ = open_device_by_index(usb_ctx_, port_index_, err, 5, true);
-    const bool ok = stream_dev_ != nullptr;
-    event_log(resolved_port_index(), ok ? "stream_recover_ok" : "stream_recover_fail",
-              ok ? "reopened" : (err && !err->empty() ? *err : "open failed"));
-    return ok;
-}
-
 bool TransferController::should_emit_ui() const {
     return !shutting_down_.load(std::memory_order_acquire);
 }

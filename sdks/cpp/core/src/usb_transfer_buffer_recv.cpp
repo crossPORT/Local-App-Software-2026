@@ -85,6 +85,12 @@ TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vecto
     }
     if (expected_frame_kind == usb_protocol::kFrameKindPayload &&
         hdr.frame_kind == usb_protocol::kFrameKindSession) {
+      if (hdr.file_size > usb_protocol::kMaxBufferPayloadBytes) {
+        USB_DIAG("[USB-DIAG] buffer_recv absurd session size=%llu; clear_halt\n",
+                 static_cast<unsigned long long>(hdr.file_size));
+        (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
+        continue;
+      }
       const int r2 = static_cast<int>(
           std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count());
       if (!drain_payload_remainder(handle, hdr.file_size, std::max(r2, 1))) {
@@ -94,11 +100,23 @@ TransferResult receive_buffer_on_handle(libusb_device_handle* handle, std::vecto
       continue;
     }
     if (expected_frame_kind != 0 && hdr.frame_kind != expected_frame_kind) {
-      (void)drain_payload_remainder(handle, hdr.file_size, static_cast<int>(payload_timeout_ms()));
+      if (hdr.file_size > usb_protocol::kMaxBufferPayloadBytes) {
+        (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
+      } else {
+        (void)drain_payload_remainder(handle, hdr.file_size, static_cast<int>(payload_timeout_ms()));
+      }
       result.error_message = "Unexpected frame kind in header";
       return result;
     }
     break;
+  }
+
+  if (hdr.file_size > usb_protocol::kMaxBufferPayloadBytes) {
+    USB_DIAG("[USB-DIAG] buffer_recv absurd size=%llu; clear_halt\n",
+             static_cast<unsigned long long>(hdr.file_size));
+    (void)libusb_clear_halt(handle, usb_protocol::kEndpointDataIn);
+    result.error_message = "Payload size exceeds limit";
+    return result;
   }
 
   result.expected_bytes = hdr.file_size;
