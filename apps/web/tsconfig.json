@@ -11,12 +11,16 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@rocketbox/sdk": ["../../sdks/typescript/src/index.ts"]
+    }
   },
-  "include": ["src", "sim"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src", "sim", "../../sdks/typescript/src"],
+  "exclude": ["src/**/*.test.ts", "../../sdks/typescript/src/**/*.test.ts"]
 }

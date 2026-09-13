@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from './fabric_port';
+import { displayPortFromLeg, setSdkLogLevel, setSdkLogSink } from '@rocketbox/sdk';
 
 export type BoothLogLevel = 'off' | 'normal' | 'verbose';
 
@@ -44,6 +44,10 @@ function initLevel(): BoothLogLevel {
 }
 
 level = initLevel();
+setSdkLogLevel(level);
+setSdkLogSink((port, event, detail = '') => {
+  boothLog(port, event, detail);
+});
 
 export function getBoothLogLevel(): BoothLogLevel {
   return level;
@@ -51,6 +55,7 @@ export function getBoothLogLevel(): BoothLogLevel {
 
 export function setBoothLogLevel(next: BoothLogLevel): void {
   level = next;
+  setSdkLogLevel(next);
   if (typeof localStorage !== 'undefined') {
     if (next === 'off') {
       localStorage.removeItem(STORAGE_KEY);

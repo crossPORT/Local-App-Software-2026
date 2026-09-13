@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -209,5 +210,10 @@ export default defineConfig({
   preview: {
     port: 8080,
     host: true,
+  },
+  resolve: {
+    alias: {
+      '@rocketbox/sdk': resolve(__dirname, '../../sdks/typescript/src/index.ts'),
+    },
   },
 });
