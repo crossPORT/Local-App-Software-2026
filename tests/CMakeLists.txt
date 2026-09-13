@@ -49,7 +49,7 @@ add_executable(integration-tests
 target_include_directories(integration-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(integration-tests PRIVATE
     FABRIC_TEST_FIXTURE_DIR="${FABRIC_TEST_FIXTURE_DIR}")
-target_link_libraries(integration-tests PRIVATE rocketbox_session)
+target_link_libraries(integration-tests PRIVATE rocketbox_sdk)
 target_compile_features(integration-tests PRIVATE cxx_std_17)
 
 add_test(NAME integration-tests COMMAND integration-tests)

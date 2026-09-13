@@ -40,7 +40,7 @@ target_include_directories(rocketbox PRIVATE
 )
 
 target_link_libraries(rocketbox PRIVATE
-    rocketbox_session
+    rocketbox_sdk
     ${wxWidgets_LIBRARIES}
 )
 

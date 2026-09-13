@@ -14,11 +14,14 @@
 #include "session_listener.h"
 #include "usb_protocol.h"
 
+#include "rocketbox/sdk.h"
+
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 namespace {
@@ -116,14 +119,19 @@ void load_shared_booth_path(int& send_port, int& recv_port) {
 
 }  // namespace
 
-TransferOrchestrator::TransferOrchestrator(int port_index,
-                                           IdentityProfile identity,
-                                           UiCallback on_ui_update)
-    : port_index_(port_index)
+TransferOrchestrator::TransferOrchestrator(
+    std::shared_ptr<rocketbox::RocketBoxTransport> transport,
+    IdentityProfile identity,
+    UiCallback on_ui_update)
+    : transport_(std::move(transport))
+    , port_index_(transport_ ? transport_->port_index() : 0)
     , identity_(std::move(identity))
     , handshake_(handshake_timing_from_identity(identity_))
     , on_ui_update_(std::move(on_ui_update))
     , instance_id_(make_instance_id()) {
+    if (!transport_) {
+        throw std::runtime_error("TransferOrchestrator requires RocketBoxTransport");
+    }
     state_.identity = identity_;
     state_.booth_display_mib_s = identity_.booth_display_mib_s;
     if (identity_.transfer_timeout_ms > 0) {
@@ -143,12 +151,8 @@ TransferOrchestrator::TransferOrchestrator(int port_index,
     roster_.seed_from_config(identity_.peers);
     state_.roster = roster_.peers();
 
-    controller_ = std::make_unique<TransferController>(port_index_, nullptr);
-
-    // Announces run from tick_presence(), not before each USB read — the fabric
-    // does not buffer session messages; blocking on OUT for announce drops offers.
     listener_ = std::make_unique<SessionListener>(
-        controller_.get(),
+        transport_.get(),
         port_index_,
         [this](const FabricSessionMessage& message) { on_session_message(message); });
     listener_->set_session_header_timeout_ms(handshake_.session_header_timeout_ms);
@@ -211,9 +215,9 @@ void TransferOrchestrator::ensure_listener_started() {
     }
     listener_->start();
     listener_started_ = true;
-    if (controller_) {
-        const int leg = controller_->fabric_leg();
-        const std::string serial = controller_->fabric_device_serial();
+    if (transport_) {
+        const int leg = transport_->resolved_port_index();
+        const std::string serial = transport_->serial();
         booth_log(leg, "cable_serial", serial.empty() ? "(none)" : serial);
         booth_log(leg,
                   "listener_started",
@@ -230,8 +234,8 @@ void TransferOrchestrator::ensure_listener_started() {
 void TransferOrchestrator::stop() {
     shutting_down_.store(true, std::memory_order_release);
     invalidate_dismiss();
-    if (controller_) {
-        controller_->request_shutdown();
+    if (transport_) {
+        transport_->request_shutdown();
     }
     if (listener_) {
         listener_->stop();
@@ -387,7 +391,7 @@ bool TransferOrchestrator::send_session_with_routing(const FabricSessionMessage&
                                                      bool reverse_path,
                                                      std::string* error_out) {
     (void)reverse_path;
-    const bool ok = send_session_message(*controller_, port_index_, message, error_out);
+    const bool ok = send_session_message(*transport_, port_index_, message, error_out);
     booth_log(port_index_,
               ok ? "session_send_ok" : "session_send_fail",
               session_kind_to_string(message.kind)
@@ -626,8 +630,8 @@ void TransferOrchestrator::tick_presence() {
 
     // Throttle USB enumeration (~1s); read-only, no interface claim.
     if (last_probe_ms_ == 0 || now - last_probe_ms_ >= 900) {
-        cached_devices_ = controller_->fabric_device_count();
-        cached_port_ok_ = controller_->fabric_port_available();
+        cached_devices_ = transport_->device_count();
+        cached_port_ok_ = transport_->port_available();
         last_probe_ms_ = now;
     }
     const int devices_seen = cached_devices_;
@@ -669,11 +673,11 @@ void TransferOrchestrator::tick_presence() {
         state_.fabric_connected = fabric_connected;
         state_.fabric_devices_seen = devices_seen;
         state_.fabric_port_open = port_ok;
-        state_.fabric_port_index = controller_ ? controller_->fabric_leg() : port_index_;
+        state_.fabric_port_index = transport_ ? transport_->resolved_port_index() : port_index_;
         if (!fabric_connected) {
             state_.fabric_device_label.clear();
         } else {
-            const std::string label = controller_->fabric_device_label();
+            const std::string label = transport_->describe_device();
             if (!label.empty()) {
                 state_.fabric_device_label = label;
             }
@@ -690,7 +694,7 @@ void TransferOrchestrator::handle_announce(const FabricSessionMessage& message) 
         return;
     }
 
-    const int my_leg = controller_ ? controller_->fabric_leg() : port_index_;
+    const int my_leg = transport_ ? transport_->resolved_port_index() : port_index_;
     int announced_port = default_remote_guess_leg(my_leg);
     ReceiveStatus peer_status = ReceiveStatus::AskFirst;
     std::string instance_id;
@@ -776,7 +780,7 @@ void TransferOrchestrator::maybe_send_announce(int64_t now_ms) {
     message.from_name = identity_.display_name;
     message.team = identity_.team;
     message.session_id = make_session_id();
-    const int my_leg = controller_ ? controller_->fabric_leg() : port_index_;
+    const int my_leg = transport_ ? transport_->resolved_port_index() : port_index_;
     message.note = build_announce_note(my_leg, identity_.receive_status, instance_id_);
 
     std::string error;
@@ -1036,8 +1040,8 @@ void TransferOrchestrator::start_outbound_payload() {
     payload_thread_ = std::thread([this, staged]() {
         ListenerPauseGuard listener_guard(listener_.get());
         TransferResult result =
-            controller_->send_on_port(port_index_, staged.path, make_progress_callback(),
-                                      payload_timeout_ms());
+            transport_->send_file_on_port(port_index_, staged.path, make_progress_callback(),
+                                          payload_timeout_ms(), usb_protocol::kFrameKindPayload);
 
         if (staged.is_temp) {
             std::remove(staged.path.c_str());
@@ -1086,8 +1090,9 @@ void TransferOrchestrator::run_inbound_payload(const FabricSessionMessage& offer
     }
     publish_state();
 
-    TransferResult result = controller_->receive_on_port(
-        port_index_, out_path, make_progress_callback(), handshake_.payload_header_timeout_ms);
+    TransferResult result = transport_->receive_file_on_port(
+        port_index_, out_path, make_progress_callback(), handshake_.payload_header_timeout_ms,
+        usb_protocol::kFrameKindPayload);
 
     if (!result.ok) {
         const FailedInboundReceive failed = handle_failed_inbound_receive(result, out_path);
@@ -1407,7 +1412,7 @@ void TransferOrchestrator::run_loopback_test(const std::string& path) {
         }
         listener_->pause();
         TransferResult result =
-            controller_->loopback_on_ports(path, 0, 1, make_progress_callback());
+            transport_->loopback_files(path, 0, 1, make_progress_callback());
         listener_->resume();
         finish_transfer(result.ok,
                         result.ok ? "Loopback verified" : "Loopback failed",

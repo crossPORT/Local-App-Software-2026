@@ -11,11 +11,11 @@ target_link_libraries(usb-pair-test PRIVATE fabric_usb_core)
 target_compile_features(usb-pair-test PRIVATE cxx_std_17)
 
 add_executable(fabric-session-test fabric_session_test.cpp)
-target_link_libraries(fabric-session-test PRIVATE rocketbox_session)
+target_link_libraries(fabric-session-test PRIVATE rocketbox_sdk)
 target_compile_features(fabric-session-test PRIVATE cxx_std_17)
 
 add_executable(booth-cli booth_cli.cpp)
-target_link_libraries(booth-cli PRIVATE rocketbox_session)
+target_link_libraries(booth-cli PRIVATE rocketbox_sdk)
 target_compile_features(booth-cli PRIVATE cxx_std_17)
 
 add_executable(send-repro send_repro.cpp)

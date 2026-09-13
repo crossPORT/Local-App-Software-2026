@@ -4,7 +4,8 @@
 #include "identity_profile.h"
 #include "peer_roster.h"
 #include "session_handshake.h"
-#include "transfer_controller.h"
+
+#include "rocketbox/sdk.h"
 
 #include <atomic>
 #include <functional>
@@ -51,7 +52,7 @@ class TransferOrchestrator {
 public:
     using UiCallback = std::function<void(const OrchestratorUiState&)>;
 
-    TransferOrchestrator(int port_index,
+    TransferOrchestrator(std::shared_ptr<rocketbox::RocketBoxTransport> transport,
                          IdentityProfile identity,
                          UiCallback on_ui_update);
     ~TransferOrchestrator();
@@ -129,13 +130,13 @@ private:
                      StagedPayload& out,
                      std::string* error_out);
 
+    std::shared_ptr<rocketbox::RocketBoxTransport> transport_;
     int port_index_ = 0;
     IdentityProfile identity_;
     HandshakeTiming handshake_;
     PeerRoster roster_;
     UiCallback on_ui_update_;
 
-    std::unique_ptr<TransferController> controller_;
     std::unique_ptr<class SessionListener> listener_;
 
     mutable std::mutex state_mutex_;

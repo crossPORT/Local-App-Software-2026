@@ -22,6 +22,7 @@ add_library(rocketbox_session STATIC
 
 target_include_directories(rocketbox_session PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/sdks/cpp/include
 )
 
 target_link_libraries(rocketbox_session PUBLIC

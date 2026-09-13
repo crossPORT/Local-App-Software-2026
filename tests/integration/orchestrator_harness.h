@@ -2,6 +2,7 @@
 
 #include "fabric_sim.h"
 #include "identity_profile.h"
+#include "rocketbox/sdk.h"
 #include "transfer_orchestrator.h"
 
 #include <chrono>
@@ -72,7 +73,7 @@ class TrackedOrchestrator {
 public:
     TrackedOrchestrator(int port_index, IdentityProfile identity)
         : orchestrator_(std::make_unique<TransferOrchestrator>(
-              port_index,
+              rocketbox::make_usb_transport(port_index),
               std::move(identity),
               [this](const OrchestratorUiState& state) {
                   std::lock_guard<std::mutex> lock(mutex_);

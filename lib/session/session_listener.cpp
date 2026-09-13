@@ -32,12 +32,12 @@ std::string make_session_id() {
     return out.str();
 }
 
-bool send_session_message(TransferController& controller,
+bool send_session_message(rocketbox::RocketBoxTransport& transport,
                           int sender_port_index,
                           const FabricSessionMessage& message,
                           std::string* error_out,
                           unsigned timeout_ms) {
-    if (controller.is_shutting_down()) {
+    if (transport.is_shutting_down()) {
         if (error_out) {
             *error_out = "Shutting down";
         }
@@ -52,9 +52,9 @@ bool send_session_message(TransferController& controller,
     }
 
     const unsigned effective_timeout = timeout_ms > 0 ? timeout_ms : kSessionSendTimeoutMs;
-    TransferResult send =
-        controller.send_on_port(sender_port_index, session_path, nullptr,
-                              effective_timeout, usb_protocol::kFrameKindSession);
+    TransferResult send = transport.send_file_on_port(
+        sender_port_index, session_path, nullptr, effective_timeout,
+        usb_protocol::kFrameKindSession);
     std::remove(session_path.c_str());
     if (!send.ok) {
         if (error_out) {
@@ -66,11 +66,11 @@ bool send_session_message(TransferController& controller,
     return true;
 }
 
-SessionListener::SessionListener(TransferController* controller,
+SessionListener::SessionListener(rocketbox::RocketBoxTransport* transport,
                                  int port_index,
                                  MessageCallback on_message,
                                  BeforeListenCallback on_before_listen)
-    : controller_(controller)
+    : transport_(transport)
     , port_index_(port_index)
     , on_message_(std::move(on_message))
     , on_before_listen_(std::move(on_before_listen)) {}
@@ -144,7 +144,7 @@ void SessionListener::listen_loop() {
             continue;
         }
 
-        if (!controller_ || !controller_->fabric_port_available()) {
+        if (!transport_ || !transport_->port_available()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(800));
             continue;
         }
@@ -168,7 +168,7 @@ void SessionListener::listen_loop() {
         }
 
         in_receive_.store(true, std::memory_order_release);
-        TransferResult result = controller_->receive_on_port(
+        TransferResult result = transport_->receive_file_on_port(
             port_index_, recv_path, nullptr, header_timeout, /*expected_frame_kind=*/0);
         in_receive_.store(false, std::memory_order_release);
         last_receive_end_ms_.store(

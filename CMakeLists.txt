@@ -26,6 +26,7 @@ option(BUILD_TESTS "Build the core/session test suites" ON)
 add_subdirectory(core)
 add_subdirectory(sim)
 add_subdirectory(lib)
+add_subdirectory(sdks/cpp)
 
 if(BUILD_WX_GUI)
     find_package(wxWidgets 3.2 QUIET COMPONENTS core base)

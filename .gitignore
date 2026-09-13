@@ -12,3 +12,4 @@
 *.user
 .DS_Store
 /Westcoast-0.01_release.zip
+/sdks/typescript/node_modules/

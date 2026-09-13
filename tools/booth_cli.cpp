@@ -7,6 +7,7 @@
 #include "booth_log.h"
 #include "identity_profile.h"
 #include "transfer_orchestrator.h"
+#include "rocketbox/sdk.h"
 #include "usb_protocol.h"
 
 #include <atomic>
@@ -124,7 +125,7 @@ int run_listen(const Args& args) {
 
     std::string last_status;
     TransferOrchestrator orchestrator(
-        args.port,
+        rocketbox::make_usb_transport(args.port),
         identity,
         [&](const OrchestratorUiState& state) {
             const std::string line = state_line(state);
@@ -179,7 +180,7 @@ int run_send(const Args& args) {
     std::string last_status;
 
     TransferOrchestrator orchestrator(
-        args.port,
+        rocketbox::make_usb_transport(args.port),
         identity,
         [&](const OrchestratorUiState& state) {
             const std::string line = state_line(state);
@@ -241,7 +242,8 @@ int run_probe(const Args& args) {
     identity.display_name = "probe";
     identity.receive_status = ReceiveStatus::Open;
 
-    TransferOrchestrator orchestrator(args.port, identity, [](const OrchestratorUiState& state) {
+    TransferOrchestrator orchestrator(rocketbox::make_usb_transport(args.port), identity,
+                                      [](const OrchestratorUiState& state) {
         if (!state.dev_log.empty()) {
             booth_log(-1, "probe_dev", state.dev_log);
         }

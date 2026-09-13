@@ -1,5 +1,6 @@
 #include "identity_profile.h"
 #include "transfer_orchestrator.h"
+#include "rocketbox/sdk.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -31,7 +32,7 @@ int run_receiver(int recv_port,
     bool recv_ok = false;
 
     TransferOrchestrator receiver(
-        recv_port,
+        rocketbox::make_usb_transport(recv_port),
         identity,
         [&](const OrchestratorUiState& state) {
             if (!state.notification.empty()) {
@@ -92,7 +93,7 @@ int main(int argc, char* argv[]) {
     bool send_ok = false;
 
     TransferOrchestrator sender(
-        send_port,
+        rocketbox::make_usb_transport(send_port),
         send_identity,
         [&](const OrchestratorUiState& state) {
             if (!state.busy && state.status_message.find("complete") != std::string::npos) {

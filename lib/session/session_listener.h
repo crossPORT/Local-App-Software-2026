@@ -1,7 +1,8 @@
 #pragma once
 
 #include "fabric_session_message.h"
-#include "transfer_controller.h"
+
+#include "rocketbox/sdk.h"
 
 #include <atomic>
 #include <chrono>
@@ -16,7 +17,7 @@ public:
 
     using BeforeListenCallback = std::function<void()>;
 
-    SessionListener(TransferController* controller,
+    SessionListener(rocketbox::RocketBoxTransport* transport,
                     int port_index,
                     MessageCallback on_message,
                     BeforeListenCallback on_before_listen = {});
@@ -35,7 +36,7 @@ public:
 private:
     void listen_loop();
 
-    TransferController* controller_ = nullptr;
+    rocketbox::RocketBoxTransport* transport_ = nullptr;
     int port_index_ = 0;
     MessageCallback on_message_;
     BeforeListenCallback on_before_listen_;
@@ -53,7 +54,7 @@ private:
     std::condition_variable pause_cv_;
 };
 
-bool send_session_message(TransferController& controller,
+bool send_session_message(rocketbox::RocketBoxTransport& transport,
                           int sender_port_index,
                           const FabricSessionMessage& message,
                           std::string* error_out = nullptr,

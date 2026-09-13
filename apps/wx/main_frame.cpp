@@ -14,6 +14,7 @@
 #include "transfer_progress_panel.h"
 #include "event_log_dialog.h"
 #include "usb_transfer.h"
+#include "rocketbox/sdk.h"
 
 #include <algorithm>
 #include <cmath>
@@ -370,7 +371,7 @@ bool MainFrame::StartOrchestrator() {
     }
 
     orchestrator_ = std::make_unique<TransferOrchestrator>(
-        port_index_,
+        rocketbox::make_usb_transport(port_index_),
         identity_,
         [this](const OrchestratorUiState& state) {
             auto snapshot = std::make_shared<OrchestratorUiState>(state);
