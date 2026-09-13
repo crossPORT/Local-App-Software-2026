@@ -14,6 +14,17 @@ case "$OUT" in
 esac
 
 if [[ -n "$PWA_VERSION" ]]; then
+  # package.json needs semver; 1.0.0.waterloo -> 1.0.0-waterloo
+  PWA_VERSION="$(python3 - <<PY
+import re, sys
+v = """$PWA_VERSION"""
+m = re.match(r"^(\d+\.\d+\.\d+)(?:[.\-](.+))?$", v)
+if m and m.group(2):
+    print(f"{m.group(1)}-{m.group(2).replace('.', '-')}")
+else:
+    print(v)
+PY
+)"
   node -e "
     const fs = require('fs');
     const path = '$WEB/package.json';

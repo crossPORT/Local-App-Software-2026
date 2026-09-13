@@ -8,7 +8,15 @@ if(NOT DEFINED ROCKETBOX_RELEASE_TAG OR ROCKETBOX_RELEASE_TAG STREQUAL "")
   set(ROCKETBOX_RELEASE_TAG "v${ROCKETBOX_VERSION}")
 endif()
 
-project(rocketbox VERSION ${ROCKETBOX_VERSION} LANGUAGES CXX)
+# CMake project(VERSION) only accepts integer components (1.0.0), not names
+# like 1.0.0.waterloo. Keep the tag string in ROCKETBOX_VERSION for packaging.
+if(ROCKETBOX_VERSION MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)")
+  set(_rb_cmake_version "${CMAKE_MATCH_1}")
+else()
+  set(_rb_cmake_version "${ROCKETBOX_VERSION}")
+endif()
+
+project(rocketbox VERSION ${_rb_cmake_version} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
