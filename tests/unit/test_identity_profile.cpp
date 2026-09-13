@@ -123,6 +123,21 @@ FABRIC_TEST(identity_default_receive_folder) {
     std::remove(path.c_str());
 }
 
+FABRIC_TEST(identity_booth_display_enabled_round_trip) {
+    const std::string path = write_conf("display_name=Booth\n");
+    IdentityProfile p;
+    CHECK(load_identity_profile(0, path, p));
+    CHECK(!p.booth_display_enabled);
+    p.booth_display_enabled = true;
+    p.config_path = path;
+    CHECK(save_identity_profile(p));
+    IdentityProfile loaded;
+    CHECK(load_identity_profile(0, path, loaded));
+    CHECK(loaded.booth_display_enabled);
+    CHECK(loaded.booth_display_mib_s > 7167.0 && loaded.booth_display_mib_s < 7169.0);
+    std::remove(path.c_str());
+}
+
 FABRIC_TEST(receive_status_string_round_trip) {
     CHECK(receive_status_from_string("open") == ReceiveStatus::Open);
     CHECK(receive_status_from_string("ask_first") == ReceiveStatus::AskFirst);

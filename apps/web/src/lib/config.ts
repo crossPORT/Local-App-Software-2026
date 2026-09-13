@@ -1,4 +1,5 @@
 import type { IdentityProfile, PeerConfig, ReceiveStatus } from './types';
+import { readBoothDisplayPref, writeBoothDisplayPref } from './booth_pref';
 
 /** Internal preset used when booth display speed is enabled — not editable in UI. */
 export const BOOTH_DISPLAY_PRESET = {
@@ -79,6 +80,9 @@ function applyIdentityKey(cfg: Partial<IdentityProfile>, key: string, value: str
     case 'booth_display_jitter_pct':
       cfg.booth_display_jitter_pct = Math.max(0, Number.parseFloat(value) || 0);
       break;
+    case 'booth_display_enabled':
+      cfg.booth_display_enabled = value === '1' || value === 'true' || value === 'yes' || value === 'on';
+      break;
     default:
       break;
   }
@@ -120,7 +124,6 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
     payload_header_timeout_ms: 0,
     booth_display_mib_s: 0,
     booth_display_jitter_pct: 0,
-    booth_display_enabled: true,
     peers: [],
   };
   const portCfg: Partial<IdentityProfile> = { peers: [] };
@@ -204,7 +207,9 @@ export function parseIdentityConfig(text: string, portIndex: number, configPath:
         ? (portCfg.booth_display_jitter_pct ?? 0)
         : (global.booth_display_jitter_pct ?? 0),
     booth_display_enabled:
-      (portCfg.booth_display_mib_s ?? 0) > 0 || (global.booth_display_mib_s ?? 0) > 0,
+      portCfg.booth_display_enabled ??
+      global.booth_display_enabled ??
+      ((portCfg.booth_display_mib_s ?? 0) > 0 || (global.booth_display_mib_s ?? 0) > 0),
     peers: global.peers ?? [],
     config_path: configPath,
   };
@@ -329,8 +334,14 @@ export function applyBoothDisplaySettings(
 /** Load identity from localStorage and apply booth display preset when enabled. */
 export async function loadIdentityProfileAsync(portIndex: number): Promise<IdentityProfile> {
   const stored = loadIdentityProfile(portIndex);
+  const pref = readBoothDisplayPref();
   let merged = normalizeIdentity(
-    { ...stored, booth_display_mib_s: 0, booth_display_jitter_pct: 0 },
+    {
+      ...stored,
+      booth_display_mib_s: 0,
+      booth_display_jitter_pct: 0,
+      ...(pref === null ? {} : { booth_display_enabled: pref }),
+    },
     portIndex,
   );
   if (isBoothDisplayDisabledInUrl()) {
@@ -348,6 +359,7 @@ export function saveIdentityProfile(portIndex: number, identity: IdentityProfile
     },
     portIndex,
   );
+  writeBoothDisplayPref(normalized.booth_display_enabled);
   const json = JSON.stringify(normalized);
   localStorage.setItem(identityStorageKey(portIndex), json);
   localStorage.setItem(GLOBAL_IDENTITY_KEY, json);

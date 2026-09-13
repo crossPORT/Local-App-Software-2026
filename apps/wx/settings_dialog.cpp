@@ -1,6 +1,7 @@
 #include "settings_dialog.h"
 
 #include "booth_display.h"
+#include "booth_identity.h"
 #include "platform_util.h"
 
 #include <algorithm>
@@ -131,7 +132,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent,
     root->Add(folder_row, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
     booth_display_check_ = new wxCheckBox(panel, wxID_ANY, "Booth display speed");
-    booth_display_check_->SetValue(profile.booth_display_mib_s > 0.0);
+    booth_display_check_->SetValue(profile.booth_display_enabled);
     booth_display_check_->SetForegroundColour(kText);
     booth_display_check_->SetBackgroundColour(kBg);
     root->Add(booth_display_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
@@ -229,13 +230,8 @@ void SettingsDialog::OnSave(wxCommandEvent&) {
                               : receive_sel == 2 ? ReceiveStatus::Busy
                                                  : ReceiveStatus::AskFirst;
     profile_.receive_folder = folder_field_->GetValue().ToStdString();
-    if (booth_display_check_->GetValue()) {
-        profile_.booth_display_mib_s = kBoothDisplayPresetMibS;
-        profile_.booth_display_jitter_pct = kBoothDisplayPresetJitterPct;
-    } else {
-        profile_.booth_display_mib_s = 0.0;
-        profile_.booth_display_jitter_pct = 0.0;
-    }
+    profile_.booth_display_enabled = booth_display_check_->GetValue();
+    apply_booth_display_rates(profile_);
     if (profile_.config_path.empty()) {
         profile_.config_path = platform::default_identity_config_path();
     }

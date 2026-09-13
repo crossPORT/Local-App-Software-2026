@@ -84,6 +84,7 @@ private:
     std::string transfer_status_;
     int64_t last_announce_ms_ = 0;
     std::string selected_peer_;
+    bool file_dialog_open_ = false;
     PeerSelectedCallback on_peer_selected_;
     FilesDroppedOnPeerCallback on_files_dropped_;
     OpenSettingsCallback on_open_settings_;

@@ -1,5 +1,6 @@
 #include "identity_profile.h"
 
+#include "booth_identity.h"
 #include "platform_util.h"
 #include "session_config.h"
 
@@ -115,6 +116,7 @@ void apply_identity_key(IdentityProfile& cfg, const std::string& key, const std:
         } catch (...) {
             cfg.payload_header_timeout_ms = 0;
         }
+    } else if (apply_booth_identity_key(cfg, key, value)) {
     } else if (key == "booth_display_mib_s") {
         try {
             cfg.booth_display_mib_s = std::stod(value);
@@ -249,12 +251,7 @@ bool load_profile_file(const std::string& path, int port_index, IdentityProfile&
     out.payload_header_timeout_ms = port_cfg.payload_header_timeout_ms != 0
                                           ? port_cfg.payload_header_timeout_ms
                                           : global.payload_header_timeout_ms;
-    out.booth_display_mib_s = port_cfg.booth_display_mib_s > 0.0
-                                 ? port_cfg.booth_display_mib_s
-                                 : global.booth_display_mib_s;
-    out.booth_display_jitter_pct = port_cfg.booth_display_jitter_pct > 0.0
-                                      ? port_cfg.booth_display_jitter_pct
-                                      : global.booth_display_jitter_pct;
+    resolve_booth_display(out, port_cfg, global);
     out.peers = global.peers;
     out.config_path = path;
     return !out.display_name.empty() || !out.peers.empty();
@@ -320,6 +317,7 @@ bool load_identity_profile(int port_index,
         profile.receive_folder = expand_home("~/Incoming");
     }
     profile.config_path = path;
+    apply_booth_display_rates(profile);
 
     out = std::move(profile);
     return true;
@@ -370,12 +368,7 @@ bool save_identity_profile(const IdentityProfile& profile) {
     if (profile.payload_header_timeout_ms > 0) {
         file << "payload_header_timeout_ms=" << profile.payload_header_timeout_ms << '\n';
     }
-    if (profile.booth_display_mib_s > 0.0) {
-        file << "booth_display_mib_s=" << profile.booth_display_mib_s << '\n';
-    }
-    if (profile.booth_display_jitter_pct > 0.0) {
-        file << "booth_display_jitter_pct=" << profile.booth_display_jitter_pct << '\n';
-    }
+    write_booth_identity(file, profile);
 
     for (std::size_t i = 0; i < profile.peers.size(); ++i) {
         const PeerConfig& peer = profile.peers[i];

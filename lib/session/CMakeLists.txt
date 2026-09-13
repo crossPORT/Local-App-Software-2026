@@ -11,6 +11,7 @@ add_library(rocketbox_session STATIC
     announce_note.cpp
     link_status.cpp
     identity_profile.cpp
+    booth_identity.cpp
     booth_display.cpp
     peer_roster.cpp
     session_listener.cpp

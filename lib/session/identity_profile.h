@@ -40,6 +40,8 @@ struct IdentityProfile {
     double booth_display_mib_s = 0.0;
     // ±percent jitter applied once per transfer run (e.g. 3 => 6972..7364 for 7168 base).
     double booth_display_jitter_pct = 0.0;
+    bool booth_display_enabled = true;
+    bool booth_display_enabled_explicit = false;
     std::vector<PeerConfig> peers;
     std::string config_path;
 };

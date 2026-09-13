@@ -29,14 +29,12 @@ const wxColour kOnlineDot(0x3d, 0xdb, 0x8a);
 const wxColour kOfflineDot(0x5a, 0x6a, 0x7a);
 const wxColour kOfflineRow(0x10, 0x14, 0x1c);
 const wxColour kBorder(0x24, 0x30, 0x42);
-const wxColour kChooseBorder(0x5a, 0x7a, 0x8a);
 
 enum { ID_CountdownTimer = wxID_HIGHEST + 400 };
 
 constexpr int kOnlineDropZoneHeight = 64;
 constexpr int kOfflineDropZoneHeight = 30;
 constexpr int kDropHintFontPt = 9;
-constexpr int kChooseFontPt = 9;
 
 wxStaticText* MakeLabel(wxWindow* parent,
                         const wxString& text,
@@ -142,16 +140,19 @@ private:
     }
 
     void OnChooseFile() {
-        if (busy_ || !roster_) {
+        if (busy_ || !roster_ || roster_->file_dialog_open_) {
             return;
         }
+        roster_->file_dialog_open_ = true;
         wxFileDialog dlg(this,
                          "Select files to send",
                          wxEmptyString,
                          wxEmptyString,
                          "All files (*.*)|*.*",
                          wxFD_OPEN | wxFD_FILE_MUST_EXIST | wxFD_MULTIPLE);
-        if (dlg.ShowModal() != wxID_OK) {
+        const int rc = dlg.ShowModal();
+        roster_->file_dialog_open_ = false;
+        if (rc != wxID_OK) {
             return;
         }
         wxArrayString paths;
@@ -164,7 +165,6 @@ private:
     }
 
     void OnPaint(wxPaintEvent&);
-    void OnChooseRowPaint(wxPaintEvent&);
     void UpdateDropZoneFill();
 
     bool offline_ = false;
@@ -175,8 +175,7 @@ private:
     wxPanel* body_ = nullptr;
     wxPanel* hint_row_ = nullptr;
     wxStaticText* hint_label_ = nullptr;
-    wxPanel* choose_row_ = nullptr;
-    wxStaticText* choose_label_ = nullptr;
+    wxButton* choose_btn_ = nullptr;
 };
 
 class RosterPanel::PeerDropZoneTarget : public wxFileDropTarget {
@@ -249,27 +248,19 @@ PeerDropZonePanel::PeerDropZonePanel(RosterPanel* roster,
     hint_sizer->AddStretchSpacer();
     hint_row_->SetSizer(hint_sizer);
 
-    choose_row_ = new wxPanel(body_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
-    choose_row_->SetBackgroundStyle(wxBG_STYLE_PAINT);
-    choose_row_->SetBackgroundColour(kRow);
-    choose_row_->SetMinSize(wxSize(132, 28));
-    choose_row_->SetMaxSize(wxSize(-1, 28));
-    choose_row_->SetCursor(wxCursor(wxCURSOR_HAND));
-    choose_row_->Bind(wxEVT_PAINT, &PeerDropZonePanel::OnChooseRowPaint, this);
-    auto* choose_sizer = new wxBoxSizer(wxHORIZONTAL);
-    choose_label_ = MakeLabel(choose_row_, "Choose file...", kText, kChooseFontPt);
-    choose_sizer->AddStretchSpacer();
-    choose_sizer->Add(choose_label_, 0, wxALIGN_CENTER_VERTICAL);
-    choose_sizer->AddStretchSpacer();
-    choose_row_->SetSizer(choose_sizer);
-    choose_row_->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& event) {
-        event.StopPropagation();
-        OnChooseFile();
-    });
+    choose_btn_ = new wxButton(body_, wxID_ANY, "Choose file...");
+    choose_btn_->SetBackgroundColour(kRow);
+    choose_btn_->SetForegroundColour(kText);
+    {
+        const wxSize best = choose_btn_->GetBestSize();
+        choose_btn_->SetMinSize(
+            wxSize(std::max(best.GetWidth() + 16, 132), std::max(best.GetHeight(), 28)));
+    }
+    choose_btn_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OnChooseFile(); });
 
     root->AddStretchSpacer(1);
     root->Add(hint_row_, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
-    root->Add(choose_row_, 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 4);
+    root->Add(choose_btn_, 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 4);
     root->AddStretchSpacer(1);
     body_->SetSizer(root);
 
@@ -297,22 +288,10 @@ void PeerDropZonePanel::UpdateDropZoneFill() {
     if (hint_label_) {
         hint_label_->SetBackgroundColour(hint_row_ ? hint_row_->GetBackgroundColour() : fill);
     }
-    if (choose_row_) {
-        choose_row_->Refresh(false);
+    if (choose_btn_) {
+        choose_btn_->Refresh(false);
     }
     body_->Refresh(false);
-}
-
-void PeerDropZonePanel::OnChooseRowPaint(wxPaintEvent& event) {
-    wxAutoBufferedPaintDC dc(choose_row_);
-    const wxSize sz = choose_row_->GetClientSize();
-    if (sz.x <= 0 || sz.y <= 0) {
-        return;
-    }
-    dc.SetPen(wxPen(choose_row_->IsEnabled() ? kChooseBorder : kBorder, 1));
-    dc.SetBrush(wxBrush(kRow));
-    dc.DrawRoundedRectangle(0, 0, sz.x - 1, sz.y - 1, 6);
-    event.Skip();
 }
 
 void PeerDropZonePanel::SetOffline(bool offline) {
@@ -331,9 +310,9 @@ void PeerDropZonePanel::SetOffline(bool offline) {
         busy_ = false;
         drag_active_ = false;
         SetDropTarget(nullptr);
-        if (choose_row_) {
-            choose_row_->Enable(false);
-            choose_row_->Hide();
+        if (choose_btn_) {
+            choose_btn_->Enable(false);
+            choose_btn_->Hide();
         }
         if (hint_label_) {
             hint_label_->SetLabel("Not connected");
@@ -344,9 +323,9 @@ void PeerDropZonePanel::SetOffline(bool offline) {
             hint_label_->SetForegroundColour(kMuted);
         }
     } else {
-        if (choose_row_) {
-            choose_row_->Enable(true);
-            choose_row_->Show();
+        if (choose_btn_) {
+            choose_btn_->Enable(true);
+            choose_btn_->Show();
         }
         AttachDropTarget();
         if (hint_label_) {
@@ -398,14 +377,11 @@ void PeerDropZonePanel::SetTransferState(bool active, const wxString& status_hin
         hint_label_->SetFont(font);
         hint_label_->SetForegroundColour(drag_active_ ? kAccent : kAccent);
     }
-    if (choose_row_) {
-        choose_row_->Enable(!active);
-    }
-    if (choose_label_) {
-        choose_label_->SetForegroundColour(kText);
-    }
-    if (choose_row_ && choose_row_->IsShown() != !active) {
-        choose_row_->Show(!active);
+    if (choose_btn_) {
+        choose_btn_->Enable(!active);
+        if (choose_btn_->IsShown() != !active) {
+            choose_btn_->Show(!active);
+        }
     }
     if (active) {
         SetDropTarget(nullptr);
@@ -608,6 +584,10 @@ void RosterPanel::UpdateRoster(const std::vector<PeerEntry>& peers,
     transfer_busy_ = transfer_busy;
     transfer_status_ = transfer_status;
     last_announce_ms_ = last_announce_ms;
+
+    if (file_dialog_open_) {
+        return;
+    }
 
     const std::vector<std::string> slot_signature = SlotSignature();
     if (LayoutNeedsRebuild(slot_signature)) {
@@ -849,6 +829,9 @@ void RosterPanel::RefreshCountdowns() {
 }
 
 void RosterPanel::OnCountdownTimer(wxTimerEvent&) {
+    if (file_dialog_open_) {
+        return;
+    }
     RefreshCountdowns();
 }
 
