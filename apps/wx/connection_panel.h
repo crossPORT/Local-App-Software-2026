@@ -14,8 +14,11 @@ class ConnectionPanel : public wxPanel {
 public:
     ConnectionPanel(wxWindow* parent);
 
-    void SetActionHandlers(std::function<void()> on_connect, std::function<void()> on_disconnect);
+    void SetActionHandlers(std::function<void()> on_connect,
+                           std::function<void()> on_disconnect,
+                           std::function<void()> on_clear = {});
     void SetLayoutChangedHandler(std::function<void()> on_layout_changed);
+    void SetLinkLed(const wxColour& colour, const wxString& tooltip);
 
     void ApplyState(bool fabric_connected,
                     int fabric_port_index,
@@ -34,11 +37,13 @@ private:
     wxStaticText* section_label_ = nullptr;
     wxStaticText* hint_label_ = nullptr;
     wxStaticText* device_label_ = nullptr;
+    wxPanel* link_indicator_ = nullptr;
     wxStaticText* meta_label_ = nullptr;
     wxStaticText* warn_label_ = nullptr;
     wxStaticText* error_label_ = nullptr;
     SpeedMonitor* activity_monitor_ = nullptr;
     wxButton* connect_btn_ = nullptr;
+    wxButton* clear_btn_ = nullptr;
     wxPanel* disconnect_btn_ = nullptr;
     wxSizer* root_sizer_ = nullptr;
     wxSizerItem* activity_monitor_item_ = nullptr;
@@ -46,6 +51,7 @@ private:
     wxSizerItem* disconnect_item_ = nullptr;
     std::function<void()> on_connect_;
     std::function<void()> on_disconnect_;
+    std::function<void()> on_clear_;
     std::function<void()> on_layout_changed_;
     uint32_t last_activity_seq_ = 0;
     double last_live_mbps_ = 0.0;

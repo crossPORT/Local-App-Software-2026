@@ -6,6 +6,8 @@ add_executable(rocketbox
     main_frame.cpp
     app_icon.cpp
     connection_panel.cpp
+    connection_panel_sync.cpp
+    connection_widgets.cpp
     fabric_device_picker.cpp
     roster_panel.cpp
     transfer_progress_panel.cpp
@@ -23,7 +25,7 @@ if(APPLE)
     set_target_properties(rocketbox PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.crossport.rocketbox"
-        MACOSX_BUNDLE_BUNDLE_NAME "RocketBox App"
+        MACOSX_BUNDLE_BUNDLE_NAME "RocketBox Transfer"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         BUILD_WITH_INSTALL_RPATH TRUE
@@ -45,6 +47,18 @@ target_link_libraries(rocketbox PRIVATE
 )
 
 target_compile_features(rocketbox PRIVATE cxx_std_17)
+
+add_custom_command(TARGET rocketbox POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-logo.png"
+        "$<TARGET_FILE_DIR:rocketbox>/rocketbox-logo.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-mark.png"
+        "$<TARGET_FILE_DIR:rocketbox>/rocketbox-mark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-wordmark.png"
+        "$<TARGET_FILE_DIR:rocketbox>/rocketbox-wordmark.png"
+)
 
 if(APPLE)
     set(_rb_icns "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.icns")
@@ -129,6 +143,9 @@ else()
     install(FILES
         ${CMAKE_SOURCE_DIR}/99-sls-fabric-usb.rules
         ${CMAKE_SOURCE_DIR}/cmake/RUNNING.txt
+        ${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-logo.png
+        ${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-mark.png
+        ${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-wordmark.png
         DESTINATION share/rocketbox
     )
 

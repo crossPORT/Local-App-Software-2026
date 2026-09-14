@@ -30,7 +30,7 @@ cp "$ROOT/cmake/icons/rocketbox.svg" "$APPDIR/usr/share/icons/hicolor/scalable/a
 cat > "$APPDIR/usr/share/applications/rocketbox.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=RocketBox App
+Name=RocketBox Transfer
 Exec=RocketBox
 Icon=rocketbox
 Categories=Utility;

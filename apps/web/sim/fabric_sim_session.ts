@@ -1,48 +1,16 @@
 import { boothLog } from '../src/lib/booth_log';
 import { FabricUsbError } from '../src/lib/fabric_errors';
 import { FabricLink, type FabricLinkEvent, type ListenMode } from '../src/lib/fabric_link';
-import {
-  formatFabricLegLabel,
-  formatFabricPortDisplay,
-  resolveFabricLegFromDevice,
-} from '../src/lib/fabric_port';
+import { formatFabricLegLabel, resolveFabricLegFromDevice } from '../src/lib/fabric_port';
+import { systemNameForLeg } from '../src/lib/system_names';
 import type { FabricSessionMessage } from '../src/lib/fabric_session';
 import type { FabricTransport } from '../src/lib/fabric_transport';
 import type { ParsedHeader } from '../src/lib/fabric_protocol';
 import { fabricHubReset, SIM_CABLE_SERIALS } from './fabric_hub';
 import { SimUsbDevice } from './fabric_sim_device';
-
-const SELECTED_SERIAL_KEY = 'rocketbox_sim_serial';
-
-function getSavedSerial(): string | null {
-  return sessionStorage.getItem(SELECTED_SERIAL_KEY);
-}
-
-function rememberSerial(serial: string): void {
-  sessionStorage.setItem(SELECTED_SERIAL_KEY, serial);
-}
-
-function clearSavedSerial(): void {
-  sessionStorage.removeItem(SELECTED_SERIAL_KEY);
-}
-
-async function pickSimSerial(): Promise<string> {
-  const saved = getSavedSerial();
-  if (saved && SIM_CABLE_SERIALS.includes(saved as (typeof SIM_CABLE_SERIALS)[number])) {
-    return saved;
-  }
-  if (typeof window === 'undefined') {
-    return SIM_CABLE_SERIALS[0]!;
-  }
-  const lines = SIM_CABLE_SERIALS.map((serial, index) => `${index + 1}. ${serial} (port ${index + 1})`).join('\n');
-  const raw = window.prompt(
-    `Pick a simulated cable (use a different serial in each tab):\n${lines}`,
-    '1',
-  );
-  const choice = Number.parseInt(raw ?? '1', 10);
-  const index = Number.isFinite(choice) ? Math.max(0, Math.min(SIM_CABLE_SERIALS.length - 1, choice - 1)) : 0;
-  return SIM_CABLE_SERIALS[index]!;
-}
+import {
+  clearSavedSimSerial, getSavedSimSerial, pickSimSerial, rememberSimSerial,
+} from './fabric_sim_serial';
 
 export class FabricSimSession implements FabricTransport {
   private device: SimUsbDevice | null = null;
@@ -74,8 +42,12 @@ export class FabricSimSession implements FabricTransport {
     return SIM_CABLE_SERIALS.length;
   }
 
+  static clearSavedSerial(): void {
+    clearSavedSimSerial();
+  }
+
   static hasSavedSerial(): boolean {
-    return getSavedSerial() != null;
+    return getSavedSimSerial() != null;
   }
 
   private refreshResolvedLeg(): void {
@@ -122,18 +94,22 @@ export class FabricSimSession implements FabricTransport {
     await this.link.prepareForPayloadSend();
   }
 
-  async connect(): Promise<string> {
-    fabricHubReset();
-    const serial = await pickSimSerial();
-    this.device = new SimUsbDevice(serial);
-    rememberSerial(serial);
+  async connect(serial?: string, options?: { resetHub?: boolean; remember?: boolean }): Promise<string> {
+    if (options?.resetHub !== false) {
+      fabricHubReset();
+    }
+    const chosen = pickSimSerial(serial);
+    this.device = new SimUsbDevice(chosen);
+    if (options?.remember !== false) {
+      rememberSimSerial(chosen);
+    }
     this.refreshResolvedLeg();
     this.link.setListenMode('always');
     return this.describeDevice();
   }
 
   async reconnectKnown(): Promise<string> {
-    const saved = getSavedSerial();
+    const saved = getSavedSimSerial();
     if (!saved) {
       throw new FabricUsbError('No saved sim cable — click Connect');
     }
@@ -144,10 +120,7 @@ export class FabricSimSession implements FabricTransport {
   }
 
   describeDevice(): string {
-    if (!this.device) {
-      return '';
-    }
-    return `Sim · ${formatFabricPortDisplay(this.resolvedFabricLeg)}`;
+    return this.device ? systemNameForLeg(this.resolvedFabricLeg) : '';
   }
 
   async disconnect(): Promise<void> {
@@ -158,7 +131,7 @@ export class FabricSimSession implements FabricTransport {
 
   async forgetThisDevice(): Promise<void> {
     await this.disconnect();
-    clearSavedSerial();
+    clearSavedSimSerial();
     fabricHubReset();
   }
 
@@ -220,7 +193,7 @@ export class FabricSimSession implements FabricTransport {
     headerTimeoutMs: number,
     expectedBytes = 0,
     onProgress?: (done: number, total: number) => void,
-  ): Promise<{ data: Uint8Array; filename: string }> {
+  ) {
     return this.link.receiveFileTransfer(headerTimeoutMs, expectedBytes, onProgress);
   }
 }

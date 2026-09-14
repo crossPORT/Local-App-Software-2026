@@ -6,6 +6,28 @@
 
 namespace {
 
+wxString FileBesideExe(const wxString& name) {
+    wxFileName exe(wxStandardPaths::Get().GetExecutablePath());
+    exe.SetFullName(name);
+    return exe.GetFullPath();
+}
+
+wxString FileInSourceIcons(const wxString& name) {
+    wxFileName walk(wxStandardPaths::Get().GetExecutablePath());
+    walk.SetFullName(wxEmptyString);
+    for (int i = 0; i < 8; ++i) {
+        const wxString candidate = walk.GetPathWithSep() + wxT("cmake/icons/") + name;
+        if (wxFileName::FileExists(candidate)) {
+            return candidate;
+        }
+        if (!walk.GetDirCount()) {
+            break;
+        }
+        walk.RemoveLastDir();
+    }
+    return {};
+}
+
 bool TryLoadIcon(wxIcon& icon, const wxString& path, wxBitmapType type) {
     if (path.empty() || !wxFileName::FileExists(path)) {
         return false;
@@ -48,6 +70,31 @@ wxIcon LoadRocketBoxIcon() {
 #endif
 
     return icon;
+}
+
+wxBitmap LoadNamedPng(const wxString& name) {
+    wxBitmap bitmap;
+    const wxString paths[] = {
+        FileBesideExe(name),
+        FileInSourceIcons(name),
+        wxT("/usr/share/rocketbox/") + name,
+    };
+    for (const wxString& path : paths) {
+        if (!path.empty() && wxFileName::FileExists(path) &&
+            bitmap.LoadFile(path, wxBITMAP_TYPE_PNG) && bitmap.IsOk()) {
+            return bitmap;
+        }
+    }
+    return bitmap;
+}
+
+wxBitmap LoadRocketBoxLogoBitmap() {
+    const wxBitmap mark = LoadNamedPng(wxT("rocketbox-mark.png"));
+    return mark.IsOk() ? mark : LoadNamedPng(wxT("rocketbox-logo.png"));
+}
+
+wxBitmap LoadRocketBoxWordmarkBitmap() {
+    return LoadNamedPng(wxT("rocketbox-wordmark.png"));
 }
 
 void ApplyRocketBoxFrameIcon(wxFrame* frame) {

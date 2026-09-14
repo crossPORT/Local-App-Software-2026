@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from './fabric_port';
+import { systemNameForLeg } from './system_names';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -120,11 +120,11 @@ export function receiveStatusLabel(status: string): string {
   }
 }
 
-/** Disambiguate roster rows when multiple stations share a display name. */
+/** Disambiguate roster rows when multiple systems share a display name. */
 export function peerRosterLabel(peer: { display_name: string; port_index: number }, peers: { display_name: string }[]): string {
   const duplicates = peers.filter((entry) => entry.display_name === peer.display_name).length > 1;
   if (!duplicates) {
     return peer.display_name;
   }
-  return `${peer.display_name} · port ${displayPortFromLeg(peer.port_index)}`;
+  return `${peer.display_name} · ${systemNameForLeg(peer.port_index)}`;
 }

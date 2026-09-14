@@ -9,6 +9,7 @@
 class RocketBoxApp : public wxApp {
 public:
     bool OnInit() override {
+        wxInitAllImageHandlers();
         wxCmdLineParser parser;
         parser.AddOption("c", "config", "Identity config file",
                          wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL);

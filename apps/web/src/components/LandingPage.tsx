@@ -51,7 +51,7 @@ export function LandingPage() {
     void QRCode.toCanvas(canvas, pwaUrl, {
       width: 280,
       margin: 2,
-      color: { dark: '#0f1620', light: '#ffffff' },
+      color: { dark: '#020817', light: '#ffffff' },
     });
   }, [pwaUrl]);
 
@@ -77,14 +77,14 @@ export function LandingPage() {
           <span className="landing-icon" aria-hidden>
             🚀
           </span>
-          <h1>RocketBox App</h1>
+          <h1>RocketBox Transfer</h1>
           <p className="landing-tagline" style={{ color: theme.muted }}>
             Scan to open the transfer app on your phone or tablet
           </p>
         </div>
 
         <div className="landing-qr-wrap">
-          <canvas ref={canvasRef} className="landing-qr" aria-label="QR code to open RocketBox App" />
+          <canvas ref={canvasRef} className="landing-qr" aria-label="QR code to open RocketBox Transfer" />
         </div>
 
         <a className="landing-url" href={pwaUrl} style={{ color: theme.accent }}>
@@ -130,7 +130,7 @@ export function LandingPage() {
         <ol className="landing-steps" style={{ color: theme.muted }}>
           <li>Scan the QR code with your phone camera</li>
           <li>Accept the HTTPS certificate warning if prompted</li>
-          <li>Plug in your USB cable and tap <strong>Connect USB</strong></li>
+          <li>Plug in your USB cable and tap <strong>Connect this system</strong></li>
           <li>Optional: add to home screen for a full-screen app</li>
         </ol>
 

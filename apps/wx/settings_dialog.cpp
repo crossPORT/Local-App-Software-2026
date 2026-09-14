@@ -3,6 +3,7 @@
 #include "booth_display.h"
 #include "booth_identity.h"
 #include "platform_util.h"
+#include "ui_colours.h"
 
 #include <algorithm>
 #include <sstream>
@@ -12,12 +13,6 @@
 #include <wx/sizer.h>
 
 namespace {
-
-const wxColour kBg(0x0f, 0x14, 0x19);
-const wxColour kField(0x12, 0x18, 0x22);
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
-const wxColour kAccent(0x00, 0xd4, 0xaa);
 
 wxString TrimWx(const wxString& value) {
     wxString trimmed = value;
@@ -33,13 +28,13 @@ wxStaticText* MakeLabel(wxWindow* parent, const wxString& text, const wxColour& 
 }
 
 void StyleField(wxTextCtrl* field) {
-    field->SetBackgroundColour(kField);
+    field->SetBackgroundColour(kSurface);
     field->SetForegroundColour(kText);
 }
 
 void StyleButton(wxButton* button, bool primary = false) {
-    button->SetBackgroundColour(primary ? kAccent : kField);
-    button->SetForegroundColour(primary ? kBg : kText);
+    button->SetBackgroundColour(primary ? kButton : kSurface);
+    button->SetForegroundColour(primary ? kOnButton : kText);
     const wxSize best = button->GetBestSize();
     button->SetMinSize(wxSize(std::max(best.GetWidth() + 12, 72), std::max(best.GetHeight(), 28)));
 }
@@ -70,16 +65,16 @@ SettingsDialog::SettingsDialog(wxWindow* parent,
     , profile_(profile)
     , on_save_(std::move(on_save))
     , dev_actions_(dev_actions) {
-    SetBackgroundColour(kBg);
+    SetBackgroundColour(kAppBg);
 
     auto* outer = new wxBoxSizer(wxVERTICAL);
 
     auto* scrolled = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
-    scrolled->SetBackgroundColour(kBg);
+    scrolled->SetBackgroundColour(kAppBg);
     scrolled->SetScrollRate(0, 12);
 
     auto* panel = new wxPanel(scrolled, wxID_ANY);
-    panel->SetBackgroundColour(kBg);
+    panel->SetBackgroundColour(kAppBg);
 
     constexpr int kWrapWidth = 400;
     auto* root = new wxBoxSizer(wxVERTICAL);
@@ -134,7 +129,7 @@ SettingsDialog::SettingsDialog(wxWindow* parent,
     booth_display_check_ = new wxCheckBox(panel, wxID_ANY, "Booth display speed");
     booth_display_check_->SetValue(profile.booth_display_enabled);
     booth_display_check_->SetForegroundColour(kText);
-    booth_display_check_->SetBackgroundColour(kBg);
+    booth_display_check_->SetBackgroundColour(kAppBg);
     root->Add(booth_display_check_, 0, wxLEFT | wxRIGHT | wxTOP, 10);
 
     std::ostringstream booth_msg;

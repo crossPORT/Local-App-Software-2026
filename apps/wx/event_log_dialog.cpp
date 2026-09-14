@@ -2,17 +2,13 @@
 
 #include "booth_log.h"
 #include "fabric_port.h"
+#include "ui_colours.h"
 
 #include <sstream>
 #include <wx/clipbrd.h>
 #include <wx/sizer.h>
 
 namespace {
-
-const wxColour kBg(0x0f, 0x14, 0x19);
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
-const wxColour kLogBg(0x12, 0x18, 0x22);
 
 enum {
     ID_RefreshLog = wxID_HIGHEST + 800,
@@ -49,7 +45,7 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , port_index_(port_index)
     , refresh_timer_(this, ID_LogRefreshTimer) {
-    SetBackgroundColour(kBg);
+    SetBackgroundColour(kAppBg);
 
     auto* root = new wxBoxSizer(wxVERTICAL);
 
@@ -62,11 +58,11 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
     port_filter_ = new wxCheckBox(this, ID_PortFilter, "Only this app (port filter)");
     port_filter_->SetValue(true);
     port_filter_->SetForegroundColour(kText);
-    port_filter_->SetBackgroundColour(kBg);
+    port_filter_->SetBackgroundColour(kAppBg);
     auto_refresh_ = new wxCheckBox(this, ID_AutoRefresh, "Auto-refresh");
     auto_refresh_->SetValue(true);
     auto_refresh_->SetForegroundColour(kText);
-    auto_refresh_->SetBackgroundColour(kBg);
+    auto_refresh_->SetBackgroundColour(kAppBg);
     filter_row->Add(port_filter_, 0, wxRIGHT, 16);
     filter_row->Add(auto_refresh_, 0);
     root->Add(filter_row, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
@@ -77,7 +73,7 @@ EventLogDialog::EventLogDialog(wxWindow* parent, int port_index)
                                wxDefaultPosition,
                                wxDefaultSize,
                                wxTE_MULTILINE | wxTE_READONLY | wxTE_DONTWRAP);
-    log_view_->SetBackgroundColour(kLogBg);
+    log_view_->SetBackgroundColour(kSurface);
     log_view_->SetForegroundColour(kText);
     wxFont mono = log_view_->GetFont();
     mono.SetFamily(wxFONTFAMILY_TELETYPE);

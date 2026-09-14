@@ -1,6 +1,7 @@
 #include "transfer_progress_panel.h"
 
 #include "link_status.h"
+#include "ui_colours.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -9,18 +10,6 @@
 #include <wx/sizer.h>
 
 namespace {
-
-const wxColour kPanel(0x1a, 0x23, 0x32);
-const wxColour kStatusBar(0x0f, 0x16, 0x20);
-const wxColour kStatusLabel(0x88, 0x99, 0xaa);
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
-const wxColour kAccent(0x00, 0xd4, 0xaa);
-const wxColour kSuccess(0x3d, 0xdb, 0x8a);
-const wxColour kError(0xff, 0x6b, 0x6b);
-const wxColour kWarn(0xff, 0x9f, 0x43);
-const wxColour kTrack(0x24, 0x30, 0x42);
-const wxColour kCard(0x12, 0x18, 0x22);
 
 constexpr int kBarHeight = 18;
 
@@ -188,7 +177,7 @@ wxColour phase_colour(Phase phase) {
         case Phase::Transferring:
             return kAccent;
         case Phase::Complete:
-            return kSuccess;
+            return kOk;
         case Phase::Failed:
             return kWarn;
     }
@@ -206,7 +195,7 @@ public:
         : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(-1, kBarHeight)) {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         SetMinSize(wxSize(-1, kBarHeight));
-        SetBackgroundColour(kPanel);
+        SetBackgroundColour(kAppBg);
         Bind(wxEVT_PAINT, &ThemeProgressBar::OnPaint, this);
     }
 
@@ -240,11 +229,11 @@ private:
             return;
         }
         dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.SetBrush(wxBrush(kPanel));
+        dc.SetBrush(wxBrush(kAppBg));
         dc.DrawRectangle(0, 0, sz.x, sz.y);
 
         const int radius = sz.y / 2;
-        dc.SetBrush(wxBrush(kTrack));
+        dc.SetBrush(wxBrush(kBorder));
         dc.DrawRoundedRectangle(0, 0, sz.x, sz.y, radius);
 
         dc.SetBrush(wxBrush(active_));
@@ -267,11 +256,11 @@ private:
 
 TransferProgressPanel::TransferProgressPanel(wxWindow* parent)
     : wxPanel(parent, wxID_ANY) {
-    SetBackgroundColour(kStatusBar);
+    SetBackgroundColour(kSurface);
     auto* root = new wxBoxSizer(wxVERTICAL);
 
     auto* head_row = new wxBoxSizer(wxHORIZONTAL);
-    head_row->Add(MakeLabel(this, "Status", kStatusLabel, 10, wxFONTWEIGHT_BOLD),
+    head_row->Add(MakeLabel(this, "Status", kMuted, 10, wxFONTWEIGHT_BOLD),
                   0,
                   wxALIGN_CENTER_VERTICAL);
     head_row->AddStretchSpacer(1);
@@ -281,7 +270,7 @@ TransferProgressPanel::TransferProgressPanel(wxWindow* parent)
 
     auto* bar_row = new wxBoxSizer(wxHORIZONTAL);
     bar_ = new ThemeProgressBar(this);
-    bar_->SetBackgroundColour(kStatusBar);
+    bar_->SetBackgroundColour(kSurface);
     bar_row->Add(bar_, 1, wxALIGN_CENTER_VERTICAL);
     percent_label_ = MakeLabel(this, "", kText, 12, wxFONTWEIGHT_BOLD);
     percent_label_->SetMinSize(wxSize(48, -1));
@@ -301,7 +290,7 @@ TransferProgressPanel::TransferProgressPanel(wxWindow* parent)
 
     reset_row_ = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
     reset_row_->SetBackgroundStyle(wxBG_STYLE_PAINT);
-    reset_row_->SetBackgroundColour(kStatusBar);
+    reset_row_->SetBackgroundColour(kSurface);
     reset_row_->SetMinSize(wxSize(-1, 36));
     reset_row_->SetCursor(wxCursor(wxCURSOR_HAND));
     auto* reset_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -316,7 +305,7 @@ TransferProgressPanel::TransferProgressPanel(wxWindow* parent)
         if (sz.x <= 0 || sz.y <= 0) {
             return;
         }
-        dc.SetPen(wxPen(kTrack));
+        dc.SetPen(wxPen(kBorder));
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         dc.DrawRoundedRectangle(0, 0, sz.x - 1, sz.y - 1, 8);
         event.Skip();
@@ -460,10 +449,10 @@ void TransferProgressPanel::ApplyState(bool busy,
         }
 
         case Phase::Complete:
-            bar_->SetActiveColour(kSuccess);
+            bar_->SetActiveColour(kOk);
             bar_->SetFraction(1.0);
             percent_label_->SetLabel("100%");
-            percent_label_->SetForegroundColour(kSuccess);
+            percent_label_->SetForegroundColour(kOk);
             if (bytes_total > 0) {
                 if (!transfer_label.empty()) {
                     bytes_label_->SetLabel(
@@ -484,7 +473,7 @@ void TransferProgressPanel::ApplyState(bool busy,
             } else {
                 message_label_->SetLabel("File delivered successfully.");
             }
-            message_label_->SetForegroundColour(kSuccess);
+            message_label_->SetForegroundColour(kOk);
             break;
 
         case Phase::Failed: {

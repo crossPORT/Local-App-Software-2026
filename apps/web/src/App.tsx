@@ -7,6 +7,7 @@ import { RosterPanel } from './components/RosterPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TransferProgressPanel } from './components/TransferProgressPanel';
 import { useRocketBox } from './hooks/useRocketBox';
+import { fabricSimEnabled } from '../sim/fabric_sim';
 
 /** Root RocketBox shell — peers, USB connect, transfer progress. */
 export function App() {
@@ -20,6 +21,7 @@ export function App() {
     disconnectUsb,
     forgetUsb,
     recoverUsb,
+    startSimulation,
     saveIdentity,
     sendToPeer,
     acceptOffer,
@@ -29,26 +31,35 @@ export function App() {
   } = useRocketBox();
 
   if (!state) {
-    return <div className="app loading">Loading RocketBox App…</div>;
+    return <div className="app loading">Loading RocketBox Transfer…</div>;
   }
 
   return (
     <div className="app">
-      <Header
-        state={state}
-        ledPulse={ledPulse}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenEventLog={() => setEventLogOpen(true)}
-      />
+      <Header onOpenSettings={() => setSettingsOpen(true)} />
       <div className="app-main">
-        <ConnectionPanel state={state} usbDescription={usbDescription}>
+        <ConnectionPanel
+          state={state}
+          ledPulse={ledPulse}
+          usbDescription={usbDescription}
+          disconnectedHint={
+            fabricSimEnabled()
+              ? 'Using the simulated RocketBox — connecting a virtual cable and partner.'
+              : undefined
+          }
+        >
           {!state.usbConnected ? (
             <div className="connect-actions">
               <button type="button" className="primary connect-btn" onClick={() => void recoverUsb()}>
-                Connect USB
+                Connect this system
               </button>
+              {!fabricSimEnabled() && (
+                <button type="button" className="disconnect-btn" onClick={() => void startSimulation()}>
+                  Simulate hardware
+                </button>
+              )}
               <button type="button" className="disconnect-btn" onClick={() => void forgetUsb()}>
-                Clear saved cable
+                Clear
               </button>
             </div>
           ) : (
