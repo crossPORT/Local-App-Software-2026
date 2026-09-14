@@ -2,19 +2,21 @@ import { theme } from '../lib/theme';
 import type { AppUiState } from '../lib/types';
 import { effectiveDisplayMbps, isOutboundHandshakeWait } from '../lib/format';
 import { ActivityMonitor } from './ActivityMonitor';
+import { ConnectionLed, deriveLinkLed } from './ConnectionLed';
 
-function deviceMetaLine(devicesSeen: number): string {
-  if (devicesSeen === 0) {
-    return 'No devices detected';
+function systemMetaLine(otherSystems: number): string {
+  if (otherSystems <= 0) {
+    return '';
   }
-  if (devicesSeen === 1) {
-    return 'Connected';
+  if (otherSystems === 1) {
+    return '1 other system on this fabric';
   }
-  return `${devicesSeen} devices — pick your cable in the USB dialog`;
+  return `${otherSystems} other systems on this fabric`;
 }
 
 interface ConnectionPanelProps {
   state: AppUiState;
+  ledPulse: boolean;
   usbDescription: string;
   disconnectedHint?: string;
   children?: React.ReactNode;
@@ -22,10 +24,13 @@ interface ConnectionPanelProps {
 
 export function ConnectionPanel({
   state,
+  ledPulse,
   usbDescription,
-  disconnectedHint = 'Plug in your USB cable, then click Connect USB below.',
+  disconnectedHint = 'Plug in your USB cable, then click Connect this system below.',
   children,
 }: ConnectionPanelProps) {
+  const led = deriveLinkLed(state.usbConnected, state.fabricConnected, state.busy);
+  const systemName = state.identity.display_name.trim() || usbDescription || 'This system';
   const connected = state.usbConnected && state.fabricConnected;
   const chartMbps =
     state.busy && !isOutboundHandshakeWait(state.statusMessage)
@@ -48,16 +53,19 @@ export function ConnectionPanel({
   return (
     <section className="connection-panel">
       <div className="section-label" style={{ color: theme.accent }}>
-        USB device
+        This system
+      </div>
+      <div className="system-name-row">
+        <ConnectionLed state={led} pulseOn={ledPulse} />
+        <span className="connection-device" style={{ color: theme.usbInk }}>
+          {systemName}
+        </span>
       </div>
       {connected ? (
         <>
-          <div className="connection-device" style={{ color: theme.text }}>
-            {usbDescription || 'USB cable connected'}
-          </div>
           {state.fabricDevicesSeen > 1 && (
-            <div className="connection-meta" style={{ color: theme.muted }}>
-              {deviceMetaLine(state.fabricDevicesSeen)}
+            <div className="connection-meta" style={{ color: theme.usbMuted }}>
+              {systemMetaLine(state.fabricDevicesSeen - 1)}
             </div>
           )}
           <ActivityMonitor
@@ -71,9 +79,9 @@ export function ConnectionPanel({
           />
         </>
       ) : (
-        <p className="connection-hint" style={{ color: theme.muted }}>
+        <p className="connection-hint" style={{ color: theme.usbMuted }}>
           {state.fabricDevicesSeen > 0
-            ? 'USB cable detected — click Connect USB and pick it in the browser dialog.'
+            ? 'USB cable detected — click Connect this system and pick it in the browser dialog.'
             : disconnectedHint}
         </p>
       )}

@@ -43,10 +43,10 @@ private:
     void OnSettingsMenu(wxCommandEvent& event);
     void OnUsbDiagnostics();
     void OnEventLog(wxWindow* parent = nullptr);
-    void OnEventLogMenu(wxCommandEvent& event);
     void OnResetConnection();
     void OnConnectUsb();
     void OnDisconnectUsb();
+    void OnClearSavedCable();
     int CountFabricDevices() const;
     void BuildMenuBar();
     void OnFirstShow(wxShowEvent& event);
@@ -64,9 +64,7 @@ private:
 
     RosterPanel* roster_panel_ = nullptr;
     TransferProgressPanel* progress_panel_ = nullptr;
-    wxStaticText* node_name_label_ = nullptr;
     wxStaticText* status_message_label_ = nullptr;
-    wxPanel* connection_indicator_ = nullptr;
     wxPanel* connection_card_ = nullptr;
     ConnectionPanel* connection_panel_ = nullptr;
     wxTimer* led_pulse_timer_ = nullptr;

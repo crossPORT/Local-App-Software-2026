@@ -73,7 +73,7 @@ export function statusLine(
     return { text: 'Plug in your USB cable, then connect below', colour: theme.warn };
   }
   if (!fabricConnected) {
-    return { text: 'Click Connect USB below', colour: theme.warn };
+    return { text: 'Click Connect this system below', colour: theme.warn };
   }
-  return { text: 'USB allowed — click Connect USB below', colour: theme.warn };
+  return { text: 'USB allowed — click Connect this system below', colour: theme.warn };
 }

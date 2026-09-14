@@ -10,8 +10,11 @@ import {
   createTransportSession,
   clearTransportSavedPairing,
   transportHasSavedSerial,
+  usbConnectBlockedReason,
 } from '../transport_factory';
-import { webUsbBlockedReason } from '../lib/webusb_env';
+import { systemNameForLeg } from '../lib/system_names';
+import { fabricSimEnabled, setFabricSimEnabled } from '../../sim/fabric_sim';
+import { startSimPartner, stopSimPartner } from '../../sim/sim_partner';
 
 export function identityNeedsSetup(identity: IdentityProfile): boolean {
   return !identity.display_name.trim();
@@ -136,8 +139,11 @@ export function useRocketBox() {
         return;
       }
       rosterRef.current.seedFromConfig(identity.peers);
+      const bootIdentity = fabricSimEnabled()
+        ? { ...identity, display_name: systemNameForLeg(identityPortHint) }
+        : identity;
       setState({
-        ...initialUiState(identity, identityPortHint),
+        ...initialUiState(bootIdentity, identityPortHint),
         roster: rosterRef.current.visiblePeers(false),
       });
     });
@@ -223,7 +229,9 @@ export function useRocketBox() {
       patch((prev) => {
         const mergedIdentity = {
           ...prev.identity,
-          display_name: prev.identity.display_name.trim() || legIdentity.display_name,
+          display_name: fabricSimEnabled()
+            ? systemNameForLeg(fabricPort)
+            : prev.identity.display_name.trim() || legIdentity.display_name,
           team: prev.identity.team.trim() || legIdentity.team,
           receive_status: prev.identity.receive_status || legIdentity.receive_status,
         };
@@ -242,13 +250,17 @@ export function useRocketBox() {
         void Notification.requestPermission();
       }
       promptSetupIfNeeded();
+      if (fabricSimEnabled()) {
+        ensureOrchestrator().startListener();
+        void startSimPartner();
+      }
     },
-    [patch, promptSetupIfNeeded],
+    [ensureOrchestrator, patch, promptSetupIfNeeded],
   );
 
   const connectUsb = useCallback(async () => {
     try {
-      const blocked = webUsbBlockedReason();
+      const blocked = usbConnectBlockedReason();
       if (blocked) {
         patchError(blocked);
         return;
@@ -279,7 +291,7 @@ export function useRocketBox() {
   const reconnectUsb = useCallback(
     async (pickerFallback = false) => {
       try {
-        const blocked = webUsbBlockedReason();
+        const blocked = usbConnectBlockedReason();
         if (blocked) {
           patchError(blocked);
           return;
@@ -368,18 +380,22 @@ export function useRocketBox() {
       reconnectAttemptedRef.current = true;
       return;
     }
-    if (!transportHasSavedSerial()) {
-      reconnectAttemptedRef.current = true;
+    reconnectAttemptedRef.current = true;
+    if (fabricSimEnabled()) {
+      void connectUsb();
       return;
     }
-    reconnectAttemptedRef.current = true;
+    if (!transportHasSavedSerial()) {
+      return;
+    }
     void reconnectUsb();
-  }, [state, state?.usbConnected, reconnectUsb]);
+  }, [connectUsb, reconnectUsb, state, state?.usbConnected]);
 
   const disconnectUsb = useCallback(async () => {
     disconnectingRef.current = true;
     sessionStorage.setItem(MANUAL_DISCONNECT_KEY, '1');
     orchestratorRef.current?.stopListener();
+    void stopSimPartner();
     try {
       await sessionRef.current.disconnect();
     } catch (err) {
@@ -400,6 +416,7 @@ export function useRocketBox() {
   const forgetUsb = useCallback(async () => {
     disconnectingRef.current = true;
     orchestratorRef.current?.stopListener();
+    void stopSimPartner();
     sessionStorage.setItem(MANUAL_DISCONNECT_KEY, '1');
     try {
       await sessionRef.current.forgetThisDevice();
@@ -469,6 +486,17 @@ export function useRocketBox() {
     await ensureOrchestrator().resetConnection();
   }, [clearTransferState, ensureOrchestrator]);
 
+  const startSimulation = useCallback(async () => {
+    setFabricSimEnabled(true);
+    orchestratorRef.current?.stopListener();
+    orchestratorRef.current = null;
+    await stopSimPartner();
+    sessionRef.current = createTransportSession();
+    sessionStorage.removeItem(MANUAL_DISCONNECT_KEY);
+    clearTransportSavedPairing();
+    await connectUsb();
+  }, [connectUsb]);
+
   return {
     state,
     settingsOpen,
@@ -485,6 +513,7 @@ export function useRocketBox() {
     declineOffer,
     recoverUsb,
     resetTransfer,
+    startSimulation,
     patch,
   };
 }

@@ -814,7 +814,7 @@ export class WebTransferOrchestrator {
       return;
     }
     if (!this.usb.connected) {
-      this.callbacks.patch({ errorMessage: 'Connect USB first' });
+      this.callbacks.patch({ errorMessage: 'Connect this system first' });
       return;
     }
     if (this.pendingInbound) {

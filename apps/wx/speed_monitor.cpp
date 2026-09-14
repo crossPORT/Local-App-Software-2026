@@ -1,6 +1,7 @@
 #include "speed_monitor.h"
 
 #include "link_status.h"
+#include "ui_colours.h"
 
 #include <algorithm>
 #include <sstream>
@@ -8,15 +9,6 @@
 #include <wx/sizer.h>
 
 namespace {
-
-const wxColour kMonitorBg(0x0f, 0x16, 0x20);
-const wxColour kSessionBar(0x5b, 0x9f, 0xd4);
-const wxColour kTransferBar(0x00, 0xd4, 0xaa);
-const wxColour kMonitorBorder(0x24, 0x30, 0x42);
-const wxColour kLegendText(0x88, 0x99, 0xaa);
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
-const wxColour kAccent(0x00, 0xd4, 0xaa);
 
 constexpr int kHeadPad = 6;
 constexpr int kFramePad = 1;
@@ -104,7 +96,7 @@ void SpeedMonitor::OnPaint(wxPaintEvent&) {
     if (sz.x <= 0 || sz.y <= 0) {
         return;
     }
-    dc.SetPen(wxPen(kMonitorBorder));
+    dc.SetPen(wxPen(kBorder));
     dc.SetBrush(wxBrush(kMonitorBg));
     dc.DrawRoundedRectangle(kFramePad, kFramePad, sz.x - kFramePad * 2, sz.y - kFramePad * 2, 8);
 }
@@ -406,14 +398,14 @@ void SpeedMonitorChart::OnPaint(wxPaintEvent&) {
         wxFont hint = dc.GetFont();
         hint.SetPointSize(9);
         dc.SetFont(hint);
-        dc.SetTextForeground(kLegendText);
+        dc.SetTextForeground(kMuted);
         dc.DrawText("Waiting for USB activity…", pad_x, plot_top + std::max(0, plot_h / 2 - 6));
     }
 
     wxFont legend = dc.GetFont();
     legend.SetPointSize(10);
     dc.SetFont(legend);
-    dc.SetTextForeground(kLegendText);
+    dc.SetTextForeground(kMuted);
 
     const wxSize session_ext = dc.GetTextExtent("session");
     const int swatch = 8;

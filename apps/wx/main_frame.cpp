@@ -2,6 +2,7 @@
 
 #include "app_icon.h"
 #include "booth_log.h"
+#include "ui_colours.h"
 #include "connection_panel.h"
 #include "fabric_device_picker.h"
 #include "session_handshake.h"
@@ -11,6 +12,7 @@
 #include "platform_util.h"
 #include "roster_panel.h"
 #include "settings_dialog.h"
+#include "system_names.h"
 #include "transfer_progress_panel.h"
 #include "event_log_dialog.h"
 #include "usb_transfer.h"
@@ -36,18 +38,6 @@
 #include <libusb-1.0/libusb.h>
 
 namespace {
-
-const wxColour kBg(0x0f, 0x14, 0x19);
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
-const wxColour kAccent(0x00, 0xd4, 0xaa);
-const wxColour kError(0xff, 0x6b, 0x6b);
-const wxColour kWarn(0xff, 0x9f, 0x43);
-const wxColour kOk(0x3d, 0xdb, 0x8a);
-const wxColour kHeader(0x1a, 0x23, 0x32);
-const wxColour kIconBox(0x12, 0x18, 0x22);
-const wxColour kCard(0x12, 0x18, 0x22);
-const wxColour kBorder(0x24, 0x30, 0x42);
 
 wxColour StatusColourToWx(StatusColour colour) {
     switch (colour) {
@@ -78,11 +68,11 @@ wxStaticText* MakeLabel(wxWindow* parent, const wxString& text, const wxColour& 
 class IconButton : public wxPanel {
 public:
     explicit IconButton(wxWindow* parent, wxWindowID id)
-        : wxPanel(parent, id, wxDefaultPosition, wxSize(32, 32), wxBORDER_NONE) {
-        SetMinSize(wxSize(32, 32));
-        SetMaxSize(wxSize(32, 32));
+        : wxPanel(parent, id, wxDefaultPosition, wxSize(44, 44), wxBORDER_NONE) {
+        SetMinSize(wxSize(44, 44));
+        SetMaxSize(wxSize(44, 44));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
-        SetBackgroundColour(kHeader);
+        SetBackgroundColour(kAppBg);
         SetCursor(wxCursor(wxCURSOR_HAND));
         Bind(wxEVT_PAINT, &IconButton::OnPaint, this);
     }
@@ -92,26 +82,26 @@ private:
         wxAutoBufferedPaintDC dc(this);
         const wxSize sz = GetClientSize();
         dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.SetBrush(wxBrush(kHeader));
+        dc.SetBrush(wxBrush(kAppBg));
         dc.DrawRectangle(0, 0, sz.x, sz.y);
-        dc.SetPen(wxPen(kBorder));
+        dc.SetPen(wxPen(kMuted, 1));
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
-        dc.DrawRoundedRectangle(0, 0, sz.x, sz.y, 8);
+        dc.DrawCircle(sz.x / 2, sz.y / 2, (std::min(sz.x, sz.y) / 2) - 2);
 
-        dc.SetPen(wxPen(kMuted));
+        dc.SetPen(wxPen(kText, 2));
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         const int cx = sz.x / 2;
         const int cy = sz.y / 2;
-        dc.DrawCircle(cx, cy, 6);
+        dc.DrawCircle(cx, cy, 8);
         for (int i = 0; i < 8; ++i) {
             const double angle = i * 3.141592653589793 / 4.0;
-            const int x1 = cx + static_cast<int>(7.0 * std::cos(angle));
-            const int y1 = cy + static_cast<int>(7.0 * std::sin(angle));
-            const int x2 = cx + static_cast<int>(10.0 * std::cos(angle));
-            const int y2 = cy + static_cast<int>(10.0 * std::sin(angle));
+            const int x1 = cx + static_cast<int>(10.0 * std::cos(angle));
+            const int y1 = cy + static_cast<int>(10.0 * std::sin(angle));
+            const int x2 = cx + static_cast<int>(14.0 * std::cos(angle));
+            const int y2 = cy + static_cast<int>(14.0 * std::sin(angle));
             dc.DrawLine(x1, y1, x2, y2);
         }
-        dc.DrawCircle(cx, cy, 2);
+        dc.DrawCircle(cx, cy, 3);
     }
 };
 
@@ -147,52 +137,6 @@ private:
     int radius_;
 };
 
-class ConnectionLedPanel : public wxPanel {
-public:
-    ConnectionLedPanel(wxWindow* parent)
-        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(14, 14), wxBORDER_NONE) {
-        SetMinSize(wxSize(14, 14));
-        SetMaxSize(wxSize(14, 14));
-        SetBackgroundStyle(wxBG_STYLE_PAINT);
-        SetBackgroundColour(parent->GetBackgroundColour());
-        Bind(wxEVT_PAINT, &ConnectionLedPanel::OnPaint, this);
-    }
-
-    void SetLedColour(const wxColour& colour) {
-        if (colour_ != colour) {
-            colour_ = colour;
-            Refresh();
-        }
-    }
-
-private:
-    void OnPaint(wxPaintEvent&) {
-        wxAutoBufferedPaintDC dc(this);
-        const wxSize sz = GetClientSize();
-        dc.SetPen(wxPen(wxColour(255, 255, 255, 38)));
-        dc.SetBrush(wxBrush(colour_));
-        dc.DrawRectangle(0, 0, sz.x, sz.y);
-    }
-
-    wxColour colour_{kError};
-};
-
-ConnectionLedPanel* MakeConnectionIndicator(wxWindow* parent) {
-    auto* indicator = new ConnectionLedPanel(parent);
-    indicator->SetToolTip("Offline");
-    return indicator;
-}
-
-void SetConnectionIndicator(ConnectionLedPanel* indicator,
-                             const wxColour& colour,
-                             const wxString& tooltip) {
-    if (!indicator) {
-        return;
-    }
-    indicator->SetLedColour(colour);
-    indicator->SetToolTip(tooltip);
-}
-
 }  // namespace
 
 enum {
@@ -200,7 +144,6 @@ enum {
     ID_SettingsBtn,
     ID_LoopbackDev,
     ID_UsbDiagnostics,
-    ID_EventLog,
     ID_LedPulseTimer,
     ID_ShutdownPollTimer,
 };
@@ -219,7 +162,6 @@ void HandleTermSignal(int) {
 wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_SHOW(MainFrame::OnFirstShow)
     EVT_MENU(ID_Settings, MainFrame::OnSettingsMenu)
-    EVT_MENU(ID_EventLog, MainFrame::OnEventLogMenu)
     EVT_TIMER(ID_LedPulseTimer, MainFrame::OnLedPulseTimer)
     EVT_TIMER(ID_ShutdownPollTimer, MainFrame::OnShutdownPollTimer)
     EVT_CLOSE(MainFrame::OnClose)
@@ -228,17 +170,20 @@ wxEND_EVENT_TABLE()
 MainFrame::MainFrame(const std::string& config_path, int cli_port_index)
     : wxFrame(nullptr,
               wxID_ANY,
-              "RocketBox App",
+              "RocketBox Transfer",
               wxDefaultPosition,
               wxDefaultSize)
     , cli_port_index_(cli_port_index)
     , config_path_(config_path) {
-    SetBackgroundColour(kBg);
+    SetBackgroundColour(kAppBg);
 
     const int config_port = cli_port_index_ >= 0 ? cli_port_index_ : 0;
     load_identity_profile(config_port, config_path_, identity_);
     if (!identity_.config_path.empty()) {
         config_path_ = identity_.config_path;
+    }
+    if (std::getenv("ROCKETBOX_SIM")) {
+        identity_.display_name = system_name_for_leg(config_port);
     }
 
     UpdateWindowTitle();
@@ -251,6 +196,18 @@ MainFrame::MainFrame(const std::string& config_path, int cli_port_index)
                                 0,
                                 false,
                                 0);
+    connection_panel_->ApplyState(false,
+                                  config_port,
+                                  0,
+                                  identity_.display_name,
+                                  false,
+                                  0.0,
+                                  0.0,
+                                  0.0,
+                                  0,
+                                  0,
+                                  {},
+                                  {});
 
     Layout();
     const wxSize fit = GetSizer()->ComputeFittingClientSize(this);
@@ -293,7 +250,7 @@ void MainFrame::OnFirstShow(wxShowEvent& event) {
                 false,
                 -1,
                 devices,
-                {},
+                identity_.display_name,
                 false,
                 0.0,
                 0.0,
@@ -302,7 +259,7 @@ void MainFrame::OnFirstShow(wxShowEvent& event) {
                 0,
                 {},
                 devices > 0 ? "USB cable detected — choose it when prompted."
-                            : "No USB cable selected — plug in your device and click Connect USB.");
+                            : "No USB cable selected — plug in your cable and click Connect this system.");
         }
         FitToContent();
         return;
@@ -391,7 +348,6 @@ void MainFrame::BuildMenuBar() {
     auto* menu_bar = new wxMenuBar();
     auto* file_menu = new wxMenu();
     file_menu->Append(ID_Settings, "Settings\tCtrl+,");
-    file_menu->Append(ID_EventLog, "Log\tCtrl+L");
 
     menu_bar->Append(file_menu, "&File");
     SetMenuBar(menu_bar);
@@ -399,31 +355,42 @@ void MainFrame::BuildMenuBar() {
 
 void MainFrame::BuildUi() {
     auto* root_panel = new wxPanel(this, wxID_ANY);
-    root_panel->SetBackgroundColour(kHeader);
+    root_panel->SetBackgroundColour(kAppBg);
     auto* root = new wxBoxSizer(wxVERTICAL);
 
     auto* header = new wxPanel(root_panel, wxID_ANY);
-    header->SetBackgroundColour(kHeader);
+    header->SetBackgroundColour(kAppBg);
     auto* header_sizer = new wxBoxSizer(wxVERTICAL);
     auto* title_row = new wxBoxSizer(wxHORIZONTAL);
 
-    auto* icon_box = new RoundedPanel(header, kIconBox, kIconBox, 8);
-    icon_box->SetMinSize(wxSize(36, 36));
-    icon_box->SetMaxSize(wxSize(36, 36));
+    auto* icon_box = new RoundedPanel(header, kAppBg, kAppBg, 8);
+    icon_box->SetMinSize(wxSize(80, 80));
+    icon_box->SetMaxSize(wxSize(80, 80));
     auto* icon_sizer = new wxBoxSizer(wxVERTICAL);
-    wxBitmap header_icon;
-    const wxIcon app_icon = LoadRocketBoxIcon();
-    if (app_icon.IsOk()) {
-        header_icon = wxBitmap(app_icon);
-        constexpr int kHeaderIconPx = 24;
-        if (header_icon.GetWidth() != kHeaderIconPx || header_icon.GetHeight() != kHeaderIconPx) {
-            header_icon = wxBitmap(
-                header_icon.ConvertToImage().Scale(kHeaderIconPx, kHeaderIconPx, wxIMAGE_QUALITY_HIGH));
+    wxBitmap header_icon = LoadRocketBoxLogoBitmap();
+    if (!header_icon.IsOk()) {
+        const wxIcon app_icon = LoadRocketBoxIcon();
+        if (app_icon.IsOk()) {
+            header_icon = wxBitmap(app_icon);
+        }
+    }
+    if (header_icon.IsOk()) {
+        constexpr int kHeaderIconPx = 80;
+        wxImage scaled = header_icon.ConvertToImage();
+        const int src_w = scaled.GetWidth();
+        const int src_h = scaled.GetHeight();
+        if (src_w > 0 && src_h > 0 && (src_w > kHeaderIconPx || src_h > kHeaderIconPx)) {
+            const double factor = std::min(static_cast<double>(kHeaderIconPx) / src_w,
+                                           static_cast<double>(kHeaderIconPx) / src_h);
+            scaled.Rescale(std::max(1, static_cast<int>(src_w * factor)),
+                           std::max(1, static_cast<int>(src_h * factor)),
+                           wxIMAGE_QUALITY_HIGH);
+            header_icon = wxBitmap(scaled);
         }
     }
     if (header_icon.IsOk()) {
         auto* icon_bitmap = new wxStaticBitmap(icon_box, wxID_ANY, header_icon);
-        icon_bitmap->SetBackgroundColour(kIconBox);
+        icon_bitmap->SetBackgroundColour(kAppBg);
         icon_sizer->AddStretchSpacer();
         icon_sizer->Add(icon_bitmap, 0, wxALIGN_CENTER_HORIZONTAL);
         icon_sizer->AddStretchSpacer();
@@ -431,31 +398,33 @@ void MainFrame::BuildUi() {
     icon_box->SetSizer(icon_sizer);
 
     auto* brand_block = new wxBoxSizer(wxVERTICAL);
-    auto* brand_row = new wxBoxSizer(wxHORIZONTAL);
-
-    auto* brand_label = MakeLabel(header, "RocketBox App", kText, 14);
+    wxBitmap wordmark = LoadRocketBoxWordmarkBitmap();
+    if (wordmark.IsOk()) {
+        wxImage word_img = wordmark.ConvertToImage();
+        const int src_w = word_img.GetWidth();
+        const int src_h = word_img.GetHeight();
+        if (src_w > 0 && src_h > 0) {
+            const int dest_w = 200;
+            const int dest_h = std::max(1, src_h * dest_w / src_w);
+            word_img.Rescale(dest_w, dest_h, wxIMAGE_QUALITY_HIGH);
+            wordmark = wxBitmap(word_img);
+        }
+        auto* wordmark_bmp = new wxStaticBitmap(header, wxID_ANY, wordmark);
+        wordmark_bmp->SetBackgroundColour(kAppBg);
+        brand_block->Add(wordmark_bmp, 0, wxALIGN_LEFT);
+    }
+    auto* brand_label = MakeLabel(header, "Transfer", kText, 22);
     {
         wxFont font = brand_label->GetFont();
         font.SetWeight(wxFONTWEIGHT_BOLD);
         brand_label->SetFont(font);
     }
-    brand_row->Add(brand_label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-
-    node_name_label_ = MakeLabel(header,
-                                 wxString::FromUTF8(identity_.display_name.c_str()),
-                                 kMuted,
-                                 12);
-    brand_row->Add(node_name_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-
-    connection_indicator_ = MakeConnectionIndicator(header);
-    brand_row->Add(connection_indicator_, 0, wxALIGN_CENTER_VERTICAL);
-
-    brand_block->Add(brand_row, 0, wxEXPAND);
-    status_message_label_ = MakeLabel(header, "Plug in your USB cable", kWarn, 11);
-    brand_block->Add(status_message_label_, 0, wxTOP, 8);
+    brand_block->Add(brand_label, 0, wxALIGN_LEFT);
+    status_message_label_ = MakeLabel(header, wxEmptyString, kWarn, 11);
+    status_message_label_->Hide();
 
     title_row->Add(icon_box, 0, wxALIGN_TOP | wxLEFT | wxTOP, 12);
-    title_row->Add(brand_block, 1, wxEXPAND | wxLEFT | wxTOP, 10);
+    title_row->Add(brand_block, 1, wxALIGN_BOTTOM | wxLEFT, 10);
 
     auto* settings_btn = new IconButton(header, ID_SettingsBtn);
     settings_btn->SetToolTip("Settings");
@@ -463,17 +432,18 @@ void MainFrame::BuildUi() {
     title_row->Add(settings_btn, 0, wxALIGN_TOP | wxRIGHT | wxTOP, 12);
 
     header_sizer->Add(title_row, 0, wxEXPAND);
-    RenderConnectionIndicator();
 
-    connection_card_ = new RoundedPanel(header, kCard, kBorder, 10);
+    connection_card_ = new RoundedPanel(header, kUsbCard, kUsbCardBorder, 16);
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
     connection_panel_ = new ConnectionPanel(connection_card_);
     connection_panel_->SetActionHandlers([this]() { OnConnectUsb(); },
-                                         [this]() { OnDisconnectUsb(); });
+                                         [this]() { OnDisconnectUsb(); },
+                                         [this]() { OnClearSavedCable(); });
     connection_panel_->SetLayoutChangedHandler([this]() { GrowToFitContent(); });
     card_sizer->Add(connection_panel_, 0, wxEXPAND | wxALL, 18);
     connection_card_->SetSizer(card_sizer);
     header_sizer->Add(connection_card_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 14);
+    RenderConnectionIndicator();
 
     roster_panel_ = new RosterPanel(
         header,
@@ -502,14 +472,11 @@ void MainFrame::BuildUi() {
 }
 
 void MainFrame::UpdateWindowTitle() {
-    SetTitle(wxString::FromUTF8(("RocketBox App — " + identity_.display_name).c_str()));
-    if (node_name_label_) {
-        node_name_label_->SetLabel(wxString::FromUTF8(identity_.display_name.c_str()));
-    }
+    SetTitle(wxString::FromUTF8(("RocketBox Transfer — " + identity_.display_name).c_str()));
 }
 
 void MainFrame::RenderConnectionIndicator() {
-    if (!connection_indicator_) {
+    if (!connection_panel_) {
         return;
     }
     wxColour colour = kError;
@@ -525,16 +492,14 @@ void MainFrame::RenderConnectionIndicator() {
             break;
         case LinkLed::Connected:
             colour = kOk;
-            tooltip = "Device connected";
+            tooltip = "System connected";
             break;
         case LinkLed::Transferring:
             colour = led_pulse_on_ ? kOk : wxColour(0x2a, 0x9d, 0x6f);
             tooltip = "Transfer in progress";
             break;
     }
-    SetConnectionIndicator(static_cast<ConnectionLedPanel*>(connection_indicator_),
-                           colour,
-                           tooltip);
+    connection_panel_->SetLinkLed(colour, tooltip);
 }
 
 void MainFrame::SyncLedPulseTimer(bool pulse) {
@@ -595,7 +560,7 @@ void MainFrame::UpdateConnectionStatus(const OrchestratorUiState& state) {
         connection_panel_->ApplyState(state.fabric_connected,
                                       fabric_port,
                                       state.fabric_devices_seen,
-                                      state.fabric_device_label,
+                                      identity_.display_name,
                                       state.busy,
                                       state.live_mbps,
                                       state.booth_display_mib_s,
@@ -615,6 +580,9 @@ void MainFrame::ApplyOrchestratorState(const OrchestratorUiState& state) {
     identity_ = state.identity;
     if (state.fabric_port_index >= 0) {
         port_index_ = state.fabric_port_index;
+    }
+    if (std::getenv("ROCKETBOX_SIM") && port_index_ >= 0) {
+        identity_.display_name = system_name_for_leg(port_index_);
     }
 
     if (modal_depth_ > 0) {
@@ -796,14 +764,14 @@ std::vector<std::string> MainFrame::PromptForSendPaths() {
                  wxDefaultPosition,
                  wxDefaultSize,
                  wxDEFAULT_DIALOG_STYLE | wxSTAY_ON_TOP);
-    dlg.SetBackgroundColour(kBg);
+    dlg.SetBackgroundColour(kAppBg);
 
     auto* prompt = MakeLabel(&dlg, "What would you like to send?", kText, 11);
     auto* files_btn = new wxButton(&dlg, ID_ChooseFiles, "Choose files...");
     auto* folder_btn = new wxButton(&dlg, ID_ChooseFolder, "Choose folder...");
     auto* cancel_btn = new wxButton(&dlg, wxID_CANCEL, "Cancel");
     for (wxButton* btn : {files_btn, folder_btn, cancel_btn}) {
-        btn->SetBackgroundColour(kCard);
+        btn->SetBackgroundColour(kSurface);
         btn->SetForegroundColour(kText);
         const wxSize best = btn->GetBestSize();
         btn->SetMinSize(wxSize(std::max(best.GetWidth() + 12, 88), std::max(best.GetHeight(), 28)));
@@ -945,7 +913,7 @@ void MainFrame::OnUsbDiagnostics() {
          << handshake_timing_from_identity(identity_).ready_timeout_sec
          << "s\n"
          << "Event log: " << booth_log_path() << "\n"
-         << "(View → Event Log or Settings → Event log…)";
+         << "(Settings → Event log…)";
     wxMessageBox(wxString::FromUTF8(text.str().c_str()),
                  "USB diagnostics",
                  wxOK | wxICON_INFORMATION,
@@ -959,6 +927,11 @@ void MainFrame::OnResetConnection() {
     std::thread([this]() {
         orchestrator_->reset_connection();
     }).detach();
+}
+
+void MainFrame::OnClearSavedCable() {
+    port_index_ = -1;
+    cli_port_index_ = -1;
 }
 
 void MainFrame::OnConnectUsb() {
@@ -977,7 +950,7 @@ void MainFrame::OnConnectUsb() {
             connection_panel_->ApplyState(false,
                                           -1,
                                           devices,
-                                          {},
+                                          identity_.display_name,
                                           false,
                                           0.0,
                                           0.0,
@@ -1021,7 +994,7 @@ void MainFrame::OnDisconnectUsb() {
         connection_panel_->ApplyState(false,
                                       -1,
                                       last_fabric_devices_seen_,
-                                      {},
+                                      identity_.display_name,
                                       false,
                                       0.0,
                                       0.0,
@@ -1046,10 +1019,6 @@ void MainFrame::OnDisconnectUsb() {
                                 {},
                                 {});
     GrowToFitContent();
-}
-
-void MainFrame::OnEventLogMenu(wxCommandEvent&) {
-    OnEventLog(this);
 }
 
 void MainFrame::OnEventLog(wxWindow* parent) {

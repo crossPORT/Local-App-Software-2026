@@ -1,13 +1,12 @@
 #include "incoming_dialog.h"
 
+#include "ui_colours.h"
+
 #include <iomanip>
 #include <sstream>
 #include <wx/sizer.h>
 
 namespace {
-
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
 
 std::string format_bytes(uint64_t bytes) {
     if (bytes < 1024) {
@@ -47,6 +46,7 @@ IncomingDialog::IncomingDialog(wxWindow* parent,
                wxDEFAULT_DIALOG_STYLE | wxSTAY_ON_TOP)
     , on_decision_(std::move(on_decision))
     , countdown_timer_(this) {
+    SetBackgroundColour(kAppBg);
     const auto& msg = offer.message;
     auto* root = new wxBoxSizer(wxVERTICAL);
 

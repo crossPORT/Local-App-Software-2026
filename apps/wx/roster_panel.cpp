@@ -2,6 +2,8 @@
 
 #include "fabric_port.h"
 #include "link_status.h"
+#include "system_names.h"
+#include "ui_colours.h"
 
 #include <algorithm>
 #include <chrono>
@@ -15,20 +17,6 @@
 #include <wx/filedlg.h>
 #include <wx/sizer.h>
 #include <wx/display.h>
-
-const wxColour kPanel(0x1a, 0x23, 0x32);
-const wxColour kRow(0x12, 0x18, 0x22);
-const wxColour kRowSelected(0x1c, 0x2a, 0x38);
-const wxColour kDropZone(0x0f, 0x16, 0x20);
-const wxColour kDropZoneActive(0x0f, 0x20, 0x18);
-const wxColour kText(0xf0, 0xf4, 0xf8);
-const wxColour kMuted(0x88, 0x99, 0xaa);
-const wxColour kSubText(0xa8, 0xb8, 0xc8);
-const wxColour kAccent(0x00, 0xd4, 0xaa);
-const wxColour kOnlineDot(0x3d, 0xdb, 0x8a);
-const wxColour kOfflineDot(0x5a, 0x6a, 0x7a);
-const wxColour kOfflineRow(0x10, 0x14, 0x1c);
-const wxColour kBorder(0x24, 0x30, 0x42);
 
 enum { ID_CountdownTimer = wxID_HIGHEST + 400 };
 
@@ -228,18 +216,18 @@ PeerDropZonePanel::PeerDropZonePanel(RosterPanel* roster,
     SetBackgroundStyle(wxBG_STYLE_PAINT);
     SetMinSize(wxSize(-1, kOnlineDropZoneHeight));
     SetMaxSize(wxSize(-1, kOnlineDropZoneHeight));
-    SetBackgroundColour(kRow);
+    SetBackgroundColour(kSurface);
 
     auto* outer = new wxBoxSizer(wxVERTICAL);
     body_ = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
-    body_->SetBackgroundColour(kDropZone);
+    body_->SetBackgroundColour(kInset);
     body_->SetMinSize(wxSize(-1, kOnlineDropZoneHeight - 4));
     body_->SetMaxSize(wxSize(-1, kOnlineDropZoneHeight - 4));
 
     auto* root = new wxBoxSizer(wxVERTICAL);
 
     hint_row_ = new wxPanel(body_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
-    hint_row_->SetBackgroundColour(kDropZone);
+    hint_row_->SetBackgroundColour(kInset);
     auto* hint_sizer = new wxBoxSizer(wxHORIZONTAL);
     hint_sizer->AddStretchSpacer();
     hint_label_ = MakeLabel(hint_row_, DropHintText(), kAccent, kDropHintFontPt);
@@ -249,7 +237,7 @@ PeerDropZonePanel::PeerDropZonePanel(RosterPanel* roster,
     hint_row_->SetSizer(hint_sizer);
 
     choose_btn_ = new wxButton(body_, wxID_ANY, "Choose file...");
-    choose_btn_->SetBackgroundColour(kRow);
+    choose_btn_->SetBackgroundColour(kSurface);
     choose_btn_->SetForegroundColour(kText);
     {
         const wxSize best = choose_btn_->GetBestSize();
@@ -275,15 +263,15 @@ void PeerDropZonePanel::UpdateDropZoneFill() {
     if (!body_) {
         return;
     }
-    wxColour fill = kDropZone;
+    wxColour fill = kInset;
     if (drag_active_) {
-        fill = kDropZoneActive;
+        fill = kDropActive;
     } else if (busy_) {
-        fill = wxColour(0x14, 0x1c, 0x28);
+        fill = kDropActive;
     }
     body_->SetBackgroundColour(fill);
     if (hint_row_) {
-        hint_row_->SetBackgroundColour(busy_ ? wxColour(0x14, 0x1c, 0x28) : fill);
+        hint_row_->SetBackgroundColour(busy_ ? kDropActive : fill);
     }
     if (hint_label_) {
         hint_label_->SetBackgroundColour(hint_row_ ? hint_row_->GetBackgroundColour() : fill);
@@ -437,10 +425,10 @@ void PeerDropZonePanel::OnPaint(wxPaintEvent&) {
 class PresenceDotPanel : public wxPanel {
 public:
     PresenceDotPanel(wxWindow* parent, const wxColour& colour)
-        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(8, 8), wxBORDER_NONE)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(14, 14), wxBORDER_NONE)
         , colour_(colour) {
-        SetMinSize(wxSize(8, 8));
-        SetMaxSize(wxSize(8, 8));
+        SetMinSize(wxSize(14, 14));
+        SetMaxSize(wxSize(14, 14));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         SetBackgroundColour(colour);
         Bind(wxEVT_PAINT, &PresenceDotPanel::OnPaint, this);
@@ -501,12 +489,12 @@ RosterPanel::RosterPanel(wxWindow* parent,
     , on_peer_selected_(std::move(on_peer_selected))
     , on_files_dropped_(std::move(on_files_dropped))
     , on_open_settings_(std::move(on_open_settings)) {
-    SetBackgroundColour(kPanel);
+    SetBackgroundColour(kAppBg);
 
     auto* root = new wxBoxSizer(wxVERTICAL);
 
     auto* section_row = new wxBoxSizer(wxHORIZONTAL);
-    section_title_label_ = MakeLabel(this, "Connected peers", kAccent, 11, wxFONTWEIGHT_BOLD);
+    section_title_label_ = MakeLabel(this, "Connected systems", kAccent, 11, wxFONTWEIGHT_BOLD);
     section_row->Add(section_title_label_, 0, wxALIGN_CENTER_VERTICAL);
     section_row->AddStretchSpacer();
     announce_label_ = MakeLabel(this, wxEmptyString, kSubText, 10);
@@ -515,14 +503,14 @@ RosterPanel::RosterPanel(wxWindow* parent,
     root->Add(section_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 16);
 
     peers_container_ = new wxPanel(this, wxID_ANY);
-    peers_container_->SetBackgroundColour(kPanel);
+    peers_container_->SetBackgroundColour(kAppBg);
     auto* container_sizer = new wxBoxSizer(wxVERTICAL);
     peers_empty_label_ = MakeLabel(peers_container_, "No peers online", kSubText, 11);
     peers_empty_label_->Wrap(520);
     container_sizer->Add(peers_empty_label_, 0, wxALL, 12);
 
     settings_inline_btn_ = new wxButton(peers_container_, wxID_ANY, "Open Settings");
-    settings_inline_btn_->SetBackgroundColour(kRow);
+    settings_inline_btn_->SetBackgroundColour(kSurface);
     settings_inline_btn_->SetForegroundColour(kText);
     {
         const wxSize best = settings_inline_btn_->GetBestSize();
@@ -541,7 +529,7 @@ RosterPanel::RosterPanel(wxWindow* parent,
     container_sizer->Add(peers_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 0);
     container_sizer->AddSpacer(10);
     peers_container_->SetSizer(container_sizer);
-    root->Add(peers_container_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 12);
+    root->Add(peers_container_, 0, wxEXPAND | wxTOP, 12);
     root->AddSpacer(8);
     SetSizer(root);
 
@@ -616,8 +604,7 @@ bool RosterPanel::LayoutNeedsRebuild(const std::vector<std::string>& slot_signat
 
 std::string RosterPanel::PeerSublineText(const PeerEntry& peer) const {
     std::ostringstream sub;
-    sub << receive_status_label(peer.receive_status) << " · port "
-        << display_port_from_leg(peer.port_index);
+    sub << receive_status_label(peer.receive_status);
     const std::string expires = peer_expires_label(peer.last_seen, std::chrono::steady_clock::now());
     if (!expires.empty()) {
         sub << " · " << expires;
@@ -642,7 +629,7 @@ void RosterPanel::UpdateEmptyState() {
 
     if (!fabric_connected_) {
         peers_empty_label_->SetLabel(identity_configured
-                                         ? "Connect USB to discover other stations"
+                                         ? "Connect this system to discover other systems"
                                          : "Set your name in Settings, then connect USB");
     }
 
@@ -718,14 +705,14 @@ void RosterPanel::RebuildList() {
             peer = *slot.peer;
         }
         const bool selected = !offline && peer.display_name == selected_peer_;
-        const wxColour row_fill = offline ? kOfflineRow : (selected ? kRowSelected : kRow);
+        const wxColour row_fill = offline ? kOfflineRow : (selected ? kSurfaceSelected : kSurface);
         const wxColour row_border = offline ? kBorder : (selected ? kAccent : kBorder);
 
         auto* row = new PeerRowPanel(peers_container_, row_fill, row_border, selected && !offline);
         auto* row_sizer = new wxBoxSizer(wxVERTICAL);
 
         auto* meta_row = new wxBoxSizer(wxHORIZONTAL);
-        auto* presence_dot = new PresenceDotPanel(row, offline ? kOfflineDot : kOnlineDot);
+        auto* presence_dot = new PresenceDotPanel(row, offline ? kOfflineDot : kOk);
         meta_row->Add(presence_dot, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
         meta_row->AddSpacer(10);
 
@@ -734,7 +721,7 @@ void RosterPanel::RebuildList() {
         wxString subtitle;
         wxStaticText* sub_label = nullptr;
         if (offline) {
-            title = wxString::Format("Port %d", display_port_from_leg(slot.leg));
+            title = wxString::FromUTF8(system_name_for_leg(slot.leg));
         } else {
             title = wxString::FromUTF8(peer.display_name.c_str());
             subtitle = wxString::FromUTF8(PeerSublineText(peer).c_str());

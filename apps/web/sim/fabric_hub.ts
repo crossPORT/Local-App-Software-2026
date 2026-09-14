@@ -136,12 +136,13 @@ export function fabricHubReset(): void {
 }
 
 export function fabricHubTransmit(fromSerial: string, data: Uint8Array): void {
-  const bus = ensureChannel();
-  if (!bus) {
-    throw new FabricUsbError('Sim fabric requires BroadcastChannel (use two browser tabs)');
-  }
   const copy = data.slice();
-  bus.postMessage({ type: 'transmit', fromSerial, data: copy.buffer });
+  for (const serial of SIM_CABLE_SERIALS) {
+    if (serial !== fromSerial) {
+      rxForSerial(serial).append(copy);
+    }
+  }
+  ensureChannel()?.postMessage({ type: 'transmit', fromSerial, data: copy.buffer });
 }
 
 export function fabricHubReceiveBuffer(serial: string): SimReceiveBuffer {

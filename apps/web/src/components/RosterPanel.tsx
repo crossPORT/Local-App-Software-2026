@@ -1,4 +1,4 @@
-import { displayPortFromLeg } from '../lib/fabric_port';
+import { systemNameForLeg } from '../lib/system_names';
 import { useEffect, useRef, useState } from 'react';
 import { collectDropFiles } from '../lib/collect_drop_files';
 import { isOutboundHandshakeWait, peerRosterLabel, receiveStatusLabel } from '../lib/format';
@@ -30,7 +30,7 @@ function rosterEmptyMessage(
 ): string {
   if (!fabricConnected) {
     return identityConfigured
-      ? 'Connect USB to discover other stations'
+      ? 'Connect this system to discover other systems'
       : 'Set your name in Settings, then connect USB';
   }
   return '';
@@ -85,7 +85,7 @@ export function RosterPanel({
   return (
     <section className="roster panel-inner">
       <div className="section-label" style={{ color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Connected peers</span>
+        <span>Connected systems</span>
         {fabricConnected && lastAnnounceMs > 0 && (
           <span
             style={{
@@ -136,7 +136,7 @@ export function RosterPanel({
               <PeerRow
                 key={`leg-${slot.leg}`}
                 peer={null}
-                label={`Port ${displayPortFromLeg(slot.leg)}`}
+                label={systemNameForLeg(slot.leg)}
                 offline
                 leg={slot.leg}
                 selected={false}
@@ -278,10 +278,10 @@ function PeerRow({
         </div>
         <div className="peer-sub" style={{ color: theme.muted }}>
           {offline ? (
-            <>Not connected — waiting for announce · port {displayPortFromLeg(leg)}</>
+            <>Not connected — waiting for announce</>
           ) : (
             <>
-              {receiveStatusLabel(peer!.receive_status)} · port {displayPortFromLeg(peer!.port_index)}
+              {receiveStatusLabel(peer!.receive_status)}
               {peer!.lastSeenMs > 0 && <> · {peerTimerLabel(peer!.lastSeenMs, now)}</>}
             </>
           )}

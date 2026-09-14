@@ -23,5 +23,5 @@ mkdir -p "$OUT_DIR"
 OUT_DMG="$OUT_DIR/RocketBox-${TAG}-macos.dmg"
 rm -f "$OUT_DMG"
 
-hdiutil create -volname "RocketBox App" -srcfolder "$APP" -ov -format UDZO "$OUT_DMG"
+hdiutil create -volname "RocketBox Transfer" -srcfolder "$APP" -ov -format UDZO "$OUT_DMG"
 echo "Created $OUT_DMG"

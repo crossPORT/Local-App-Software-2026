@@ -4,9 +4,17 @@ import {
   countUsbDevices,
   createRocketBoxUsbTransport,
   usbHasSavedSerial,
+  webUsbBlockedReason,
 } from '@rocketbox/sdk';
 import { fabricSimEnabled } from '../sim/fabric_sim';
 import { FabricSimSession } from '../sim/fabric_sim_session';
+
+export function usbConnectBlockedReason(): string | null {
+  if (fabricSimEnabled()) {
+    return null;
+  }
+  return webUsbBlockedReason();
+}
 
 export function createTransportSession(): FabricTransport {
   if (fabricSimEnabled()) {
@@ -31,6 +39,7 @@ export function transportHasSavedSerial(): boolean {
 
 export function clearTransportSavedPairing(): void {
   if (fabricSimEnabled()) {
+    FabricSimSession.clearSavedSerial();
     return;
   }
   clearUsbSavedPairing();

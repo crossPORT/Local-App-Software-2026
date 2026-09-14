@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=RocketBox App
+Name=RocketBox Transfer
 Comment=File transfer for RocketBox hardware
 Exec=RocketBox
 Icon=rocketbox

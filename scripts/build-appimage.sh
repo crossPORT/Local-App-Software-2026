@@ -25,12 +25,12 @@ exec "$HERE/usr/bin/RocketBox" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
 
-mkdir -p "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/scalable/apps"
-cp "$ROOT/cmake/icons/rocketbox.svg" "$APPDIR/usr/share/icons/hicolor/scalable/apps/rocketbox.svg"
+mkdir -p "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+cp "$ROOT/cmake/icons/rocketbox-256.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/rocketbox.png"
 cat > "$APPDIR/usr/share/applications/rocketbox.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=RocketBox App
+Name=RocketBox Transfer
 Exec=RocketBox
 Icon=rocketbox
 Categories=Utility;
@@ -46,7 +46,7 @@ OUTPUT_NAME="RocketBox-${TAG}-linux-x64.AppImage"
 cd "$WORKDIR"
 LDAI_OUTPUT="$OUTPUT_NAME" "$LINUXDEPLOY" --appdir "$APPDIR" --output appimage \
   --desktop-file="$APPDIR/usr/share/applications/rocketbox.desktop" \
-  --icon-file="$APPDIR/usr/share/icons/hicolor/scalable/apps/rocketbox.svg" \
+  --icon-file="$APPDIR/usr/share/icons/hicolor/256x256/apps/rocketbox.png" \
   --executable="$APPDIR/usr/bin/RocketBox"
 
 APPIMAGE="$WORKDIR/$OUTPUT_NAME"
