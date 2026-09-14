@@ -10,6 +10,7 @@ import {
   saveBoothOrigin,
 } from '../lib/pwa_url';
 import { theme } from '../lib/theme';
+import { BrandLockup } from './BrandLockup';
 
 export function LandingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -51,7 +52,7 @@ export function LandingPage() {
     void QRCode.toCanvas(canvas, pwaUrl, {
       width: 280,
       margin: 2,
-      color: { dark: '#020817', light: '#ffffff' },
+      color: { dark: theme.text, light: theme.bg },
     });
   }, [pwaUrl]);
 
@@ -74,10 +75,8 @@ export function LandingPage() {
     <div className="landing-page">
       <div className="landing-card">
         <div className="landing-brand">
-          <span className="landing-icon" aria-hidden>
-            🚀
-          </span>
-          <h1>RocketBox Transfer</h1>
+          <BrandLockup align="center" />
+          <h1 className="sr-only">RocketBox Transfer</h1>
           <p className="landing-tagline" style={{ color: theme.muted }}>
             Scan to open the transfer app on your phone or tablet
           </p>

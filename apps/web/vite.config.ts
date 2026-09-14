@@ -164,7 +164,7 @@ export default defineConfig({
     boothNetworkPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon.png', 'icon-192.png', 'icon-512.png', 'rocketbox-mark.png'],
       manifest: {
         name: 'RocketBox Transfer',
         short_name: 'RocketBox Transfer',
@@ -175,12 +175,6 @@ export default defineConfig({
         start_url: '/app',
         scope: '/',
         icons: [
-          {
-            src: 'favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
           {
             src: 'icon-192.png',
             sizes: '192x192',

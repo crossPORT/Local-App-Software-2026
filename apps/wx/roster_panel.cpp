@@ -1,5 +1,6 @@
 #include "roster_panel.h"
 
+#include "fabric_port.h"
 #include "link_status.h"
 #include "system_names.h"
 #include "ui_colours.h"

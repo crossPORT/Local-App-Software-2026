@@ -41,9 +41,8 @@ wxIcon LoadRocketBoxIcon() {
     wxIcon icon;
 
 #if defined(__WXMSW__)
-    wxFileName exe(wxStandardPaths::Get().GetExecutablePath());
-    exe.SetFullName(wxT("rocketbox.ico"));
-    if (TryLoadIcon(icon, exe.GetFullPath(), wxBITMAP_TYPE_ICO)) {
+    if (TryLoadIcon(icon, FileBesideExe(wxT("rocketbox.ico")), wxBITMAP_TYPE_ICO) ||
+        TryLoadIcon(icon, FileInSourceIcons(wxT("rocketbox.ico")), wxBITMAP_TYPE_ICO)) {
         return icon;
     }
 #elif defined(__WXOSX__)
@@ -53,19 +52,16 @@ wxIcon LoadRocketBoxIcon() {
         return icon;
     }
 #else
-    static const wxChar* kIconPaths[] = {
+    const wxString linux_paths[] = {
+        FileBesideExe(wxT("rocketbox.png")),
+        FileInSourceIcons(wxT("rocketbox-256.png")),
         wxT("/usr/share/icons/hicolor/256x256/apps/rocketbox.png"),
         wxT("/usr/share/pixmaps/rocketbox.png"),
     };
-    for (const wxChar* path : kIconPaths) {
+    for (const wxString& path : linux_paths) {
         if (TryLoadIcon(icon, path, wxBITMAP_TYPE_PNG)) {
             return icon;
         }
-    }
-    wxFileName exe(wxStandardPaths::Get().GetExecutablePath());
-    exe.SetFullName(wxT("rocketbox.png"));
-    if (TryLoadIcon(icon, exe.GetFullPath(), wxBITMAP_TYPE_PNG)) {
-        return icon;
     }
 #endif
 

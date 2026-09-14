@@ -34,6 +34,7 @@ if(APPLE)
 elseif(WIN32)
     # GUI subsystem: wxIMPLEMENT_APP supplies WinMain, not main().
     set_target_properties(rocketbox PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_sources(rocketbox PRIVATE "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.rc")
 endif()
 
 target_include_directories(rocketbox PRIVATE
@@ -58,6 +59,12 @@ add_custom_command(TARGET rocketbox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-wordmark.png"
         "$<TARGET_FILE_DIR:rocketbox>/rocketbox-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+        "$<TARGET_FILE_DIR:rocketbox>/rocketbox.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico"
+        "$<TARGET_FILE_DIR:rocketbox>/rocketbox.ico"
 )
 
 if(APPLE)
@@ -133,6 +140,11 @@ else()
     install(FILES
         "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
         DESTINATION share/icons/hicolor/256x256/apps
+        RENAME rocketbox.png
+    )
+    install(FILES
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+        DESTINATION share/pixmaps
         RENAME rocketbox.png
     )
     install(FILES
