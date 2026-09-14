@@ -138,7 +138,6 @@ export function RosterPanel({
                 peer={null}
                 label={systemNameForLeg(slot.leg)}
                 offline
-                leg={slot.leg}
                 selected={false}
                 busy={false}
                 statusMessage=""
@@ -166,7 +165,6 @@ function PeerRow({
   peer,
   label,
   offline,
-  leg = -1,
   selected,
   busy,
   statusMessage,
@@ -178,7 +176,6 @@ function PeerRow({
   peer: PeerEntry | null;
   label: string;
   offline: boolean;
-  leg?: number;
   selected: boolean;
   busy: boolean;
   statusMessage: string;
