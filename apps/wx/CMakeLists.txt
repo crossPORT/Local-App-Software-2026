@@ -49,25 +49,34 @@ target_link_libraries(rocketbox PRIVATE
 
 target_compile_features(rocketbox PRIVATE cxx_std_17)
 
-add_custom_command(TARGET rocketbox POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-logo.png"
-        "$<TARGET_FILE_DIR:rocketbox>/rocketbox-logo.png"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-mark.png"
-        "$<TARGET_FILE_DIR:rocketbox>/rocketbox-mark.png"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-wordmark.png"
-        "$<TARGET_FILE_DIR:rocketbox>/rocketbox-wordmark.png"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
-        "$<TARGET_FILE_DIR:rocketbox>/rocketbox.png"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico"
-        "$<TARGET_FILE_DIR:rocketbox>/rocketbox.ico"
-)
+if(NOT APPLE)
+    add_custom_command(TARGET rocketbox POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-logo.png"
+            "$<TARGET_FILE_DIR:rocketbox>/rocketbox-logo.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-mark.png"
+            "$<TARGET_FILE_DIR:rocketbox>/rocketbox-mark.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-wordmark.png"
+            "$<TARGET_FILE_DIR:rocketbox>/rocketbox-wordmark.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-256.png"
+            "$<TARGET_FILE_DIR:rocketbox>/rocketbox.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.ico"
+            "$<TARGET_FILE_DIR:rocketbox>/rocketbox.ico"
+    )
+endif()
 
 if(APPLE)
+    set(_rb_bundle_pngs
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-logo.png"
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-mark.png"
+        "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox-wordmark.png"
+    )
+    set_source_files_properties(${_rb_bundle_pngs} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(rocketbox PRIVATE ${_rb_bundle_pngs})
     set(_rb_icns "${CMAKE_SOURCE_DIR}/cmake/icons/rocketbox.icns")
     if(EXISTS "${_rb_icns}")
         set_source_files_properties("${_rb_icns}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)

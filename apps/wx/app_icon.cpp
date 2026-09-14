@@ -12,6 +12,10 @@ wxString FileBesideExe(const wxString& name) {
     return exe.GetFullPath();
 }
 
+wxString FileInResources(const wxString& name) {
+    return wxFileName(wxStandardPaths::Get().GetResourcesDir(), name).GetFullPath();
+}
+
 wxString FileInSourceIcons(const wxString& name) {
     wxFileName walk(wxStandardPaths::Get().GetExecutablePath());
     walk.SetFullName(wxEmptyString);
@@ -71,6 +75,7 @@ wxIcon LoadRocketBoxIcon() {
 wxBitmap LoadNamedPng(const wxString& name) {
     wxBitmap bitmap;
     const wxString paths[] = {
+        FileInResources(name),
         FileBesideExe(name),
         FileInSourceIcons(name),
         wxT("/usr/share/rocketbox/") + name,

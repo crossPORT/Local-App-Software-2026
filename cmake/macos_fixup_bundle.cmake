@@ -28,6 +28,15 @@ endforeach()
 message(STATUS "macOS bundle fixup: ${_app}")
 message(STATUS "macOS bundle fixup search dirs: ${_extra_dirs}")
 
+# Loose images beside the binary look like unsigned code to codesign.
+file(GLOB _stray_macos "${_app}/Contents/MacOS/*")
+foreach(_f IN LISTS _stray_macos)
+    if(_f MATCHES "\\.(png|ico|svg)$")
+        message(STATUS "macOS bundle fixup: remove stray ${_f}")
+        file(REMOVE "${_f}")
+    endif()
+endforeach()
+
 fixup_bundle("${_app}" "" "${_extra_dirs}")
 
 # fixup_bundle rewrites dylib load paths; re-sign so macOS will load bundled libraries.
